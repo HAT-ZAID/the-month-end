@@ -1,0 +1,7 @@
+log.txt
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+code.zip
+.ua/
