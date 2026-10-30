@@ -1,0 +1,47 @@
+[
+  {
+    "request_id": "request_26",
+    "machine_diffs": [],
+    "explanation_changed": false,
+    "rationale_source": "kernel",
+    "fallback_reason": "candidate disagreed with the deterministic kernel on payment_plan, earliest_date_for_full_payment; the kernel row stands",
+    "provider_calls": 4,
+    "tool_calls": 3,
+    "retrieval_backend": "fallback",
+    "seconds": 78.766,
+    "input_tokens": 9080,
+    "output_tokens": 2121,
+    "trace_error": null,
+    "loop_error": null
+  },
+  {
+    "request_id": "request_27",
+    "machine_diffs": [],
+    "explanation_changed": false,
+    "rationale_source": "kernel",
+    "fallback_reason": "candidate disagreed with the deterministic kernel on payment_plan, earliest_date_for_full_payment; the kernel row stands",
+    "provider_calls": 3,
+    "tool_calls": 3,
+    "retrieval_backend": "fts",
+    "seconds": 51.016,
+    "input_tokens": 6243,
+    "output_tokens": 1182,
+    "trace_error": null,
+    "loop_error": null
+  },
+  {
+    "request_id": "request_28",
+    "machine_diffs": [],
+    "explanation_changed": false,
+    "rationale_source": "kernel",
+    "fallback_reason": "candidate disagreed with the deterministic kernel on recommended_payment_method; the kernel row stands",
+    "provider_calls": 4,
+    "tool_calls": 3,
+    "retrieval_backend": "fts",
+    "seconds": 84.563,
+    "input_tokens": 9055,
+    "output_tokens": 2314,
+    "trace_error": null,
+    "loop_error": null
+  }
+]

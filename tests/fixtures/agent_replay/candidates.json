@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "note": "Recorded provider proposals replayed offline by code.providers.ReplayProvider. Fixtures are advisory input only; the deterministic kernel still owns every output field. 'request_demo' is the synthetic id used by tests/test_agent_contract.py.",
+  "candidates": {
+    "request_demo": {
+      "request_id": "request_demo",
+      "amount_safe_to_pay": "1000.00",
+      "affordability_status": "affordable_now",
+      "recommended_payment_method": "full_payment",
+      "payment_plan": "2026-01-05:1000.00",
+      "earliest_date_for_full_payment": "2026-01-05",
+      "spending_changes_needed": "none",
+      "evidence_sufficient": true,
+      "confidence": 0.9,
+      "rationale": "The full amount fits above the protected minimum balance on the request date."
+    }
+  }
+}

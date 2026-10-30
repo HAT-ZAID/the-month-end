@@ -1,193 +1,323 @@
-# HackerRank Orchestrate
+# Buy or Wait?
 
-Starter repository for the **HackerRank Orchestrate** 24-hour hackathon (September 2026).
+A local-first assistant that answers one question before you spend money:
+**can I safely pay for this?**
 
-## Buy or Wait?
+You keep your own data as CSV files: balances, recurring bills, salary dates,
+payments already scheduled, and the things you refuse to cut. The assistant
+projects your cash flow forward, then tells you whether to pay now, pay part of
+it, use installments, wait, or not proceed at all — and shows the arithmetic
+behind the answer.
 
-Build an AI-powered financial agent that decides whether a user can safely afford a requested expense.
+Nothing leaves your machine unless you explicitly configure a remote model. The
+decision itself is plain Python; a language model can add narration, never a
+different answer.
 
-A user may ask: **"Can I afford this laptop?"**
+## Origin
 
-Answering well takes more than the current balance. The agent must account for recurring expenses, pending payments, essential spending, confirmed income, available payment options, and relevant details buried in messages and images.
+This started as a submission to **HackerRank Orchestrate (September 2026)** and
+the "Buy or Wait?" brief: decide, for each request in `dataset/requests.csv`,
+whether the user should pay in full, pay partially, take installments, wait, or
+decline, never letting the projected balance fall below the user's minimum. The
+competition scaffolding is still in the repository (the dataset, the eight-column
+export, the evaluation gates), but the product is now meant to be used
+day to day, offline, on your own data.
 
-For every request, the agent decides whether the user should pay in full, pay partially, use installments, wait, or not proceed. The recommendation must be personalized: two users with the same balance can deserve different answers based on their commitments, priorities, payment preferences, and willingness to adjust flexible expenses.
+## What it produces
 
-A recommendation is safe only if the user can complete the full payment plan, cover essential expenses, and stay above their preferred minimum balance throughout the forecast period.
-
-Read [`problem_statement.md`](./problem_statement.md) for the full task spec, input/output schema, allowed values, conflict-resolution rules, and submission format.
-
----
-
-## Quick Start
-
-Clone the repository and move into the project directory:
-
-```bash
-git clone https://github.com/interviewstreet/hackerrank-orchestrate-september26.git
-cd hackerrank-orchestrate-september26
-```
-
-Build your solution in `code/main.py`, or use another language and document its entry point clearly.
-
-Your solution must:
-
-- Read the input files from `dataset/`
-- Generate one prediction for every request
-- Write the final predictions to `output.csv` in the repository root
-
-Run the starter Python entry point with:
-
-```bash
-python3 code/main.py
-```
-
-After running your solution, confirm that `output.csv` exists in the repository root and contains the required columns and one row for every request.
-
-## Important File Locations
-
-```text
-dataset/        Input data and the blank output template. Do not modify the input data.
-code/           Your solution code.
-output.csv      Final generated predictions in the repository root.
-code.zip        ZIP file containing your complete solution for submission.
-```
-
-The blank template at `dataset/output.csv` is provided as a reference. Your final generated file must be the root-level `output.csv`.
-
----
-
-## Repository Layout
-
-```text
-.
-├── AGENTS.md                         # Rules for AI coding tools + transcript logging
-├── problem_statement.md              # Full challenge statement
-├── README.md                         # You are here
-├── code/                             # Your solution code
-├── output.csv                        # Final generated predictions
-└── dataset/
-    ├── requests.csv                  # 250 requests to evaluate — predict these
-    ├── output.csv                    # Blank submission template
-    ├── sample_requests.csv           # 25 solved examples
-    ├── financial_profiles.csv        # Balances, minimum balance, priorities, preferences
-    ├── financial_events.csv          # Historical, pending, and confirmed transactions
-    ├── request_payment_options.csv   # Payment options available per request
-    ├── exchange_rates.csv            # Fixed, dated conversion rates
-    ├── messages.csv                  # Messages tied to users, requests, or events
-    ├── images.csv                    # Payroll letters, statements, bills, receipts
-    └── media/
-        └── images/
-```
-
-Only `dataset/requests.csv` requires predictions. Everything else is context. Join user records with `user_id`, request records with `request_id`, supporting evidence with `related_event_id`, and exchange rates with the rate date and currency pair.
-
-Amounts are in the user's `home_currency` — the dataset uses INR, ZAR, IDR, USD, and EUR, and every conversion rate you need is in `exchange_rates.csv`. All dates are `YYYY-MM-DD`. Live exchange rates, market data, and banking access are not required.
-
----
-
-## What You Need to Build
-
-For every row in `dataset/requests.csv`, produce one row in `output.csv` with:
+Every decision is one row with eight columns. The first seven are computed in
+Python and are identical on every run; only the explanation text can come from a
+model, and only when one is configured and its prose passes validation.
 
 | Column | Meaning |
 |---|---|
 | `request_id` | The request being answered |
-| `amount_safe_to_pay` | Largest amount safe to pay on `request_date` before optional spending changes, after protecting essentials and the minimum balance |
+| `amount_safe_to_pay` | Largest amount safe on the request date, before optional spending changes (`0 <= x <= requested_amount`) |
 | `affordability_status` | `affordable_now`, `affordable_with_plan`, `affordable_later`, or `not_affordable` |
 | `recommended_payment_method` | `full_payment`, `partial_payment`, `installments`, `wait`, or `not_recommended` |
-| `payment_plan` | Chronological `<YYYY-MM-DD>:<amount>` entries joined by `\|`, or `none` |
-| `earliest_date_for_full_payment` | Earliest date the full amount is forecast safe as one payment; empty if never within the forecast |
-| `spending_changes_needed` | Up to three `stop:<event_id>` / `reduce_to:<event_id>:<amount>` changes joined by `\|`, or `none` |
-| `decision_explanation` | Short explanation and the financial facts behind it |
+| `payment_plan` | Chronological `YYYY-MM-DD:amount` legs joined by `\|`, or `none` |
+| `earliest_date_for_full_payment` | First conservative date a single safe full payment fits; empty when none does |
+| `spending_changes_needed` | `none`, or up to three `stop:<event_id>` / `reduce_to:<event_id>:<amount>` actions |
+| `decision_explanation` | Short, grounded reason for the recommendation |
 
-`0 <= amount_safe_to_pay <= requested_amount` must always hold. Installment plans must exactly match a supplied payment option, and only recurring expenses marked flexible may be changed.
+`output.csv` is the audit/export format. The interactive TUI is the everyday
+interface.
 
-`affordable_with_plan` means the full request is completed through a partial-payment schedule, installments, or permitted spending changes. Recommend `partial_payment` only when the request allows it, the user accepts it, `0 < amount_safe_to_pay < requested_amount`, and `earliest_date_for_full_payment` is on or before `desired_completion_date`. Use exactly two payments: pay `amount_safe_to_pay` on `request_date`, then pay the remaining amount on `earliest_date_for_full_payment`. The two payments must add up to `requested_amount`. Unlike installments, partial payment does not need to match a supplied payment option.
+## How it works
 
----
+Two layers, with a hard boundary between them:
 
-## Suggested Workflow
+1. **A deterministic judge** reconstructs your financial position from the CSVs,
+   forecasts 90 days of daily balances, and searches full / partial / installment
+   / wait plans. It owns every number: safe amounts, earliest dates, plan
+   feasibility, spending-change search and plan ranking.
+2. **An optional agentic analyst** can call seven typed tools (request context,
+   evidence search, events, projection, payment options, spending-change
+   candidates, `propose_decision`). Its proposal is checked by a deterministic
+   verifier against the kernel; anything that disagrees, or any provider error,
+   falls back to the kernel row. The agent cannot edit a decision field.
 
-1. Inspect `dataset/sample_requests.csv` — 25 requests with completed output columns — to understand the expected format and decision style.
-2. Reconstruct each user's financial state from `financial_profiles.csv` and `financial_events.csv`: separate recurring expenses from one-time events, reserve pending transactions, count confirmed salary only on its settlement date, and de-duplicate repeated representations of the same event.
-3. When an event has a blank `amount`, find its `event_id` as `related_event_id` in `images.csv` and extract the amount from the linked image. Never treat a blank amount as zero. Pull in any other relevant messages, images, and payment options for the request.
-4. Forecast forward and generate a plan that keeps the balance above the minimum at every step.
-5. Verify deterministically — bounds, plan feasibility, schedule match, flexible-only spending changes — before writing `output.csv`.
-6. Score yourself on the solved samples, then run the full dataset.
+Supporting pieces: RAG retrieval over messages/OCR text with SQLite (FTS5) as the
+canonical structured store and fallback retriever, a static HTML trace viewer for
+every agent run, and a TUI for exploring, simulating and re-deciding requests
+without touching your files.
 
-You may use any language or runtime. Python, JavaScript, and TypeScript are all reasonable choices.
+### Reading images locally
 
----
+Screenshots (payslips, receipts, bills, transfer confirmations) are read on your
+machine, never in the cloud.
 
-## Requirements
+| Backend | What it does | Configure with |
+|---|---|---|
+| `vlm` | Qwen3-VL 2B Instruct through a local Ollama endpoint: text plus a structured amount, currency, date and merchant | `BUY_WAIT_VLM_BASE_URL`, `BUY_WAIT_VLM_MODEL` |
+| `docling` | IBM Docling layout-aware markdown, run in its own interpreter | `BUY_WAIT_DOCLING_PYTHON` |
+| `tesseract` | Classic OCR, kept as the comparison and last-resort path | `TESSERACT_CMD` |
 
-Your solution must:
 
-- be runnable from the terminal
-- read the provided files from `dataset/`
-- produce a valid `output.csv` with the exact required columns in the exact required order
-- include one prediction for every `request_id` in `dataset/requests.csv`
-- not use organizer-only files or hardcoded labels
-- keep behavior deterministic where possible
+`BUY_WAIT_OCR_BACKEND=auto` tries Qwen3-VL, then Docling when configured, then
+Tesseract. A model-proposed amount is trusted only when it is positive, in the
+event's currency, and a deterministic reading of the same document reproduces it
+exactly. The model's own transcript counts first; when that transcript yields no
+labelled amount, an independent local Tesseract read of the same image acts as the
+second witness. If neither confirms the figure, it is discarded and the parser's own
+reading wins. A
+non-loopback VLM host is refused unless you set `BUY_WAIT_VLM_ALLOW_REMOTE=1`.
+Reads are cached on disk by image path, image bytes and backend, so repeat runs do
+no model work; entries older than `BUY_WAIT_CACHE_TTL_DAYS` (default 30) are treated
+as misses and swept from disk. Inspect or clean the cache with:
 
-If you use API keys or secrets, read them from environment variables. Never hardcode secrets in the repo.
-
----
-
-## Evaluation
-
-Your `output.csv` will be compared against hidden ground-truth values.
-
-The scoring will consider:
-
-- accuracy of `amount_safe_to_pay`
-- correctness of `affordability_status`
-- correctness of `recommended_payment_method` and `payment_plan`
-- accuracy of `earliest_date_for_full_payment`
-- validity of `spending_changes_needed`
-- usefulness and consistency of `decision_explanation`
-
-### Token Usage And Cost Analysis
-
-Your `code.zip` must include one token-usage file:
-
-```text
-evaluation/usage_report.md
+```bash
+python -m code.cache --stats            # root, TTL, entry count
+python -m code.cache --purge --stats    # delete expired entries now
 ```
 
-The report must cover model providers and names, model calls, input and output tokens, total and average tokens per request, estimated total and per-request cost. The reported values must correspond to the final full-dataset run that produced your `output.csv`.
+Comparison results live in [`docs/ocr-comparison.md`](./docs/ocr-comparison.md).
 
----
+### Optional JEV decision audit (OpenCode Zen)
 
-## Chat Transcript Logging
+`tools/compare_jev.py` is an experiment, not a decision source: it asks the
+TypeSafe **Jev** decision model (free `jev-1.13-free` through OpenCode Zen) to
+reproduce the kernel's affordability status and payment method as typed
+probabilities, and to rate each decision's safety and evidence sufficiency.
+The deterministic kernel still owns every machine field; the audit never edits a
+row. It needs an OpenCode API key (`OPENCODE_API_KEY`, or the signed-in
+`auth.json`), it is the only network call outside optional agent providers, and
+the free tier answers `noul` propositions only, which the tool encodes as an
+11-proposition argmax. Results live in
+[`docs/jev-decision-gate.md`](./docs/jev-decision-gate.md).
 
-This repo includes an [`AGENTS.md`](./AGENTS.md) file for AI coding tools. It asks compatible tools to append conversation summaries to a `log.txt` in the repository root — the same directory as `AGENTS.md`:
+See [`docs/architecture.md`](./docs/architecture.md) for the module map and data
+flow, and [`docs/edge-case-policy.md`](./docs/edge-case-policy.md) for the
+governed edge cases.
 
-| Platform | Path |
+## Quickstart
+
+Requires Python 3.11+.
+
+### 1. Install the base dependencies
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+`pandas` and `rich` are all the deterministic path and the TUI need. Image
+reading (`pytesseract`, `Pillow`) is optional and additionally needs a Tesseract
+binary at runtime; set `TESSERACT_CMD` if it is not on `PATH`. The local vision
+path needs a running Ollama server serving `qwen3-vl:2b-instruct-q4_K_M` (or a
+Docling interpreter); neither needs an API key.
+
+### 2. Run the deterministic batch
+
+```bash
+python -m code.main            # writes output.csv and the usage report
+python -m code.main --help     # usage, no run
+```
+
+One row per request, LF line endings, no model calls, no API key. Add
+`--agent --agent-limit 3` to run the offline analyst pass over three requests
+(needs the optional agent stack and a local Ollama model).
+
+### 3. Explore in the TUI
+
+```bash
+python -m tools.tui
+```
+
+Everything you do there — `list`, `show`, `dashboard`, `whatif`, `changes`,
+`apply`, `diff`, `undo`, `new`, `explain`, `trace` — is session-only. The TUI
+never writes `output.csv` or `dataset/` and never calls a model provider.
+
+### 4. Run the evaluation gates
+
+```bash
+python -m evaluation.run --mode pr
+```
+
+This runs the real pipeline, grades the 25 public sample rows semantically,
+checks determinism and provenance, and writes `evaluation/report.json` plus
+`evaluation/report.md`. It exits non-zero when a required gate fails.
+
+`--mode release` additionally runs **G7**, which breaks the agent loop on purpose
+for two requests and requires that the pipeline still finishes, every machine field
+matches the deterministic baseline, and each crash is recorded in
+`usage["agent_loop_errors"]` and named on stderr. G5/G6 stay `NOT_APPLICABLE` until
+an `--archive` is supplied.
+
+### 5. Optional: local agent (Ollama, no key)
+
+```bash
+python -m pip install -r requirements-agent.txt
+ollama serve
+ollama pull qwen2.5:1.5b
+python -m code.agent --request-id <request_id> --provider ollama --trace-dir traces/demo
+```
+
+`ollama` is the local default and needs no cloud account. Every run is capped at
+`BUY_WAIT_LLM_MAX_CALLS` provider calls (default 50).
+
+Local generation settings are tunable, and the defaults stay reproducible
+(`temperature=0`, `num_ctx=8192`):
+
+```bash
+export BUY_WAIT_OLLAMA_TEMPERATURE=0.0     # raise to explore different wording
+export BUY_WAIT_OLLAMA_NUM_CTX=8192
+export BUY_WAIT_OLLAMA_TOP_P=0.9           # optional; omitted unless set
+export BUY_WAIT_OLLAMA_TOP_K=40
+export BUY_WAIT_OLLAMA_REPEAT_PENALTY=1.1
+export BUY_WAIT_OLLAMA_NUM_PREDICT=1024
+```
+
+Sampling can change what the model *says*, never what the answer *is*: the seven
+machine-readable columns always come from the kernel, and a proposal that
+disagrees with the kernel is dropped. `propose_decision` takes the ten candidate
+fields as flat tool arguments — small local models drop free-form fields when the
+payload is nested under a single wrapper key, so the schema is flat on purpose.
+
+### 6. Optional: Kilo + Nemotron Ultra deployment
+
+The deployment provider is Kilo's OpenAI-compatible endpoint serving
+**Nemotron Ultra**. **You must configure the API yourself** — the repository
+ships no endpoint and no key, and `OPENROUTER_KEY` is deliberately not used as a
+fallback.
+
+```bash
+export BUY_WAIT_KILO_BASE_URL="<your Kilo OpenAI-compatible base URL>"
+export BUY_WAIT_KILO_API_KEY="<your Kilo API key>"
+export BUY_WAIT_KILO_MODEL="nemotron-3-ultra"      # default; override if needed
+
+# single-request demo
+python -m code.agent --request-id <request_id> --provider kilo --trace-dir traces/demo
+
+# batch agent pass (provider selection also via BUY_WAIT_LLM_PROVIDER=kilo)
+BUY_WAIT_LLM_PROVIDER=kilo python -m code.main --agent --agent-limit 5
+```
+
+If the URL or key is missing the two entry points behave differently, on purpose:
+
+- `python -m code.agent --provider kilo` **exits with an error** naming the missing
+  variable. It is a debug entry point, and a silent fallback there would hide a
+  configuration mistake.
+- `python -m code.main --agent` (and the TUI) **falls back to the deterministic
+  kernel** row for that request and records the reason in the trace, so a batch run
+  never dies halfway.
+
+The 50-call cap is shared with the other remote providers.
+
+### Docker
+
+```bash
+docker build -t month-end:test .
+docker run --rm month-end:test --help       # usage
+docker run --rm month-end:test              # deterministic batch inside /app
+touch output.csv                            # needed before a bind mount: Docker
+                                            # would otherwise create a directory
+docker run --rm -v "${PWD}/output.csv:/app/output.csv" month-end:test
+```
+
+The container runs as uid **10001**, so a host `output.csv` must be writable by that
+user (on Linux: `chown 10001 output.csv`, or mount a writable directory and copy the
+file out). `code.main` always writes `/app/output.csv`, so a directory mount needs a
+code change and is not offered here.
+The image is `python:3.11-slim`, installs both requirement files plus Tesseract,
+runs as a non-root user, and reads `dataset/` from `/app`. Pass `-e
+BUY_WAIT_KILO_BASE_URL=... -e BUY_WAIT_KILO_API_KEY=...` to enable the remote
+agent; without them the container is offline and keyless.
+
+**Build status: unverified.** The image definition is checked by the packaging
+tests and ships with the repository, but it has not been built here because the
+development machine ran out of disk space. Treat the first real build as
+unproven and report anything it breaks.
+
+## Data and privacy
+
+- Your data stays in local CSV files (`dataset/`) and a local SQLite database
+  (`data/app.db`, rebuildable with `python -m code.store --rebuild`).
+- With no provider configured, the assistant makes **zero network calls** and
+  needs no credentials. The local Ollama path also stays on your machine.
+- Remote providers are opt-in and hard-capped; API keys are read from environment
+  variables only and are never written to traces, reports or output.
+- Messages and images are **untrusted evidence**. They may confirm, amend, delay
+  or cancel a financial fact, but instructions embedded in them are ignored, and
+  anything they cannot prove is flagged rather than guessed.
+- The pipeline fails closed: unresolved image evidence, unknown FX, or an
+  over-claimed amount produces a conservative row with a warning, never an
+  invented number.
+
+## Current limitations
+
+- `output.csv` is generated, not golden. The committed file comes from the release
+  run (250 rows, sha256 `1f35043f?`) and G4 ties it to that commit; regenerate it
+  after any forecast or policy change.
+- Semantic agreement with the 25 public sample rows is still partial: the last PR
+  run passed the structural and safety gates (G0/G1/G3/G4) but failed the sample
+  quality gate (G2), with `recommended_payment_method`, `payment_plan`,
+  `earliest_date_for_full_payment` and spending-change rows the main gaps.
+- Image reading is local but uneven. On the 16 linked images Tesseract and
+  Qwen3-VL 2B both resolve 15 and agree on 14 of those, so the 2B model buys no
+  extra coverage here; `image_14` stays unresolved for both. The model did
+  propose two wrong amounts (a 40.00 USD receipt and a garbled nine-digit INR
+  total), both rejected by the deterministic check, which is why the parser stays
+  the authority. A third reader, IBM Docling, resolves 13/16 and agrees with
+  Tesseract on only 7 of those — it loses grand totals on dense, itemised
+  receipts — so it stays an optional third opinion. See
+  [`docs/ocr-comparison.md`](./docs/ocr-comparison.md) and
+  [`docs/docling-vs-tesseract.md`](./docs/docling-vs-tesseract.md).
+- Live model quality is measured only on small local models. `llama3.2:3b` and
+  `qwen3-vl:2b-instruct` both fail to converge on a schema-valid proposal under a
+  bounded tool budget, and every request falls back to the kernel. The
+  Kilo/Nemotron path is wired but has never been run with real credentials, so no
+  remote quality or latency number exists yet.
+- The projection horizon is 90 days with fixed, dated exchange rates. It does not
+  fetch live rates, bank balances or market data.
+
+## Development
+
+```bash
+python -m pytest tests -q                      # full suite
+python -m pytest tests/test_providers.py tests/test_packaging.py -q
+python -m evaluation.run --mode pr             # required gates
+```
+
+- Tests are offline by default: no network, no Ollama server, no API key. Model
+  providers are exercised with recording fakes and replay fixtures.
+- The machine-readable columns are determinism-checked; explanations are not
+  compared byte for byte.
+- Every change is reviewed with a scoped CodeRabbit pass before merge, and
+  review findings are fixed or documented rather than parked silently.
+- Never commit secrets. Use `.env` (gitignored) or your shell; `.env.example`
+  carries placeholders only.
+
+## Layout
+
+| Path | Role |
 |---|---|
-| macOS / Linux | `<repo root>/log.txt` |
-| Windows | `<repo root>\log.txt` |
+| `code/` | Deterministic kernel, evidence pipeline, agent loop, providers, store, traces |
+| `dataset/` | Input CSVs and image evidence; `dataset/output.csv` is the blank template |
+| `evaluation/` | Gate runner, semantic comparator, usage report |
+| `tools/` | TUI, static trace viewer, sample verifier |
+| `tests/` | Pytest suite (offline) |
+| `docs/` | Architecture, edge-case policy, plans |
 
-The path resolves relative to `AGENTS.md`, so it stays correct across clones, renames, and checkouts. `log.txt` is gitignored — upload it as your chat transcript at submission time. Do not paste secrets into the chat.
-
-In case, the harness you are using is not in the repo root, you can explicitly ask the agent to look for the AGENTS.md in this folder & then continue.
-
----
-
-## Submission
-
-Submit the following files as instructed by HackerRank:
-
-| File | Description |
-|---|---|
-| `code.zip` | Full runnable solution, prompts/configuration, README, and the required `evaluation/` folder |
-| `output.csv` | Predictions for every row in `dataset/requests.csv` |
-| `chat_transcript` | The `log.txt` described above, showing how you developed or used the system |
-
-Before submitting, confirm:
-
-- `output.csv` has one row per row in `dataset/requests.csv` (250 rows plus the header).
-- `output.csv` has the exact required columns in the exact required order.
-- Every `amount_safe_to_pay` satisfies `0 <= amount_safe_to_pay <= requested_amount`.
-- Every installment plan matches a supplied payment option, and every spending change targets a flexible recurring expense.
-- Your runnable code, setup instructions, and `evaluation/` folder are included in `code.zip`.
+The full problem specification is preserved in
+[`problem_statement.md`](./problem_statement.md); the repository rules for
+automated agents are in [`AGENTS.md`](./AGENTS.md).

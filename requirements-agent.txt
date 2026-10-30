@@ -1,0 +1,16 @@
+# Optional agent stack for the Buy or Wait? agent loop (Task 5B).
+#
+# The deterministic pipeline (python -m code.main, python -m evaluation.run)
+# keeps working without these packages: every import is lazy and the agent layer
+# falls back to the deterministic kernel when they are missing.
+#
+# Install into the shared environment:
+#     python -m pip install -r requirements-agent.txt
+#
+# Ranges are the 1.x LangChain line, which is the first line that accepts the
+# already-installed openai 3.x client (langchain-openai 0.3 pinned openai<3 and
+# would have downgraded it).  Python 3.11 is supported by all four packages.
+langchain-core>=1,<2
+langchain-ollama>=1,<2
+langchain-openai>=1,<2
+pydantic>=2,<3

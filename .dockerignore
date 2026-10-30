@@ -1,0 +1,37 @@
+# Version control, editors and local tooling.
+.git
+.gitignore
+.gitattributes
+.opencode
+.superpowers
+.venv
+**/__pycache__
+**/*.pyc
+**/*.pyo
+.pytest_cache
+
+# Secrets: never bake a real environment file into an image.  The template is
+# kept only so the documented variable names ship with the context.
+.env
+.env.*
+!.env.example
+
+# Logs and local history.
+log.txt
+sessions_context.md
+plan_a.md
+
+# Generated state and outputs: the image rebuilds these at runtime.
+output.csv
+traces
+data/*.db
+data/*.db-*
+data/*.sqlite
+data/*.sqlite-*
+data/index
+data/vector_index
+data/ocr_text.json
+code.zip
+
+# Local release/plan scratch that is not needed to run the product.
+docs/superpowers

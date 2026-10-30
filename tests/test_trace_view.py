@@ -1,0 +1,300 @@
+"""Task 6B: static trace viewer + TUI `trace` command tests.
+
+Everything here is synthetic: no dataset load, no solver, no provider, no
+browser. The trace fixtures mirror what ``code.trace.TraceRecorder.finish``
+writes, so the viewer is tested against the real contract.
+"""
+import io
+import json
+
+from rich.console import Console
+
+from tools import trace_view, tui
+
+
+FINAL_ROW = {
+    "request_id": "request_001",
+    "amount_safe_to_pay": "60.00",
+    "affordability_status": "affordable_with_plan",
+    "recommended_payment_method": "partial_payment",
+    "payment_plan": "2026-01-05:60.00|2026-01-20:40.00",
+    "earliest_date_for_full_payment": "2026-01-20",
+    "spending_changes_needed": "none",
+    "decision_explanation": "Two payments keep the floor intact.",
+}
+
+#: The eight output.csv columns, in contract order.
+OUTPUT_COLUMNS = (
+    "request_id",
+    "amount_safe_to_pay",
+    "affordability_status",
+    "recommended_payment_method",
+    "payment_plan",
+    "earliest_date_for_full_payment",
+    "spending_changes_needed",
+    "decision_explanation",
+)
+
+CANDIDATE = {
+    "request_id": "request_001",
+    "amount_safe_to_pay": "60.00",
+    "affordability_status": "affordable_with_plan",
+    "recommended_payment_method": "partial_payment",
+    "payment_plan": "2026-01-05:60.00|2026-01-20:40.00",
+    "earliest_date_for_full_payment": "2026-01-20",
+    "spending_changes_needed": "none",
+    "evidence_sufficient": True,
+    "confidence": 0.8,
+    "rationale": "Two payments keep the floor intact.",
+}
+
+
+def make_trace(request_id="request_001", **overrides):
+    trace = {
+        "schema_version": 2,
+        "run_id": "run-test",
+        "request_id": request_id,
+        "provider": "fake",
+        "model": "fake-model",
+        "prompt_version": "agent-v1",
+        "prompt_hash": "abc123def456",
+        "events": [{"kind": "request_start", "request_id": request_id}],
+        "model_turns": [
+            {"role": "assistant", "text": "looking", "tool_calls": [], "usage": {"total_tokens": 150}}
+        ],
+        "tool_calls": [
+            {
+                "name": "search_evidence",
+                "args": {"request_id": request_id, "query": "salary"},
+                "ok": True,
+                "error": None,
+                "duration_ms": 1.5,
+            },
+            {
+                "name": "get_cashflow_projection",
+                "args": {"request_id": request_id},
+                "ok": False,
+                "error": "no ledger",
+                "duration_ms": 2.25,
+            },
+        ],
+        "retrieval": {"backend": "sqlite", "warnings": [], "queries": 1},
+        "candidate": dict(CANDIDATE, request_id=request_id),
+        "verification": {
+            "agent_agreement": True,
+            "differences": [],
+            "candidate_valid": True,
+            "fallback_reason": None,
+            "rationale_source": "candidate",
+        },
+        "final_row": dict(FINAL_ROW, request_id=request_id),
+        "usage": {
+            "provider": "fake",
+            "model": "fake-model",
+            "model_calls": 2,
+            "input_tokens": 100,
+            "output_tokens": 50,
+            "total_tokens": 150,
+            "api_key": "sk-live-ABCDEFGH12345678",
+            "access_token": "tok_abcdef123456",
+        },
+        "budget": {
+            "provider_calls_used": 2,
+            "provider_calls_limit": 6,
+            "tool_calls_used": 2,
+            "tool_calls_limit": 6,
+        },
+        "fallback_reason": None,
+        "metadata": {"created_at": "2026-10-29T00:00:00Z", "duration_ms": 12.0},
+    }
+    trace.update(overrides)
+    return trace
+
+
+def write_trace(directory, trace):
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / f"{trace['request_id']}.json"
+    path.write_text(json.dumps(trace), encoding="utf-8")
+    return path
+
+
+def make_console():
+    buffer = io.StringIO()
+    console = Console(
+        file=buffer, width=110, force_terminal=False, highlight=False, markup=False
+    )
+    return console, buffer
+
+
+# ---------------------------------------------------------------------------
+# Detail page
+# ---------------------------------------------------------------------------
+
+
+def test_detail_page_shows_request_status_and_tool_names(tmp_path):
+    path = write_trace(tmp_path / "run-test", make_trace())
+    out = tmp_path / "request_001.html"
+
+    code = trace_view.main(["--trace", str(path), "--out", str(out)])
+
+    assert code == 0
+    html = out.read_text(encoding="utf-8")
+    assert "request_001" in html
+    assert "affordable_with_plan" in html and "partial_payment" in html
+    assert "search_evidence" in html
+    assert "get_cashflow_projection" in html
+    assert "fake-model" in html
+    assert "2026-01-05:60.00|2026-01-20:40.00" in html
+    assert html.lstrip().startswith("<!DOCTYPE html>")
+
+    # The final row is shown as the exact eight-column output contract.
+    contract = html[html.index("Final enforced row") :]
+    contract = contract[: contract.index("</table>")]
+    positions = [contract.index(f"<th>{column}</th>") for column in OUTPUT_COLUMNS]
+    assert positions == sorted(positions)
+    assert "Two payments keep the floor intact." in contract
+
+
+def test_trace_text_is_escaped_never_executable(tmp_path):
+    hostile = '<script>alert("x")</script>'
+    trace = make_trace()
+    trace["tool_calls"][0]["args"] = {"request_id": "request_001", "query": hostile}
+    trace["final_row"]["decision_explanation"] = hostile
+    path = write_trace(tmp_path / "run-test", trace)
+
+    html = trace_view.render_detail(trace_view.load_trace(path))
+
+    assert "<script>" not in html
+    assert "&lt;script&gt;" in html
+    assert hostile not in html
+
+
+def test_secrets_are_redacted_but_token_counters_survive(tmp_path):
+    path = write_trace(tmp_path / "run-test", make_trace())
+
+    html = trace_view.render_detail(trace_view.load_trace(path))
+
+    assert "sk-live-ABCDEFGH12345678" not in html
+    assert "tok_abcdef123456" not in html
+    assert trace_view.REDACTED in html
+    assert "total_tokens" in html
+    assert "150" in html
+
+
+def test_trace_without_out_prints_html_to_stdout(tmp_path, capsys):
+    path = write_trace(tmp_path / "run-test", make_trace())
+
+    code = trace_view.main(["--trace", str(path)])
+
+    captured = capsys.readouterr()
+    assert code == 0
+    assert captured.out.lstrip().startswith("<!DOCTYPE html>")
+    assert "request_001" in captured.out
+    assert captured.err == ""
+
+
+def test_missing_trace_exits_nonzero_with_readable_message(tmp_path, capsys):
+    code = trace_view.main(["--trace", str(tmp_path / "nope.json")])
+
+    captured = capsys.readouterr()
+    assert code != 0
+    assert "nope.json" in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_malformed_trace_exits_nonzero_with_readable_message(tmp_path, capsys):
+    broken = tmp_path / "request_001.json"
+    broken.write_text("{not json", encoding="utf-8")
+
+    code = trace_view.main(["--trace", str(broken)])
+
+    captured = capsys.readouterr()
+    assert code != 0
+    assert "not valid JSON" in captured.err
+    assert "Traceback" not in captured.err
+
+
+# ---------------------------------------------------------------------------
+# Index page
+# ---------------------------------------------------------------------------
+
+
+def test_trace_dir_writes_index_and_one_page_per_trace(tmp_path):
+    root = tmp_path / "traces" / "run-test"
+    write_trace(root, make_trace("request_001"))
+    write_trace(root, make_trace("request_002"))
+    out = root / "index.html"
+
+    code = trace_view.main(["--trace-dir", str(root), "--out", str(out)])
+
+    assert code == 0
+    index = out.read_text(encoding="utf-8")
+    assert "run-test" in index
+    assert "2" in index  # trace count
+    assert 'href="request_001.html"' in index
+    assert 'href="request_002.html"' in index
+    assert "fake-model" in index
+    assert "affordable_with_plan" in index
+    assert (root / "request_001.html").exists()
+    assert (root / "request_002.html").exists()
+
+
+def test_trace_dir_without_out_is_a_clear_error(tmp_path, capsys):
+    root = tmp_path / "run-test"
+    write_trace(root, make_trace())
+
+    code = trace_view.main(["--trace-dir", str(root)])
+
+    captured = capsys.readouterr()
+    assert code != 0
+    assert "--out" in captured.err
+    assert "Traceback" not in captured.err
+
+
+def test_empty_trace_dir_is_a_clear_error(tmp_path, capsys):
+    (tmp_path / "empty").mkdir()
+
+    code = trace_view.main(["--trace-dir", str(tmp_path / "empty"), "--out", str(tmp_path / "i.html")])
+
+    captured = capsys.readouterr()
+    assert code != 0
+    assert "no" in captured.err.lower()
+    assert "Traceback" not in captured.err
+
+
+# ---------------------------------------------------------------------------
+# TUI command
+# ---------------------------------------------------------------------------
+
+
+def test_tui_trace_summarizes_the_trace(tmp_path):
+    root = tmp_path / "traces"
+    path = write_trace(root / "run-test", make_trace())
+    console, buffer = make_console()
+    app = tui.TUI(data={}, console=console, trace_dir=root)
+
+    app.cmd_trace(["request_001"])
+
+    output = buffer.getvalue()
+    assert "request_001" in output
+    assert "fake-model" in output
+    assert "search_evidence" in output
+    assert "get_cashflow_projection" in output
+    assert str(path) in output or "request_001.json" in output
+
+
+def test_tui_trace_reports_a_missing_trace(tmp_path):
+    root = tmp_path / "traces"
+    write_trace(root / "run-test", make_trace())
+    console, buffer = make_console()
+    app = tui.TUI(data={}, console=console, trace_dir=root)
+
+    app.cmd_trace(["request_404"])
+
+    output = buffer.getvalue()
+    assert "request_404" in output
+    assert "no trace" in output.lower()
+
+
+def test_tui_help_lists_the_trace_command():
+    assert "trace <id>" in tui.HELP_TEXT

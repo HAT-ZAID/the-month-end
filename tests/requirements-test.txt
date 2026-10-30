@@ -1,0 +1,3 @@
+# Test-only dependencies (dev harness, never shipped in code.zip).
+pytest>=8
+pandas>=2

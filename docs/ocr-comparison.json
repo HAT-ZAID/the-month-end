@@ -1,0 +1,401 @@
+{
+  "rows": [
+    {
+      "image_id": "image_01",
+      "event_id": "event_253",
+      "currency": "IDR",
+      "category": "salary",
+      "missing": false,
+      "results": {
+        "tesseract": {
+          "amount": "4365000",
+          "note": "cached",
+          "backend": "tesseract",
+          "latency_ms": 905,
+          "cached": true
+        },
+        "vlm": {
+          "amount": "4365000",
+          "note": "certified by a second local reading (cached)",
+          "backend": "vlm",
+          "latency_ms": 11391,
+          "cached": true
+        }
+      },
+      "agree": true
+    },
+    {
+      "image_id": "image_02",
+      "event_id": "event_1442",
+      "currency": "INR",
+      "category": "rent",
+      "missing": false,
+      "results": {
+        "tesseract": {
+          "amount": "100000.00",
+          "note": "cached",
+          "backend": "tesseract",
+          "latency_ms": 766,
+          "cached": true
+        },
+        "vlm": {
+          "amount": "100000",
+          "note": "certified by a second local reading (cached)",
+          "backend": "vlm",
+          "latency_ms": 8000,
+          "cached": true
+        }
+      },
+      "agree": true
+    },
+    {
+      "image_id": "image_03",
+      "event_id": "event_1545",
+      "currency": "INR",
+      "category": "groceries",
+      "missing": false,
+      "results": {
+        "tesseract": {
+          "amount": "41272.00",
+          "note": "cached",
+          "backend": "tesseract",
+          "latency_ms": 625,
+          "cached": true
+        },
+        "vlm": {
+          "amount": "41272.0",
+          "note": "cached",
+          "backend": "vlm",
+          "latency_ms": 9296,
+          "cached": true
+        }
+      },
+      "agree": true
+    },
+    {
+      "image_id": "image_04",
+      "event_id": "event_1700",
+      "currency": "INR",
+      "category": "groceries",
+      "missing": false,
+      "results": {
+        "tesseract": {
+          "amount": "2854.00",
+          "note": "cached",
+          "backend": "tesseract",
+          "latency_ms": 969,
+          "cached": true
+        },
+        "vlm": {
+          "amount": "2854.00",
+          "note": "cached",
+          "backend": "vlm",
+          "latency_ms": 15671,
+          "cached": true
+        }
+      },
+      "agree": true
+    },
+    {
+      "image_id": "image_05",
+      "event_id": "event_1786",
+      "currency": "INR",
+      "category": "utilities",
+      "missing": false,
+      "results": {
+        "tesseract": {
+          "amount": "704.05",
+          "note": "cached",
+          "backend": "tesseract",
+          "latency_ms": 780,
+          "cached": true
+        },
+        "vlm": {
+          "amount": "704.05",
+          "note": "cached",
+          "backend": "vlm",
+          "latency_ms": 14750,
+          "cached": true
+        }
+      },
+      "agree": true
+    },
+    {
+      "image_id": "image_06",
+      "event_id": "event_3051",
+      "currency": "INR",
+      "category": "groceries",
+      "missing": false,
+      "results": {
+        "tesseract": {
+          "amount": "1995.00",
+          "note": "cached",
+          "backend": "tesseract",
+          "latency_ms": 1016,
+          "cached": true
+        },
+        "vlm": {
+          "amount": "1995.00",
+          "note": "certified by a second local reading (cached)",
+          "backend": "vlm",
+          "latency_ms": 14546,
+          "cached": true
+        }
+      },
+      "agree": true
+    },
+    {
+      "image_id": "image_07",
+      "event_id": "event_3231",
+      "currency": "INR",
+      "category": "dining",
+      "missing": false,
+      "results": {
+        "tesseract": {
+          "amount": "8528.10",
+          "note": "cached",
+          "backend": "tesseract",
+          "latency_ms": 703,
+          "cached": true
+        },
+        "vlm": {
+          "amount": "8528.10",
+          "note": "cached",
+          "backend": "vlm",
+          "latency_ms": 8703,
+          "cached": true
+        }
+      },
+      "agree": true
+    },
+    {
+      "image_id": "image_08",
+      "event_id": "event_4535",
+      "currency": "INR",
+      "category": "housing",
+      "missing": false,
+      "results": {
+        "tesseract": {
+          "amount": "15339",
+          "note": "cached",
+          "backend": "tesseract",
+          "latency_ms": 842,
+          "cached": true
+        },
+        "vlm": {
+          "amount": "15339",
+          "note": "cached",
+          "backend": "vlm",
+          "latency_ms": 6641,
+          "cached": true
+        }
+      },
+      "agree": true
+    },
+    {
+      "image_id": "image_09",
+      "event_id": "event_5170",
+      "currency": "INR",
+      "category": "utilities",
+      "missing": false,
+      "results": {
+        "tesseract": {
+          "amount": "723.00",
+          "note": "cached",
+          "backend": "tesseract",
+          "latency_ms": 483,
+          "cached": true
+        },
+        "vlm": {
+          "amount": "723",
+          "note": "cached",
+          "backend": "vlm",
+          "latency_ms": 4046,
+          "cached": true
+        }
+      },
+      "agree": true
+    },
+    {
+      "image_id": "image_10",
+      "event_id": "event_6033",
+      "currency": "INR",
+      "category": "groceries",
+      "missing": false,
+      "results": {
+        "tesseract": {
+          "amount": "79679.26",
+          "note": "cached",
+          "backend": "tesseract",
+          "latency_ms": 2375,
+          "cached": true
+        },
+        "vlm": {
+          "amount": "79679.26",
+          "note": "certified by a second local reading (cached)",
+          "backend": "vlm",
+          "latency_ms": 21594,
+          "cached": true
+        }
+      },
+      "agree": true
+    },
+    {
+      "image_id": "image_11",
+      "event_id": "event_6859",
+      "currency": "INR",
+      "category": "healthcare",
+      "missing": false,
+      "results": {
+        "tesseract": {
+          "amount": "3650.00",
+          "note": "cached",
+          "backend": "tesseract",
+          "latency_ms": 953,
+          "cached": true
+        },
+        "vlm": {
+          "amount": "3650.00",
+          "note": "cached",
+          "backend": "vlm",
+          "latency_ms": 23907,
+          "cached": true
+        }
+      },
+      "agree": true
+    },
+    {
+      "image_id": "image_12",
+      "event_id": "event_7307",
+      "currency": "USD",
+      "category": "transport",
+      "missing": false,
+      "results": {
+        "tesseract": {
+          "amount": "40.00",
+          "note": "cached",
+          "backend": "tesseract",
+          "latency_ms": 608,
+          "cached": true
+        },
+        "vlm": {
+          "amount": "40.00",
+          "note": "model amount rejected, text used (cached)",
+          "backend": "vlm",
+          "latency_ms": 4280,
+          "cached": true
+        }
+      },
+      "agree": true
+    },
+    {
+      "image_id": "image_13",
+      "event_id": "event_7941",
+      "currency": "INR",
+      "category": "shopping",
+      "missing": false,
+      "results": {
+        "tesseract": {
+          "amount": "2298",
+          "note": "cached",
+          "backend": "tesseract",
+          "latency_ms": 406,
+          "cached": true
+        },
+        "vlm": {
+          "amount": "2298",
+          "note": "cached",
+          "backend": "vlm",
+          "latency_ms": 4843,
+          "cached": true
+        }
+      },
+      "agree": true
+    },
+    {
+      "image_id": "image_14",
+      "event_id": "event_9421",
+      "currency": "INR",
+      "category": "healthcare",
+      "missing": false,
+      "results": {
+        "tesseract": {
+          "amount": "—",
+          "note": "no labelled amount (cached)",
+          "backend": "tesseract",
+          "latency_ms": 437,
+          "cached": true
+        },
+        "vlm": {
+          "amount": "error",
+          "note": "model did not return JSON",
+          "backend": "vlm",
+          "latency_ms": 49875,
+          "cached": false
+        }
+      },
+      "agree": null
+    },
+    {
+      "image_id": "image_15",
+      "event_id": "event_9806",
+      "currency": "INR",
+      "category": "transport",
+      "missing": false,
+      "results": {
+        "tesseract": {
+          "amount": "9968.00",
+          "note": "cached",
+          "backend": "tesseract",
+          "latency_ms": 1094,
+          "cached": true
+        },
+        "vlm": {
+          "amount": "1142513200",
+          "note": "model amount rejected, text used (cached)",
+          "backend": "vlm",
+          "latency_ms": 10562,
+          "cached": true
+        }
+      },
+      "agree": false
+    },
+    {
+      "image_id": "image_16",
+      "event_id": "event_10521",
+      "currency": "INR",
+      "category": "transport",
+      "missing": false,
+      "results": {
+        "tesseract": {
+          "amount": "393.22",
+          "note": "cached",
+          "backend": "tesseract",
+          "latency_ms": 702,
+          "cached": true
+        },
+        "vlm": {
+          "amount": "393.22",
+          "note": "cached",
+          "backend": "vlm",
+          "latency_ms": 5656,
+          "cached": true
+        }
+      },
+      "agree": true
+    }
+  ],
+  "cache": {
+    "enabled": true,
+    "root": "D:\\Hackerrank_Orchestrate\\the-month-end-agentic\\data\\cache",
+    "ttl_days": 30.0,
+    "hits": 35,
+    "misses": 1,
+    "writes": 0,
+    "expired": 0
+  },
+  "backends": [
+    "tesseract",
+    "vlm"
+  ]
+}
