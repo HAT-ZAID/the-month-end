@@ -23,6 +23,17 @@ competition scaffolding is still in the repository (the dataset, the eight-colum
 export, the evaluation gates), but the product is now meant to be used
 day to day, offline, on your own data.
 
+### How that submission scored
+
+**9/10 on the chat transcript.** That signal was graded against four criteria:
+
+| Criterion | Weight |
+|---|---|
+| Direction and architecture ownership | 35% |
+| Technical specificity and constraint | 25% |
+| Iteration and verification | 25% |
+| Safety and edge-case awareness | 15% |
+
 ## What it produces
 
 Every decision is one row with eight columns. The first seven are computed in
