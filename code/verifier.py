@@ -8,18 +8,20 @@ kernel row.  It has three guarantees:
    dict is never mutated (values are copied, not aliased).
 2. **Auditability** — ``verification`` records whether the proposal was valid,
    whether it agreed, every field that differed, and why the kernel row stood.
-3. **Fail-closed prose** — the candidate rationale is used only when the
-   proposal is schema-valid, agrees with the kernel, and is non-empty.  An
-   absent, malformed or diverging proposal always falls back to the kernel
-   explanation.
+3. **Claim-checked prose** — the candidate rationale ships only when every
+   amount, date, status/method name and spending-change action in it is
+   reproduced by the kernel row (:func:`code.claims.verify_claims`).  The check is
+   independent of machine-field agreement: a model may be wrong about the plan
+   and still contribute a correct, grounded explanation, and it may never
+   contribute an unsupported number.
 
-Grounding (checking that prose is supported by evidence) is Task 5B's job; this
-module deliberately performs no LLM reasoning.
+This module performs no LLM reasoning.
 """
 from __future__ import annotations
 
 from decimal import Decimal
 
+from code.claims import verify_claims
 from code.schema import (
     CENT,
     FINAL_FIELDS,
@@ -142,11 +144,16 @@ def enforce_decision(
     candidate: DecisionCandidate | dict | None,
     kernel_result: dict,
     request_context: dict | None = None,
+    *,
+    extra_numbers=(),
+    extra_dates=(),
 ) -> dict:
     """Return ``{"final_row", "verification"}`` with the kernel row always winning.
 
     ``kernel_result`` is the return value of :func:`code.solver.solve_request`
-    (or the pipeline's fail-closed row).
+    (or the pipeline's fail-closed row). ``extra_numbers`` / ``extra_dates`` are
+    further facts the agent legitimately saw (the request amount, the requested
+    date): a rationale may cite them, so the claim check must know them.
     """
     row = _kernel_row(kernel_result)
 
@@ -200,9 +207,16 @@ def enforce_decision(
     rationale = str(getattr(parsed, "rationale", "") or "").strip()
     # A context mismatch means the row we are about to emit was not the request
     # the candidate reasoned about, so its prose cannot be attached to it.
-    rationale_source = (
-        "candidate" if (agreement and rationale and not context_mismatch) else "kernel"
-    )
+    claim_report = None
+    if rationale and not context_mismatch and parsed is not None:
+        claim_report = verify_claims(
+            rationale,
+            row,
+            extra_numbers=extra_numbers or (),
+            extra_dates=extra_dates or (),
+        )
+    rationale_ok = bool(claim_report and claim_report.get("ok"))
+    rationale_source = "candidate" if rationale_ok else "kernel"
 
     final_row = dict(row)
     if rationale_source == "candidate":
@@ -215,7 +229,10 @@ def enforce_decision(
         fallback_reason=fallback_reason,
         rationale_source=rationale_source,
     )
-    return {"final_row": final_row, "verification": verification.as_dict()}
+    payload = verification.as_dict()
+    if claim_report is not None:
+        payload["claim_check"] = claim_report
+    return {"final_row": final_row, "verification": payload}
 
 
 __all__ = ["enforce_decision"]

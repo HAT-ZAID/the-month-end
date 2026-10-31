@@ -62,11 +62,27 @@ Two layers, with a hard boundary between them:
    forecasts 90 days of daily balances, and searches full / partial / installment
    / wait plans. It owns every number: safe amounts, earliest dates, plan
    feasibility, spending-change search and plan ranking.
-2. **An optional agentic analyst** can call seven typed tools (request context,
-   evidence search, events, projection, payment options, spending-change
-   candidates, `propose_decision`). Its proposal is checked by a deterministic
-   verifier against the kernel; anything that disagrees, or any provider error,
-   falls back to the kernel row. The agent cannot edit a decision field.
+2. **An optional agentic analyst** runs a bounded tool-calling loop over twelve
+   typed tools: it reads the request context, searches evidence, projects cash
+   flow, compares payment options, reconciles receipts and submits a proposal.
+   A deterministic verifier recomputes the kernel row and keeps its own numbers.
+   The agent owns three things and nothing else:
+   - the **explanation**, shipped only when every amount, date, status and action
+     in it is reproduced by the kernel row (`code/claims.py`);
+   - a **guarded spending change proposal**: the kernel re-solves it and accepts
+     it only when the event is permitted, unprotected and the re-solved plan
+     raises the safe amount — but the shipped row keeps the kernel's own
+     `spending_changes_needed`, so an accepted proposal is advice, not a change
+     to the answer;
+   - **concerns** about unreadable or conflicting evidence, which change no number.
+
+   Schema errors and ledger disagreements are fed back to the model with the exact
+   fix and retried up to `BUY_WAIT_AGENT_REPAIR_TURNS` (default 2). When that is
+   exhausted, or on any provider error, the kernel row stands.
+
+   It can also take plain instructions in the TUI — `ask stop my streaming
+   subscription`, `ask can I afford 40,000 on the 12th`, `ask undo` — through the
+   same kernel, session-only.
 
 Supporting pieces: RAG retrieval over messages/OCR text with SQLite (FTS5) as the
 canonical structured store and fallback retriever, a static HTML trace viewer for
@@ -155,8 +171,24 @@ python -m tools.tui
 ```
 
 Everything you do there — `list`, `show`, `dashboard`, `whatif`, `changes`,
-`apply`, `diff`, `undo`, `new`, `explain`, `trace` — is session-only. The TUI
-never writes `output.csv` or `dataset/` and never calls a model provider.
+`apply`, `diff`, `undo`, `new`, `explain`, `trace`, `ask` — is session-only. The
+TUI never writes `output.csv` or `dataset/`.
+
+`ask` is the conversational surface: plain-language instructions, split into
+ordered steps, each one executed against the same kernel.
+
+```text
+tui> ask why was request_101 refused
+tui> ask where am I leaking money, then stop the worst one
+tui> ask can I afford 40,000 on the 12th
+tui> ask and if I wait until the 20th
+```
+
+Each step reports what it did, what changed, and what it refused (with the
+nearest safe alternative). `python -m code.task_agent "<instruction>"` runs the
+same engine from the terminal, and `--provider ollama --model <id>` lets the
+model classify clauses the rules cannot read. Without a provider the rules answer
+alone, so nothing here needs a key.
 
 ### 4. Run the evaluation gates
 
@@ -199,10 +231,32 @@ export BUY_WAIT_OLLAMA_NUM_PREDICT=1024
 ```
 
 Sampling can change what the model *says*, never what the answer *is*: the seven
-machine-readable columns always come from the kernel, and a proposal that
-disagrees with the kernel is dropped. `propose_decision` takes the ten candidate
-fields as flat tool arguments — small local models drop free-form fields when the
-payload is nested under a single wrapper key, so the schema is flat on purpose.
+machine-readable columns always come from the kernel. `propose_decision` takes the
+ten candidate fields as flat tool arguments — small local models drop free-form
+fields when the payload is nested under a single wrapper key, so the schema is
+flat on purpose.
+
+The loop now treats a rejection as feedback instead of a stop condition:
+
+- **Intent first.** Every request is classified (`code/intent.py`) before the
+  first model call. The reading is deterministic and free; when a *clause* in a
+  task cannot be parsed by the rules, the model classifies it and the trace
+  records which reading won (`model` or `deterministic_fallback`).
+- **Repair turns.** A schema rejection or a disagreement with the ledger is sent
+  back with the exact fix ("you proposed X for `payment_plan`, the ledger computes
+  Y; re-read `get_cashflow_projection` and resubmit all ten fields"), bounded by
+  `BUY_WAIT_AGENT_REPAIR_TURNS` (default 2, max 5).
+- **Claim-checked explanations.** A model's `rationale` ships only when every
+  amount, date, status/method name and spending-change action in it is reproduced
+  by the kernel row (`code/claims.py`). Wrong about the plan, still allowed to
+  explain it; never allowed to invent a number.
+- **Guarded spending changes.** `propose_spending_change` lets the model try a
+  permitted `stop`/`reduce_to`; the kernel re-solves and accepts it only when it
+  actually raises the safe amount. The shipped row still carries the kernel's own
+  `spending_changes_needed`: the proposal is a tested recommendation, not an
+  edit to the answer.
+- **Concerns.** `raise_concern` records unreadable evidence or ambiguity in the
+  trace and the task report. It never changes a number.
 
 ### 6. Optional: Kilo + Nemotron Ultra deployment
 

@@ -27,7 +27,7 @@ import re
 import time
 from dataclasses import dataclass
 from datetime import date, datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Callable
 
@@ -88,6 +88,16 @@ def _text(value) -> str:
 
 def _clean_row(row: dict) -> dict:
     return {str(key): _text(value) for key, value in dict(row).items()}
+
+
+def _amount_key(value) -> Decimal:
+    """Sort key for money that may already be formatted, blank, or a Decimal."""
+    if isinstance(value, Decimal):
+        return value
+    try:
+        return Decimal(str(value or "0").replace(",", "").strip() or "0")
+    except (InvalidOperation, ValueError):
+        return Decimal("0")
 
 
 def _plain(value):
@@ -173,6 +183,36 @@ TOOL_SPECS: tuple[ToolSpec, ...] = (
         "Kernel plus verifier for the current request; never returns a decision it owns.",
         ("candidate",),
         "verify_decision",
+    ),
+    ToolSpec(
+        "propose_spending_change",
+        "Try one permitted stop/reduce action; the kernel re-solves and owns the numbers.",
+        ("request_id", "event_id", "action", "new_amount", "rationale"),
+        "propose_spending_change",
+    ),
+    ToolSpec(
+        "search_spending_changes",
+        "Rank the permitted spending changes by the safe amount each one unlocks.",
+        ("request_id",),
+        "search_spending_changes",
+    ),
+    ToolSpec(
+        "compare_payment_options",
+        "Compare the supplied payment options: total payable, fees and eligibility.",
+        ("request_id",),
+        "compare_payment_options",
+    ),
+    ToolSpec(
+        "reconcile_receipts",
+        "List the events whose amount came from an image and flag unresolved evidence.",
+        ("user_id",),
+        "reconcile_receipts",
+    ),
+    ToolSpec(
+        "raise_concern",
+        "Record a concern (unreadable evidence, ambiguity, conflict). Never changes a number.",
+        ("kind", "detail"),
+        "raise_concern",
     ),
 )
 
@@ -766,6 +806,243 @@ class Toolbox:
             "forecast_probes": probed,
             "candidates": candidates,
         }
+
+    @_structured
+    def propose_spending_change(
+        self,
+        request_id: str,
+        event_id: str,
+        action: str,
+        new_amount=None,
+        rationale=None,
+    ) -> dict:
+        """Try one permitted change. Accepted only when the kernel says it helps."""
+        request = self._request_row(request_id)
+        user_id = request.get("user_id", "")
+        kind = str(action or "").strip().lower()
+        if kind not in ("stop", "reduce_to"):
+            raise ToolError(f"action must be 'stop' or 'reduce_to', got {action!r}")
+        permitted = {
+            (_text(item.get("event_id")), _text(item.get("action"))): item
+            for item in self._permitted_actions(user_id)
+        }
+        key = (_text(event_id), kind)
+        if key not in permitted:
+            allowed = sorted(
+                {entry for entry in permitted if entry[0] == _text(event_id)}
+            )
+            if allowed:
+                raise ToolError(
+                    f"{event_id} cannot be {kind}; the user permits "
+                    + ", ".join(sorted(item[1] for item in allowed))
+                )
+            raise ToolError(
+                f"{event_id} is not a permitted spending change for this user "
+                "(protected category, fixed cost, or outside the categories the "
+                "user will change)"
+            )
+        entry = permitted[key]
+        value = entry.get("value")
+        if kind == "reduce_to":
+            try:
+                target = Decimal(str(new_amount).replace(",", ""))
+            except (InvalidOperation, ValueError, TypeError):
+                raise ToolError("reduce_to needs a numeric new_amount")
+            # Compare against what the event costs today, not against the
+            # permitted action's floor: the floor is the lower bound that
+            # `_validate_change_tokens` enforces, so using it here as a ceiling
+            # would make every reduce_to impossible.
+            current = None
+            for event in self._user_events(user_id):
+                if _text(event.get("event_id")) != _text(event_id):
+                    continue
+                try:
+                    current = Decimal(str(event.get("amount")).replace(",", ""))
+                except (InvalidOperation, TypeError, ValueError):
+                    current = None
+                break
+            if current is None:
+                raise ToolError(
+                    f"{event_id} has no readable current amount, so it cannot be reduced"
+                )
+            if target <= 0 or target >= current:
+                raise ToolError(
+                    f"new_amount must be above 0 and below the current {money_text(current)}"
+                )
+            value = target
+        token = (
+            ("stop", _text(event_id), None)
+            if kind == "stop"
+            else ("reduce_to", _text(event_id), value)
+        )
+        baseline = self._projection(request_id, ())
+        projected = self._projection(request_id, (token,))
+        if projected.get("fail_closed"):
+            return {
+                "request_id": str(request_id),
+                "accepted": False,
+                "reason": str(projected.get("fail_closed_reason") or "projection failed"),
+                "changes": "none",
+            }
+        baseline_safe = Decimal(str(baseline.get("safe_amount") or "0"))
+        safe = Decimal(str(projected.get("safe_amount") or "0"))
+        requested = Decimal(str(request.get("requested_amount") or "0"))
+        accepted = safe > baseline_safe
+        change_text = (
+            f"stop:{_text(event_id)}"
+            if kind == "stop"
+            else f"reduce_to:{_text(event_id)}:{money_text(value)}"
+        )
+        return {
+            "request_id": str(request_id),
+            "accepted": bool(accepted),
+            "changes": change_text if accepted else "none",
+            "category": _text(entry.get("category")),
+            "baseline_safe_amount": money_text(baseline_safe),
+            "safe_amount": money_text(safe),
+            "covers_request": bool(safe >= requested),
+            "earliest_date": _text(projected.get("earliest_date")),
+            "reason": (
+                "the kernel re-solved and this change raises the safe amount"
+                if accepted
+                else "the kernel re-solved and this change does not raise the safe amount"
+            ),
+            "rationale": _text(rationale),
+        }
+
+    @_structured
+    def search_spending_changes(self, request_id: str) -> dict:
+        """Rank permitted changes by the safe amount each one unlocks."""
+        listing = self.list_spending_change_candidates(request_id)
+        data = listing.get("data") if listing.get("ok") else {}
+        rows = []
+        for entry in (data or {}).get("candidates") or []:
+            if not entry.get("changes_forecast"):
+                continue
+            try:
+                projected = self._projection(
+                    request_id,
+                    ((
+                        entry["action"],
+                        entry["event_id"],
+                        None if entry["action"] == "stop" else _amount_key(entry.get("value")),
+                    ),),
+                )
+            except ToolError:
+                continue
+            rows.append(
+                {
+                    "action": entry["action"],
+                    "event_id": entry["event_id"],
+                    "category": entry.get("category"),
+                    "safe_amount": money_text(projected.get("safe_amount") or "0"),
+                    "earliest_date": _text(projected.get("earliest_date")),
+                }
+            )
+        rows.sort(key=lambda item: _amount_key(item.get("safe_amount")), reverse=True)
+        return {
+            "request_id": str(request_id),
+            "ranked": rows[:5],
+            "count": len(rows),
+        }
+
+    @_structured
+    def compare_payment_options(self, request_id: str) -> dict:
+        """Arithmetic over the supplied options; no new terms are invented."""
+        listing = self.get_payment_options(request_id)
+        data = listing.get("data") if listing.get("ok") else {}
+        eligible = {
+            _text(option.get("payment_option_id"))
+            for option in (data or {}).get("eligible") or []
+        }
+        rows = []
+        priced = []
+        for option in (data or {}).get("supplied") or []:
+            option_id = _text(option.get("payment_option_id"))
+            total = option.get("total_payable_amount")
+            fee = option.get("financing_fee")
+            try:
+                total_value = Decimal(str(total).replace(",", ""))
+            except (InvalidOperation, ValueError):
+                total_value = None
+            try:
+                fee_value = Decimal(str(fee).replace(",", "")) if fee not in (None, "") else Decimal("0")
+            except (InvalidOperation, ValueError):
+                fee_value = None
+            rows.append(
+                {
+                    "payment_option_id": option_id,
+                    "payment_method": _text(option.get("payment_method")),
+                    "number_of_payments": _text(option.get("number_of_payments")),
+                    "total_payable_amount": money_text(total_value) if total_value is not None else _text(total),
+                    "financing_fee": money_text(fee_value) if fee_value is not None else _text(fee),
+                    "eligible": option_id in eligible,
+                }
+            )
+            # An option whose total cannot be read is not the cheapest one; it
+            # is an option with an unknown price.
+            if option_id in eligible and total_value is not None:
+                priced.append((total_value, option_id))
+        priced.sort(key=lambda item: item[0])
+        return {
+            "request_id": str(request_id),
+            "options": rows,
+            "cheapest_eligible": priced[0][1] if priced else "",
+            "eligible_count": len([row for row in rows if row["eligible"]]),
+            "priced_eligible_count": len(priced),
+        }
+
+    @_structured
+    def reconcile_receipts(self, user_id: str) -> dict:
+        """Which events owe their amount to an image, and which are still unknown."""
+        rows = []
+        unresolved = []
+        for event in self._bundle().events:
+            if _text(event.get("user_id")) != _text(user_id):
+                continue
+            source = _text(event.get("amount_source"))
+            amount = event.get("amount")
+            if source == "linked_image_ocr":
+                rows.append(
+                    {
+                        "event_id": _text(event.get("event_id")),
+                        "amount": money_text(amount) if amount not in (None, "") else "",
+                        "backend": _text(event.get("amount_evidence_backend")),
+                        "image": _text(event.get("amount_evidence_id")),
+                    }
+                )
+            elif amount in (None, "") or str(amount).strip().lower() in {"nan", "none", ""}:
+                unresolved.append(
+                    {
+                        "event_id": _text(event.get("event_id")),
+                        "category": _text(event.get("category")),
+                        "date": _text(event.get("event_date")),
+                    }
+                )
+        total = sum(
+            (Decimal(str(row["amount"].replace(",", ""))) for row in rows if row["amount"]),
+            Decimal("0"),
+        )
+        return {
+            "user_id": str(user_id),
+            "from_images": rows,
+            "from_images_total": money_text(total),
+            "unresolved": unresolved,
+        }
+
+    @_structured
+    def raise_concern(self, kind: str, detail: str) -> dict:
+        """Keep a concern on the toolbox; it never changes a number."""
+        text = _text(kind)
+        message = _text(detail)
+        if not text or not message:
+            raise ToolError("raise_concern needs both kind and detail")
+        concerns = getattr(self, "concerns", None)
+        if concerns is None:
+            concerns = []
+            self.concerns = concerns
+        concerns.append({"kind": text, "detail": message})
+        return {"kind": text, "detail": message, "count": len(concerns)}
 
     @_structured
     def propose_decision(self, candidate) -> dict:

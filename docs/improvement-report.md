@@ -202,7 +202,8 @@ Full table: [`docs/ocr-comparison.md`](ocr-comparison.md).
 
 *(run 1: `llama3.2:3b`, 5 requests, shipped 6-turn budget, §6.1. Run 2: same
 model, 600 s per-call timeout, §6.4. Run 3: `gemma4:e2b-it-qat`, before and after
-the flat proposal schema, §6.5.)*
+the flat proposal schema, §6.5. Run 4: the same model once the loop was allowed to
+contribute and to repair, §6.6.)*
 
 The point of the experiment is not "is the LLM smarter". It is: **does adding an
 LLM loop change any number the user acts on?** If it does, that is a bug.
@@ -355,6 +356,68 @@ The lesson worth carrying: at 2–3B parameters, **tool-schema ergonomics matter
 than model size**. A wrapper key that looks tidy to a human is a lossy pipe for a
 small model, and no amount of timeout compensates.
 
+### 6.6 Run 4: giving the model somewhere legal to put its answer
+
+Runs 1–3 shared a structural defect that I put there, not the models: the verifier
+accepted a candidate only when it *agreed* with the kernel on every machine field,
+so a model could change exactly one thing — `decision_explanation` — and only when
+its reasoning resembled the kernel's own text. A model that agreed won nothing; a
+model that disagreed was discarded. Under that contract, "the agent contributes
+nothing" was guaranteed by design, and three different models proved it.
+
+Run 4 changed the contract in three ways, all without moving a single machine value:
+
+1. **Repair instead of rejection.** A failed proposal now comes back to the model as
+   a structured rejection naming the field, the kernel value and the model value,
+   bounded by `BUY_WAIT_AGENT_REPAIR_TURNS` (default 2).
+2. **Claim-checked prose.** The model writes the explanation; `code/claims.py`
+   extracts every number, date, status and method name from it and requires each one
+   to be reproduced by the kernel row. Grounded prose ships even when the model's
+   own candidate fields differ; fabricated prose never ships.
+3. **Intent first.** Every instruction is classified (question / analysis / action /
+   compound / follow-up) before any tool runs, so the loop reads the request the
+   user actually made.
+
+| Metric | flat schema, no contribution (§6.5) | run 4, repair + claims |
+|---|---|---|
+| Machine fields identical to the kernel | 3/3 | **3/3** |
+| Requests that fell back to the kernel row | **3/3** | **0/3** |
+| Explanations written by the model | 0/3 | **2/3** |
+| Model calls (total / per request) | 11 / 3.7 | 22 / 7.3 |
+| Wall clock (mean / max) | 71.5 s / 84.6 s | 176.3 s / 245.7 s |
+
+Three runs were measured end to end at 3 requests each. The explanation count went
+0/3 → 1/3 → 2/3 and 2/3, and the fallback count went 3/3 → 0/3 and stayed there.
+The per-request prose changes between runs — in one run `request_26` ships and
+`request_27` does not, in the next the reverse — which is honest variation from a
+2.3B model, not a number I should quote as stable.
+
+**Cost.** Calls roughly doubled (3.7 → 7.3 per request) and wall clock roughly
+doubled with them, because the loop now reads evidence, projects cash flow, submits,
+reads the rejection and tries again. That is the price of an agent that finishes
+rather than one that fails fast.
+
+**Two over-rejection bugs found on the way, both mine.**
+
+The first: the claim check only knew the numbers in the final decision row, so a
+rationale citing the *request amount* or the user's *minimum balance* was treated as
+fabrication. `request_28` was discarded for quoting `1048.86` and `1100` — its own
+profile figures. The check now receives the request amount, both request dates and
+the two balance figures the model was shown, because citing a fact you were given is
+not inventing one.
+
+The second was the same bug wearing a disguise: the facts fetch called
+`tools.call("get_request_context", request_id)` positionally, while `Toolbox.call`
+takes only keyword arguments. The `TypeError` was swallowed by the surrounding
+`except`, so `facts` was silently empty and every citation stayed unsupported —
+`request_27` was rejected for quoting `20500`, the user's actual minimum balance.
+A test now pins the call to keyword form, and a failed fact read is documented as
+"narrows what prose may cite" rather than a harmless detail.
+
+Both are the same lesson: a trust boundary that fails closed on *my* plumbing error
+looks exactly like a model hallucinating. Fail-closed is only honest when the path it
+guards is correct.
+
 ---
 
 ## 6x. A second mind, checked: the JEV decision gate
@@ -467,19 +530,22 @@ silent-failure bug in §6.4 was still live; this one would have caught it.
 3. **Handwriting.** One unreadable receipt forces a whole request to
    `not_affordable`. A human-in-the-loop confirmation would fix it.
 4. **Live model quality is mostly unmeasured.** The 50-call OpenRouter budget has
-   not been spent. The local models now *do* complete the loop (§6.5), but on three
-   requests, and they were wrong about the plan every time — so there is still no
-   evidence that a strong remote model's proposals would beat the kernel's own row.
+   not been spent. The local models now complete the loop and stop falling back
+   (§6.6), but on three requests each, and what they contribute is narration plus the
+   occasional guarded spending change — there is still no evidence that a strong
+   remote model's proposals would beat the kernel's own row.
 5. **Docker is unverified.** The image definition exists and is checked by tests,
    but it has not been built here because the development machine ran out of disk
    space. Treat the first build as unproven; G5/G6 stay NOT RUN until an archive
    exists.
-6. **The agentic path is measured, not proven.** Seven requests have now run end to
-   end (three with `llama3.2:3b`, three plus one diagnostic with Gemma 4), and every
-   one of them fell back to the kernel — first because the model could not fill the
-   schema, then because the verifier disagreed with its plan. That demonstrates the
-   guardrail, not that a capable remote model would converge — the Kilo/Nemotron path
-   is wired and documented but has never been run with real credentials.
+6. **The agentic path is measured, not proven.** Thirteen requests have now run end
+   to end (five with `llama3.2:3b`, eight with Gemma 4 across four runs). The early runs
+   fell back every time — first because the model could not fill the schema, then
+   because the verifier disagreed with its plan — and the last two runs fell back not
+   at all, shipping the model's own explanation on two of three requests. That is a
+   real contribution path working, still on three requests and one 2.3B model. The
+   Kilo/Nemotron path is wired and documented but has never been run with real
+   credentials, so no claim here rests on a frontier model.
 7. **`output.csv` is generated, not golden.** It is now rebuilt from the release run
    (250 rows, sha256 `1f35043f…`), but it reflects this build only. Regenerate it
    after any forecast or policy change; G4 ties the file to the commit that made it.

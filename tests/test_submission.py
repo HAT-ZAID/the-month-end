@@ -143,10 +143,13 @@ def test_no_hardcoded_labels_in_code():
         text = path.read_text(encoding="utf-8", errors="ignore")
         if "_REF = re.compile" in text:
             continue  # anti-hallucination ID-strip guard
+        # A regex such as ``request_\d+`` is a parser, not a hardcoded label: mask
+        # every ``\d`` escape so only real literals (`request_26`) can match.
+        scanned = text.replace(r"\d", "DIGIT")
         is_code = code_root in path.parents
         pats = id_pats + code_only_pats if is_code else id_pats
         for pat in pats:
-            if re.search(pat, text):
+            if re.search(pat, scanned):
                 hits.append(f"{path.name}:{pat}")
     assert hits == [], f"hardcoded labels: {hits}"
 

@@ -70,11 +70,31 @@ checks.
 |---|---|
 | `code/store.py` | SQLite canonical store of requests, profiles, events, options, messages and FTS5 evidence chunks |
 | `code/rag.py` | Hybrid retriever: local vector search first, SQLite FTS5 when embeddings are unavailable |
-| `code/tools.py` | Seven typed tools plus the `Toolbox`; user-scoped arguments only |
-| `code/agent.py` | Bounded LangChain tool-calling loop, run-wide call cap, per-turn timeout, replay/offline paths |
+| `code/tools.py` | Twelve typed tools plus the `Toolbox`; user-scoped arguments only |
+| `code/agent.py` | Bounded LangChain tool-calling loop, run-wide call cap, per-turn timeout, repair turns, replay/offline paths |
+| `code/intent.py` | Instruction classification: model first, deterministic rules always, source recorded |
+| `code/claims.py` | Claim check that decides whether a model rationale may ship |
+| `code/verifier.py` | Recomputes the kernel row; accepts a candidate's prose only when its claims are supported |
+| `code/task_agent.py` | Conversational task engine (`ask`): parse, decompose, act through the kernel, trace |
 | `code/providers.py` | Provider factory: `none` (default), `replay`, `ollama`, `openrouter`, `kilo` |
-| `code/verifier.py` | Recomputes the kernel row and accepts only agreeing candidates |
 | `code/trace.py` | Per-request JSON traces with secret redaction |
+
+#### What the model is allowed to contribute
+
+The loop used to accept only a fully agreeing candidate, so a model could not
+change anything except when it already agreed. The contribution paths today:
+
+| Path | Guard |
+|---|---|
+| `decision_explanation` | every amount, date, status/method name and spending-change action must be reproduced by the kernel row (`code/claims.py`); grounds prose without agreement |
+| `spending_changes_needed` | `propose_spending_change` is accepted only when the kernel re-solve raises the safe amount and the event is permitted and unprotected; the shipped row keeps the kernel's value, so an accepted proposal is advice, not an edit |
+| Intent / routing | `code/intent.py`; a wrong reading costs a turn, never a number |
+| Concerns | `raise_concern` writes to the trace only |
+| Task actions | `code/task_agent.py`; session-only and reversible |
+
+Every other machine field stays kernel-only. A rejection is feedback: schema
+errors and ledger disagreements are returned to the model with the exact fix and
+retried up to `BUY_WAIT_AGENT_REPAIR_TURNS` (default 2, max 5).
 
 The loop has three independent limits: chat turns per request (`MAX_PROVIDER_CALLS
 = 6`), tool calls per request, and provider calls per run
@@ -99,7 +119,8 @@ time.
 |---|---|---|
 | Batch | `python -m code.main` | `output.csv`, usage report |
 | Single-request demo | `python -m code.agent --request-id ID --provider KIND` | one JSON trace when `--trace-dir` is set |
-| TUI | `python -m tools.tui` | nothing (session-only) |
+| TUI | `python -m tools.tui` (`ask <instruction>` for tasks) | `traces/tasks/*.json` only |
+| Task engine | `python -m code.task_agent "<instruction>"` | one task trace |
 | Trace viewer | `python -m tools.trace_view --trace-dir DIR --out PAGE` | static HTML |
 | Gates | `python -m evaluation.run --mode pr` | `evaluation/report.{json,md}` |
 | Store | `python -m code.store --rebuild` | `data/app.db` |

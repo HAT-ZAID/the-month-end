@@ -189,7 +189,12 @@ def test_verifier_returns_kernel_values_when_candidate_lies():
     assert row["recommended_payment_method"] == "full_payment"
     assert row["payment_plan"] == "2026-01-05:1000"
     assert row["earliest_date_for_full_payment"] == "2026-01-05"
-    assert row["decision_explanation"] == KERNEL["decision_explanation"]
+    # The prose makes no claim the kernel contradicts ("the full amount fits
+    # above the protected minimum balance" is true of the kernel row), so it
+    # ships even though the candidate was wrong about every plan field.
+    assert row["decision_explanation"] == liar["rationale"]
+    assert verification["rationale_source"] == "candidate"
+    assert verification["claim_check"]["unsupported"] == []
 
     assert verification["agent_agreement"] is False
     assert verification["candidate_valid"] is True
@@ -262,9 +267,11 @@ def test_trace_redacts_secrets_and_writes_stable_json(tmp_path):
     assert deterministic_view(payload) == deterministic_view(
         json.loads(path_b.read_text(encoding="utf-8"))
     )
-    assert payload["metadata"]["duration_ms"] != json.loads(
-        path_b.read_text(encoding="utf-8")
-    )["metadata"]["duration_ms"]
+    # ``duration_ms`` is real elapsed time and two back-to-back writes can land
+    # on the same millisecond, so assert it is recorded and numeric rather than
+    # asserting the two runs always differ (that assertion was flaky).
+    assert isinstance(payload["metadata"]["duration_ms"], (int, float))
+    assert payload["metadata"]["duration_ms"] >= 0
 
 
 def test_replay_provider_reads_fixture_and_returns_none_when_missing(tmp_path):
