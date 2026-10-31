@@ -189,11 +189,11 @@ def test_verifier_returns_kernel_values_when_candidate_lies():
     assert row["recommended_payment_method"] == "full_payment"
     assert row["payment_plan"] == "2026-01-05:1000"
     assert row["earliest_date_for_full_payment"] == "2026-01-05"
-    # The prose makes no claim the kernel contradicts ("the full amount fits
-    # above the protected minimum balance" is true of the kernel row), so it
-    # ships even though the candidate was wrong about every plan field.
-    assert row["decision_explanation"] == liar["rationale"]
-    assert verification["rationale_source"] == "candidate"
+    # The candidate was wrong about every plan field, so its prose must not ship
+    # even though the claim check found nothing it could contradict: agreement
+    # is the first gate and claim checking only narrows it further.
+    assert row["decision_explanation"] == KERNEL["decision_explanation"]
+    assert verification["rationale_source"] == "kernel"
     assert verification["claim_check"]["unsupported"] == []
 
     assert verification["agent_agreement"] is False

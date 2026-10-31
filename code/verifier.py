@@ -205,8 +205,11 @@ def enforce_decision(
 
     agreement = bool(candidate_valid and not differences)
     rationale = str(getattr(parsed, "rationale", "") or "").strip()
-    # A context mismatch means the row we are about to emit was not the request
-    # the candidate reasoned about, so its prose cannot be attached to it.
+    # The model may narrate the row only when it also got the plan right.  A
+    # candidate that disagreed on a machine field would otherwise attach prose
+    # about a plan we are not shipping; a failed schema check or a context
+    # mismatch rules it out for the same reason.  Claim checking then runs on
+    # top of agreement, so agreement alone is never enough either.
     claim_report = None
     if rationale and not context_mismatch and parsed is not None:
         claim_report = verify_claims(
@@ -215,7 +218,7 @@ def enforce_decision(
             extra_numbers=extra_numbers or (),
             extra_dates=extra_dates or (),
         )
-    rationale_ok = bool(claim_report and claim_report.get("ok"))
+    rationale_ok = bool(agreement and claim_report and claim_report.get("ok"))
     rationale_source = "candidate" if rationale_ok else "kernel"
 
     final_row = dict(row)

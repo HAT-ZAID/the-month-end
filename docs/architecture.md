@@ -74,19 +74,20 @@ checks.
 | `code/agent.py` | Bounded LangChain tool-calling loop, run-wide call cap, per-turn timeout, repair turns, replay/offline paths |
 | `code/intent.py` | Instruction classification: model first, deterministic rules always, source recorded |
 | `code/claims.py` | Claim check that decides whether a model rationale may ship |
-| `code/verifier.py` | Recomputes the kernel row; accepts a candidate's prose only when its claims are supported |
+| `code/verifier.py` | Recomputes the kernel row; ships a candidate's prose only when the candidate agrees and its claims are supported |
 | `code/task_agent.py` | Conversational task engine (`ask`): parse, decompose, act through the kernel, trace |
-| `code/providers.py` | Provider factory: `none` (default), `replay`, `ollama`, `openrouter`, `kilo` |
+| `code/providers.py` | Provider factory: `none` (default), `replay`, `ollama`, `openrouter`, `kilo`, `paid`; every provider declares a privacy class |
 | `code/trace.py` | Per-request JSON traces with secret redaction |
 
 #### What the model is allowed to contribute
 
-The loop used to accept only a fully agreeing candidate, so a model could not
-change anything except when it already agreed. The contribution paths today:
+The loop accepts a candidate's prose only when the candidate agrees with the kernel
+row; everything the model contributes on top of that is still guarded. The
+contribution paths today:
 
 | Path | Guard |
 |---|---|
-| `decision_explanation` | every amount, date, status/method name and spending-change action must be reproduced by the kernel row (`code/claims.py`); grounds prose without agreement |
+| `decision_explanation` | the candidate must agree with the kernel row on every machine field, and then every amount, date, status/method name and spending-change action in its prose must be reproduced by the kernel row, the supplied request facts (requested amount, minimum balance) or the profile facts it was shown (`code/claims.py`) |
 | `spending_changes_needed` | `propose_spending_change` is accepted only when the kernel re-solve raises the safe amount and the event is permitted and unprotected; the shipped row keeps the kernel's value, so an accepted proposal is advice, not an edit |
 | Intent / routing | `code/intent.py`; a wrong reading costs a turn, never a number |
 | Concerns | `raise_concern` writes to the trace only |

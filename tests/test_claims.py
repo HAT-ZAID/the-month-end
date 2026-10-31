@@ -103,7 +103,7 @@ def test_verifier_keeps_kernel_text_when_the_rationale_fabricates():
     assert result["verification"]["claim_check"]["ok"] is False
 
 
-def test_verifier_ships_a_grounded_rationale_even_when_fields_disagree():
+def test_verifier_keeps_kernel_text_when_fields_disagree():
     candidate = {
         "request_id": "request_demo",
         "amount_safe_to_pay": "1",  # wrong
@@ -117,9 +117,12 @@ def test_verifier_ships_a_grounded_rationale_even_when_fields_disagree():
         "rationale": "The transfer of 15,656,000 clears on 2025-08-03 in one payment.",
     }
     result = enforce_decision(candidate, dict(ROW))
-    assert result["verification"]["rationale_source"] == "candidate"
+    # Grounded or not, prose from a candidate that disagreed with the plan does
+    # not ship: the explanation would describe a row we are not emitting.
+    assert result["verification"]["rationale_source"] == "kernel"
     assert result["verification"]["agent_agreement"] is False
-    assert result["final_row"]["decision_explanation"] == candidate["rationale"]
+    assert result["verification"]["claim_check"]["ok"] is True
+    assert result["final_row"]["decision_explanation"] == ROW["decision_explanation"]
     # machine fields still come from the kernel
     assert result["final_row"]["affordability_status"] == "affordable_now"
     assert result["final_row"]["amount_safe_to_pay"] == "15656000"
@@ -192,3 +195,21 @@ def test_request_facts_are_empty_when_the_read_fails():
 
     assert _request_facts(Broken(), "request_demo") == {}
     assert _request_facts(object(), "request_demo") == {}
+
+def test_prose_from_an_invalid_candidate_never_ships():
+    candidate = {
+        "request_id": "request_OTHER",
+        "amount_safe_to_pay": "15656000",
+        "affordability_status": "affordable_now",
+        "recommended_payment_method": "full_payment",
+        "payment_plan": "2025-08-03:15656000",
+        "earliest_date_for_full_payment": "2025-08-03",
+        "spending_changes_needed": "none",
+        "evidence_sufficient": True,
+        "confidence": 0.9,
+        "rationale": "This other purchase is fine.",
+    }
+    result = enforce_decision(candidate, dict(ROW))
+    assert result["verification"]["candidate_valid"] is False
+    assert result["verification"]["rationale_source"] == "kernel"
+    assert result["final_row"]["decision_explanation"] == ROW["decision_explanation"]
