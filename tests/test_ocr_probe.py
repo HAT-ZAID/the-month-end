@@ -147,4 +147,4 @@ def test_upscaling_never_exceeds_the_maximum_dimension(tmp_path):
     # not shrunk either: the raw source is handed to the reader unchanged.
     large = tmp_path / "large.png"
     Image.new("RGB", (3000, 1200), color=(90, 90, 90)).save(large)
-    assert max(ocr.preprocess_image(large).size) <= 3000
+    assert ocr.preprocess_image(large).size == (3000, 1200)

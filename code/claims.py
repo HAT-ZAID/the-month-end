@@ -61,6 +61,18 @@ _MONEY_CUE = re.compile(
     re.IGNORECASE,
 )
 _CUE_WINDOW = 40
+# A figure followed by a count noun is a quantity, not an amount: "2
+# installments" and "3 of 5 samples" must not become money claims.
+_COUNT_UNIT = re.compile(
+    r"\s*(?:install?ments?|months?|weeks?|days?|years?|times|percent|%|of\b)",
+    re.IGNORECASE,
+)
+# A currency symbol or code in front of the figure marks it as money even when
+# the figure is short and no money word is near.
+_CURRENCY_MARKER = re.compile(
+    r"(?:[$€£¥₹]|\b(?:usd|idr|eur|gbp|sgd|zar|myr|thb|php|inr|jpy|aud|cad|chf)\b|rp)\s*$",
+    re.IGNORECASE,
+)
 _ACTION = re.compile(
     r"\b(stop|reduce_to):(event_\d+)(?::(\d+(?:\.\d+)?))?", re.IGNORECASE
 )
@@ -119,8 +131,13 @@ def _money_claims(text: str) -> list[tuple[str, Decimal]]:
         # A bare three-digit figure is only money when a money word sits next
         # to it: "pay 500" is a claim, "3 of 5 samples" is not. Without the
         # cue, a small invented amount would pass as an unchecked count.
+        # "$500" is money with no word near it, and "2 installments" is a count
+        # with "pay" just before it: the unit decides first, then the marker.
+        if _COUNT_UNIT.match(unspanned[match.end():]):
+            continue
+        marked = _CURRENCY_MARKER.search(unspanned[max(0, match.start() - 8):match.start()])
         cue = _MONEY_CUE.search(unspanned[max(0, match.start() - _CUE_WINDOW):match.start()])
-        if "," in token or "." in token or len(significant) >= 4 or cue:
+        if marked or "," in token or "." in token or len(significant) >= 4 or cue:
             number = _decimal(token)
             if number is not None:
                 claims.append((token, number))

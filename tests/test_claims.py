@@ -344,3 +344,13 @@ def test_the_batch_row_never_takes_a_disagreement_note():
         _preferred_explanation(template, res, {"verification": {"rationale_source": "candidate"}})
         == note
     )
+def test_a_currency_marked_figure_is_a_claim_without_a_cue_word():
+    report = verify_claims("$500 is due now.", dict(ROW))
+    assert report["checked"] >= 1
+    assert report["ok"] is False
+
+
+def test_a_unit_count_is_not_a_money_claim():
+    report = verify_claims("Pay 500 in 2 installments.", dict(ROW))
+    amounts = [item["text"] for item in report["unsupported"] if item["kind"] == "amount"]
+    assert amounts == ["500"]
