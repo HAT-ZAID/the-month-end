@@ -31,6 +31,7 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Callable
 
+from code.amounts import to_decimal
 from code.changes import apply_changes, permitted_actions
 from code.options import get_valid_options
 from code.oracle import solve_safe_amount
@@ -94,10 +95,7 @@ def _amount_key(value) -> Decimal:
     """Sort key for money that may already be formatted, blank, or a Decimal."""
     if isinstance(value, Decimal):
         return value
-    try:
-        return Decimal(str(value or "0").replace(",", "").strip() or "0")
-    except (InvalidOperation, ValueError):
-        return Decimal("0")
+    return to_decimal(str(value or "").replace(",", "").strip() or "0", Decimal("0"))
 
 
 def _plain(value):

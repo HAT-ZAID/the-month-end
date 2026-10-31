@@ -12,7 +12,7 @@ Section numbering in §6 is load-bearing: `code/changes.py`, `code/options.py`, 
 
 1. Read this file.
 2. Never invent a financial fact. The deterministic kernel owns every machine field; the model explains, classifies intent, and proposes — it does not compute balances.
-3. Run `pytest -q` before claiming anything works. Baseline: **580 passed, 1 skipped**.
+3. Run `pytest -q` before claiming anything works. Baseline: **629 passed, 1 skipped**.
 4. A major change gets a CodeRabbit deep review iterated until clean, then two independent reviews immediately before push.
 5. Secrets come from the environment only. A free model tier warns before it touches free text.
 
@@ -45,7 +45,7 @@ Rules:
 - **Free tiers train on submitted data.** The TUI and `python -m code.task_agent` must warn before a free provider receives free text, and the warning must say plainly that free tiers train on your data and that sensitive information should not be entered.
 - Prefer `local` for real user data, `paid` next, `free` only for development.
 - Secrets live in `.env` or the environment. Never commit keys, tokens, cookies or private keys.
-- Traces and usage reports may record provider, model and token counts. They never record credentials or full user text.
+- Traces and usage reports may record provider, model and token counts, plus the shape of a run. They never record credentials. A task trace stores a hash of the typed instruction, not its text; the agent trace can contain the prompt facts it was shown, so keep `traces/` out of version control.
 - Do not weaken this section to make a demo easier.
 
 ---

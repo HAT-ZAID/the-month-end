@@ -28,16 +28,18 @@ TUI's rich console is not needed.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from pathlib import Path
 
-from code.amounts import parse_amount
+from code.amounts import parse_amount, to_decimal
 from code.intent import detect_intent, deterministic_intent
+from code.trace import sanitize
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_TRACE_DIR = REPO_ROOT / "traces" / "tasks"
@@ -67,7 +69,7 @@ _MONTH_DAY = re.compile(
 )
 _REQUEST_ID = re.compile(r"\brequest[_\s-]?(\d+)\b", re.IGNORECASE)
 _EVENT_ID = re.compile(r"\bevent[_\s-]?(\d+)\b", re.IGNORECASE)
-_MONEY = re.compile(r"(?<![\w.])(\d[\d,]*(?:\.\d+)?)(?![\w])")
+_MONEY = re.compile(r"(?<![\w.])(\d[\d.,]*\d|\d)(?![\w])")
 
 _MONTHS = {
     "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
@@ -169,25 +171,23 @@ class UnknownTarget(ValueError):
 # --- small parsers ---------------------------------------------------------
 
 
-def _money_value(token) -> Decimal | None:
-    """'40,000' / 'IDR 8 000' / '1500.50' -> Decimal, or None."""
+def _money_value(token, currency: str = "", lang: str = "") -> Decimal | None:
+    """'40,000' / 'IDR 8 000' / '1500.50' -> Decimal, or None.
+
+    ``parse_amount`` is the locale-aware reader and it needs a currency to
+    resolve an ambiguous separator, so the caller passes the home currency when
+    it knows it.  Without one, the mixed-separator rule still reads EU-style
+    input correctly, and the naive separator strip is only the last resort.
+    """
     text = str(token or "").strip().replace(" ", "")
     if not text:
         return None
-    try:
-        value = parse_amount(text)
-    except Exception:
-        try:
-            value = Decimal(text.replace(",", ""))
-        except (InvalidOperation, ValueError):
-            return None
+    value = parse_amount(text, currency, lang)
     if value is None:
+        value = to_decimal(text.replace(",", ""))
+    if value is None or not value.is_finite():
         return None
-    try:
-        value = Decimal(value)
-    except (InvalidOperation, TypeError, ValueError):
-        return None
-    return value if value.is_finite() else None
+    return value
 
 
 def _strip_tokens(text: str) -> str:
@@ -250,9 +250,13 @@ def extract_date(text: str, reference: date | None = None) -> date | None:
         if month:
             for year in (reference.year, reference.year + 1):
                 try:
-                    return date(year, month, int(match.group(1)))
+                    candidate = date(year, month, int(match.group(1)))
                 except ValueError:
                     continue
+                # A month name with no year means the next occurrence, not a
+                # date in the past: "on 3 Jan" asked in December is next January.
+                if candidate >= reference:
+                    return candidate
     match = _DAY_ORDINAL.search(text or "")
     if match:
         try:
@@ -624,6 +628,9 @@ def _afford(workspace: Workspace, spec: StepSpec, result: TaskResult) -> StepRes
         request_date = wanted_date or reference or date.today()
         user_id = workspace.default_user()
         request_id = workspace.add_manual(amount, request_date, user_id)
+        # The manual request is what the user is now talking about, so a
+        # following `what if I wait until the 20th` must test this request.
+        workspace.current_request_id = request_id
         decision = workspace.decide(request_id)
         question = f"{_fmt(amount)} on {request_date.isoformat()}"
 
@@ -787,6 +794,7 @@ def _apply(workspace: Workspace, spec: StepSpec, result: TaskResult) -> StepResu
     if action is None:
         return StepResult("apply", spec.text, STATUS_REFUSED, problem)
     before = workspace.decide(request_id)
+    previous_applied = list(workspace.context(request_id).applied)
     fresh = workspace.apply_actions(request_id, [action])
     if not fresh:
         return StepResult(
@@ -797,7 +805,7 @@ def _apply(workspace: Workspace, spec: StepSpec, result: TaskResult) -> StepResu
     changed = _tui().diff_fields(before or {}, after or {})
     if not changed:
         alternative = _nearest_alternative(workspace, request_id, action)
-        workspace.session.undo(request_id)
+        _restore_applied(workspace, request_id, previous_applied)
         return StepResult(
             "apply", spec.text, STATUS_REFUSED,
             f"applied {action} to {request_id} and the decision did not move, so I "
@@ -819,6 +827,23 @@ def _apply(workspace: Workspace, spec: StepSpec, result: TaskResult) -> StepResu
         f"{action} applied to {request_id} in this session: {summary}. `undo` reverts it.",
         {"request_id": request_id, "action": action, "changed": list(changed)},
     )
+
+
+def _restore_applied(workspace: Workspace, request_id, previous) -> None:
+    """Put the applied-action list back, keeping every other session override.
+
+    ``session.undo`` drops the whole override dict for the request, which would
+    silently discard a ``whatif`` amount or an earlier action the user still
+    expects to be in force.
+    """
+    tui = _tui()
+    overlay = workspace.session.overrides.get(str(request_id), {})
+    if previous:
+        overlay[tui.APPLIED_KEY] = list(previous)
+    else:
+        overlay.pop(tui.APPLIED_KEY, None)
+    if not overlay:
+        workspace.session.undo(request_id)
 
 
 def _nearest_alternative(workspace: Workspace, request_id, action) -> str:
@@ -1077,15 +1102,43 @@ def run_task(
 
 
 def _write_trace(result: TaskResult, directory: Path) -> str | None:
-    """Write the task trace; a failed write never fails the task."""
+    """Write the task trace; a failed write never fails the task.
+
+    The trace is a diagnostic, not a transcript.  It keeps the shape of the run
+    -- step kinds, statuses, ids and the provider metadata -- and a hash of the
+    instruction instead of its text, because the text is the user's own
+    financial question.  Everything written is passed through
+    :func:`code.trace.sanitize`, so a provider error that echoes a URL password
+    or a key cannot be persisted either.
+    """
     try:
         directory.mkdir(parents=True, exist_ok=True)
         path = directory / f"{result.task_id}.json"
-        payload = {
-            "kind": "task",
-            "created_at": datetime.now().isoformat(timespec="seconds"),
-            **result.as_dict(),
+        record = result.as_dict()
+        instruction = str(record.pop("instruction", "") or "")
+        record["instruction"] = {
+            "sha256": hashlib.sha256(instruction.encode("utf-8")).hexdigest(),
+            "length": len(instruction),
         }
+        record["summary"] = ""
+        steps = []
+        for step in record.get("steps") or []:
+            entry = dict(step) if isinstance(step, dict) else {"step": str(step)}
+            entry["text"] = ""
+            entry["detail"] = ""
+            data = entry.pop("data", None)
+            if isinstance(data, dict):
+                # `data` carries the same clause text and the parsed amounts.
+                entry["data"] = {}
+            steps.append(entry)
+        record["steps"] = steps
+        payload = sanitize(
+            {
+                "kind": "task",
+                "created_at": datetime.now().isoformat(timespec="seconds"),
+                **record,
+            }
+        )
         path.write_text(
             json.dumps(payload, indent=2, default=str, sort_keys=False) + "\n",
             encoding="utf-8",

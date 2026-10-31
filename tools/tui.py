@@ -1528,7 +1528,18 @@ class TUI:
             if notice:
                 self._privacy_notice = True
                 self.console.print(notice, style="yellow")
-        workspace = Workspace(data=data, session=self.session)
+        # One workspace per session: `ask and if I wait until the 20th` is a
+        # follow-up on the previous command, so current_request_id, last_amount
+        # and last_date have to survive between calls.
+        workspace = getattr(self, "_workspace", None)
+        if workspace is None:
+            workspace = Workspace(data=data, session=self.session)
+            workspace._cache = {
+                key: value
+                for key, value in self._cache.items()
+                if not key.startswith(MANUAL_PREFIX)
+            }
+            self._workspace = workspace
         result = run_task(
             instruction,
             workspace=workspace,

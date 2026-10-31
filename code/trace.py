@@ -46,6 +46,10 @@ _SECRET_KEY = re.compile(
 _SECRET_VALUE = re.compile(
     r"(?:\b(?:sk|pk|rk)-[A-Za-z0-9_-]{8,}|(?i:Bearer\s+)[A-Za-z0-9._-]{8,})"
 )
+#: ``user:password@`` inside a URL.  A gateway may legitimately carry basic-auth
+#: credentials in its base URL, and a provider error is persisted verbatim, so
+#: the userinfo part has to go even though it matches no key-name pattern.
+_URL_USERINFO = re.compile(r"(?<=://)[^/\s@]+@")
 _UNSTABLE_KEYS = frozenset({"duration_ms"})
 _UNSTABLE_BLOCKS = frozenset({"metadata"})
 _UNSAFE_FILE_CHARS = re.compile(r"[^A-Za-z0-9._-]+")
@@ -70,7 +74,7 @@ def sanitize(value):
     if hasattr(value, "as_dict") and callable(value.as_dict):
         return sanitize(value.as_dict())
     if isinstance(value, str):
-        return _SECRET_VALUE.sub(REDACTED, value)
+        return _SECRET_VALUE.sub(REDACTED, _URL_USERINFO.sub(f"{REDACTED}@", value))
     return value
 
 

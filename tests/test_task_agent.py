@@ -49,7 +49,19 @@ def test_day_ordinal_rolls_to_the_next_occurrence():
 
 
 def test_month_name_date_is_parsed():
-    assert extract_date("pay it on 12 September") == date(date.today().year, 9, 12)
+    assert extract_date("pay it on 12 September", reference=date(2026, 8, 1)) == date(
+        2026, 9, 12
+    )
+
+
+def test_a_month_name_never_resolves_to_a_past_date():
+    # Asked in October, "12 September" is next September, not last month.
+    assert extract_date("pay it on 12 September", reference=date(2026, 10, 31)) == date(
+        2027, 9, 12
+    )
+    assert extract_date("pay it on 12 September", reference=date(2026, 9, 12)) == date(
+        2026, 9, 12
+    )
 
 
 def test_money_ignores_request_ids_and_dates():
@@ -225,3 +237,65 @@ def test_trace_is_written_only_when_a_directory_is_given(tmp_path):
     assert written.trace_path is not None
     payload = (tmp_path / "tasks").glob("*.json")
     assert next(payload).read_text(encoding="utf-8").startswith("{")
+
+
+def test_locale_amounts_are_read_by_the_locale_parser():
+    from code.task_agent import _money_value
+
+    assert _money_value("1.050,00") == Decimal("1050.00")
+    assert _money_value("40,000") == Decimal("40000")
+    assert _money_value("1500.50") == Decimal("1500.50")
+    assert _money_value("5.000") == Decimal("5.000")
+    assert _money_value("", "EUR", "es") is None
+
+
+def test_extract_money_reads_an_eu_formatted_figure():
+    assert extract_money("can I afford 1.050,00 on the 12th") == Decimal("1050.00")
+
+def test_the_task_trace_never_stores_the_typed_instruction(tmp_path):
+    from code.task_agent import StepResult, TaskResult, _write_trace
+
+    secret = "can I afford 1.050,00 for the medical bill"
+    result = TaskResult(
+        task_id="task_test",
+        instruction=secret,
+        steps=[StepResult("afford", secret, "ok", f"you can pay 1.050,00")],
+        summary=f"you can pay 1.050,00",
+    )
+    written = _write_trace(result, tmp_path)
+    assert written is not None
+    text = (tmp_path / "task_test.json").read_text(encoding="utf-8")
+    assert secret not in text
+    assert "1.050,00" not in text
+    assert '"sha256"' in text
+
+
+def test_the_task_trace_redacts_a_credential_in_a_provider_error(tmp_path):
+    from code.task_agent import TaskResult, _write_trace
+
+    result = TaskResult(
+        task_id="task_secret",
+        instruction="ask",
+        concerns=[
+            "RuntimeError: https" "://tenant:pa55w0rd@gateway.invalid/v1 rejected "
+            "sk-or-v1-SECRETKEY0123456789"
+        ],
+    )
+    written = _write_trace(result, tmp_path)
+    text = (tmp_path / "task_secret.json").read_text(encoding="utf-8")
+    assert written is not None
+    assert "pa55w0rd" not in text
+    assert "SECRETKEY0123456789" not in text
+
+def test_a_manual_afford_is_what_the_next_whatif_tests():
+    workspace = Workspace()
+    result = run_task(
+        "can I afford 40,000 on the 12th then what if I wait until the 20th",
+        workspace=workspace,
+    )
+    kinds = [step.kind for step in result.steps]
+    assert kinds[:2] == ["afford", "whatif"]
+    # The follow-up must target the request the manual question created, not an
+    # earlier request or nothing at all.
+    assert workspace.current_request_id
+    assert workspace.current_request_id.startswith("manual_")

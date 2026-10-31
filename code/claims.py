@@ -73,6 +73,14 @@ def _supported_numbers(row: dict, extra_numbers=()) -> set[Decimal]:
         number = _decimal(value)
         if number is not None:
             numbers.add(number)
+    # An installment or partial plan is a `date:amount|date:amount` string, so
+    # each leg amount has to be added explicitly: the whole string is not a
+    # number, and the legs are exactly what a plan explanation cites.
+    for leg in str(row.get("payment_plan") or "").split("|"):
+        _, _, amount = leg.partition(":")
+        number = _decimal(amount)
+        if number is not None:
+            numbers.add(number)
     for value in extra_numbers or ():
         number = _decimal(value)
         if number is not None:
