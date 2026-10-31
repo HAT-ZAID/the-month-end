@@ -4,7 +4,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from code.vision import VisionEvidence
-from tools.compare_ocr import _cell, _resolve_amount, render
+from tools.experiments.compare_ocr import _cell, _resolve_amount, render
 
 
 def _result(rows, backends=("tesseract", "vlm")):

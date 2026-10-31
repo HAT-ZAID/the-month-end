@@ -122,7 +122,7 @@ Comparison results live in [`docs/ocr-comparison.md`](./docs/ocr-comparison.md).
 
 ### Optional JEV decision audit (OpenCode Zen)
 
-`tools/compare_jev.py` is an experiment, not a decision source: it asks the
+`tools/experiments/compare_jev.py` is an experiment, not a decision source: it asks the
 TypeSafe **Jev** decision model (free `jev-1.13-free` through OpenCode Zen) to
 reproduce the kernel's affordability status and payment method as typed
 probabilities, and to rate each decision's safety and evidence sufficiency.

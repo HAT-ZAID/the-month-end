@@ -8,7 +8,7 @@ string comparator that misread blanks/NaN and skipped image evidence.
 
 Run from the repo root::
 
-    python -m tools.verify_samples
+    python -m tools.experiments.verify_samples
 
 Exit code 0 only when every machine field on every public sample row matches
 semantically.
@@ -18,9 +18,9 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-# Allow `python tools/verify_samples.py` as well as `python -m tools.verify_samples`
+# Allow `python tools/experiments/verify_samples.py` as well as `python -m tools.experiments.verify_samples`
 if __package__ in (None, ""):
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import pandas as pd
 
@@ -29,7 +29,7 @@ from evaluation import semantics
 
 
 def run_verification(repo_root=None) -> int:
-    root = Path(repo_root).resolve() if repo_root is not None else Path(__file__).resolve().parents[1]
+    root = Path(repo_root).resolve() if repo_root is not None else Path(__file__).resolve().parents[2]
     sample_path = root / "dataset" / "sample_requests.csv"
 
     output_df, usage = run_pipeline(

@@ -12,7 +12,7 @@ Because the verifier owns every machine field, the agent should never change
 measures what the agent actually adds: a written rationale, tool usage, model
 calls and latency.
 
-    python -m tools.compare_agentic --limit 5 --provider ollama \\
+    python -m tools.experiments.compare_agentic --limit 5 --provider ollama \\
         --model qwen3:4b-instruct --base-url http://127.0.0.1:11435
 
 Manual tool: it can talk to a local model, it never writes ``output.csv`` and it
@@ -27,7 +27,7 @@ import sys
 import time
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 

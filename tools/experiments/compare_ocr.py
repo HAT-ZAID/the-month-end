@@ -4,9 +4,9 @@ This is a **manual** tool, not part of the test suite: with ``--backend vlm`` it
 talks to the local Qwen3-VL server and can take a while.  It never writes
 ``output.csv`` and never changes an event; it only reports what each reader sees.
 
-    python -m tools.compare_ocr --backend both
-    python -m tools.compare_ocr --backend tesseract --limit 5
-    python -m tools.compare_ocr --backend vlm --no-cache --out ocr-vlm.md
+    python -m tools.experiments.compare_ocr --backend both
+    python -m tools.experiments.compare_ocr --backend tesseract --limit 5
+    python -m tools.experiments.compare_ocr --backend vlm --no-cache --out ocr-vlm.md
 
 Backends: ``tesseract``, ``vlm``, ``docling``, ``auto`` (the chain), or ``both``
 (tesseract and vlm side by side, the usual comparison).
@@ -19,7 +19,7 @@ import time
 from decimal import Decimal
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
@@ -242,7 +242,7 @@ def render(result: dict) -> str:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
-        prog="python -m tools.compare_ocr",
+        prog="python -m tools.experiments.compare_ocr",
         description="Compare local OCR/VLM readers on the linked dataset images.",
     )
     parser.add_argument("--repo-root", default=str(REPO_ROOT), help="repository root")

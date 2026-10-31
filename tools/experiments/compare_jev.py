@@ -8,9 +8,9 @@ disagreement is a calibration signal for humans, never an automatic edit.
 Run:
 
 ```bash
-python -m tools.compare_jev                 # 25-row sample, ~1 call per request
-python -m tools.compare_jev --limit 5       # quick pass
-python -m tools.compare_jev --dry-run       # build states, no network
+python -m tools.experiments.compare_jev                 # 25-row sample, ~1 call per request
+python -m tools.experiments.compare_jev --limit 5       # quick pass
+python -m tools.experiments.compare_jev --dry-run       # build states, no network
 ```
 
 Credentials are the OpenCode key (env ``OPENCODE_API_KEY`` or the desktop
@@ -26,9 +26,9 @@ import time
 from pathlib import Path
 
 if __package__ in (None, ""):
-    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _sys_path_setup() -> None:  # keep import order tidy for direct execution

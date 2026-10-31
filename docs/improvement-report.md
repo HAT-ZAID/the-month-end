@@ -429,7 +429,7 @@ hand it a compact state and typed propositions, and it returns probabilities.
 It cannot write prose, cannot plan, cannot call tools — which makes it a nearly
 ideal auditor for a verifier-driven product.
 
-How it is wired: for each of the 25 labelled sample requests, `tools/compare_jev.py`
+How it is wired: for each of the 25 labelled sample requests, `tools/experiments/compare_jev.py`
 sends one `noul`-proposition set per request — "the status is X" for all four
 statuses, "the method is Y" for all five methods, "this decision keeps the balance
 above the minimum after every commitment", "the facts given are sufficient" — and
@@ -559,9 +559,9 @@ python -m code.main                 # deterministic batch -> output.csv
 python -m tools.tui                 # interactive dashboard
 python -m evaluation.run --mode pr  # the gates above
 python -m code.agent --provider ollama --model qwen3:4b-instruct   # agent demo
-python -m tools.compare_ocr --backend both                          # OCR comparison
-python -m tools.compare_agentic --limit 3                           # agent vs kernel
-python -m tools.compare_jev                                        # JEV audit (needs OpenCode Zen)
+python -m tools.experiments.compare_ocr --backend both                          # OCR comparison
+python -m tools.experiments.compare_agentic --limit 3                           # agent vs kernel
+python -m tools.experiments.compare_jev                                        # JEV audit (needs OpenCode Zen)
 python -m code.cache --stats --purge                               # cache hygiene
 ```
 

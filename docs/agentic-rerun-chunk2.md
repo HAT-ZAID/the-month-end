@@ -17,7 +17,7 @@ emit the required typed fields.
 ## Not run, and why
 
 `request_29` and `request_30` were reported in the first version of this window but
-were **never executed**. `tools/compare_agentic.py` passed `--offset` to the reported
+were **never executed**. `tools/experiments/compare_agentic.py` passed `--offset` to the reported
 slice only, while the loop always starts at the first request in dataset order, so the
 window advanced the report without advancing the run. The runner now receives
 `offset + limit`, and the alignment was verified with a fail-fast provider run
