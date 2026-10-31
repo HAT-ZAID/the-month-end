@@ -248,13 +248,15 @@ def extract_date(text: str, reference: date | None = None) -> date | None:
     if match:
         month = _MONTHS.get(match.group(2).lower()[:3])
         if month:
-            for year in (reference.year, reference.year + 1):
+            # A month name with no year means the next occurrence, not a date in
+            # the past: "on 3 Jan" asked in December is next January.  Search
+            # forward until the day exists in that month, so "29 February"
+            # asked in 2026 finds 2028 rather than nothing.
+            for year in range(reference.year, reference.year + 9):
                 try:
                     candidate = date(year, month, int(match.group(1)))
                 except ValueError:
                     continue
-                # A month name with no year means the next occurrence, not a
-                # date in the past: "on 3 Jan" asked in December is next January.
                 if candidate >= reference:
                     return candidate
     match = _DAY_ORDINAL.search(text or "")
@@ -375,7 +377,16 @@ class Workspace:
     def add_manual(self, amount, request_date, user_id=None, desired=None) -> str:
         """Session-only manual request (mirrors the TUI's `new`)."""
         tui = _tui()
-        self._manual_counter += 1
+        # Continue the TUI's manual-id sequence rather than restarting at 0001:
+        # `new` may already own manual_0001, and reusing that id would make this
+        # question report the earlier request's decision.
+        existing = {
+            str(request.get("request_id", "")) for request in self.data["requests"]
+        } | set(self._manual)
+        index = self._manual_counter
+        while f"{tui.MANUAL_PREFIX}{index + 1:04d}" in existing:
+            index += 1
+        self._manual_counter = index + 1
         request_id = f"{tui.MANUAL_PREFIX}{self._manual_counter:04d}"
         user_id = user_id or self.default_user()
         request_date = request_date or date.today()
@@ -1101,6 +1112,22 @@ def run_task(
     return result
 
 
+def _trace_safe_action(action) -> str:
+    """An applied action with its amount removed: ``reduce_to:evt_003``.
+
+    ``actions_applied`` records ``reduce_to:<event_id>:<amount>``, and that
+    amount is the user's own money. The trace keeps the action and the event it
+    touched, which is what makes the run legible, and drops the figure.
+    """
+    parts = str(action or "").split(":")
+    return ":".join(parts[:2]) if len(parts) > 1 else parts[0]
+
+
+#: The intent reading is provenance, not user text: these fields say which
+#: classifier ran and what it concluded, and carry no clause text or amounts.
+_TRACE_INTENT_FIELDS = ("intent", "request_kind", "source", "confidence", "ambiguity")
+
+
 def _write_trace(result: TaskResult, directory: Path) -> str | None:
     """Write the task trace; a failed write never fails the task.
 
@@ -1121,6 +1148,15 @@ def _write_trace(result: TaskResult, directory: Path) -> str | None:
             "length": len(instruction),
         }
         record["summary"] = ""
+        actions = []
+        for entry in record.get("actions_applied") or []:
+            if isinstance(entry, dict):
+                safe = dict(entry)
+                safe["action"] = _trace_safe_action(safe.get("action"))
+                actions.append(safe)
+            else:
+                actions.append(_trace_safe_action(entry))
+        record["actions_applied"] = actions
         steps = []
         for step in record.get("steps") or []:
             entry = dict(step) if isinstance(step, dict) else {"step": str(step)}
@@ -1129,7 +1165,20 @@ def _write_trace(result: TaskResult, directory: Path) -> str | None:
             data = entry.pop("data", None)
             if isinstance(data, dict):
                 # `data` carries the same clause text and the parsed amounts.
-                entry["data"] = {}
+                # Keep only the intent provenance, so a trace still shows which
+                # classifier produced the reading.
+                reading = data.get("intent")
+                entry["data"] = (
+                    {
+                        "intent": {
+                            key: reading[key]
+                            for key in _TRACE_INTENT_FIELDS
+                            if key in reading
+                        }
+                    }
+                    if isinstance(reading, dict)
+                    else {}
+                )
             steps.append(entry)
         record["steps"] = steps
         payload = sanitize(

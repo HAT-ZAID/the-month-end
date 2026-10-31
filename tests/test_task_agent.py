@@ -299,3 +299,51 @@ def test_a_manual_afford_is_what_the_next_whatif_tests():
     # earlier request or nothing at all.
     assert workspace.current_request_id
     assert workspace.current_request_id.startswith("manual_")
+
+def test_february_29_resolves_to_the_next_leap_year():
+    reference = date(2026, 1, 15)
+    assert extract_date("29 February", reference=reference) == date(2028, 2, 29)
+    assert extract_date("29 February", reference=date(2028, 1, 15)) == date(2028, 2, 29)
+
+
+def test_the_task_trace_keeps_the_action_but_not_the_amount(tmp_path):
+    from code.task_agent import TaskResult, _write_trace
+
+    result = TaskResult(
+        task_id="task_action",
+        instruction="reduce the gym to 40000",
+        actions_applied=[
+            {"request_id": "request_1", "action": "reduce_to:evt_003:40000.00"}
+        ],
+    )
+    assert _write_trace(result, tmp_path) is not None
+    text = (tmp_path / "task_action.json").read_text(encoding="utf-8")
+    assert "reduce_to:evt_003" in text
+    assert "40000" not in text
+
+
+def test_the_task_trace_keeps_the_intent_source_and_no_clause_text(tmp_path):
+    from code.task_agent import StepResult, TaskResult, _write_trace
+
+    step = StepResult(
+        "afford",
+        "can I afford 1.050,00 for the dentist",
+        "ok",
+        "you can pay 1.050,00",
+        {"intent": {"intent": "afford", "source": "model", "confidence": 0.8}},
+    )
+    result = TaskResult(task_id="task_intent", instruction="ask", steps=[step])
+    assert _write_trace(result, tmp_path) is not None
+    text = (tmp_path / "task_intent.json").read_text(encoding="utf-8")
+    assert '"source": "model"' in text
+    assert "dentist" not in text
+    assert "1.050,00" not in text
+
+
+def test_a_manual_id_never_reuses_one_the_tui_already_made(tmp_path):
+    workspace = Workspace()
+    workspace.data["requests"] = list(workspace.data["requests"]) + [
+        {"request_id": "manual_0001", "user_id": "user_001"}
+    ]
+    request_id = workspace.add_manual(1000, date(2025, 9, 1))
+    assert request_id == "manual_0002"
