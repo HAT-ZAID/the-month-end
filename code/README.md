@@ -161,14 +161,16 @@ The report must cover model providers and names, model calls, input and output t
 
 ## Chat Transcript Logging
 
-This repo includes an [`AGENTS.md`](./AGENTS.md) file for AI coding tools. It asks compatible tools to append conversation summaries to a `log.txt` in the repository root — the same directory as `AGENTS.md`:
+This repo includes an [`AGENTS.md`](./AGENTS.md) file for AI coding tools. A tool that
+maintains a session log writes it to a `log.txt` in the repository root — the same
+directory as `AGENTS.md`:
 
 | Platform | Path |
 |---|---|
 | macOS / Linux | `<repo root>/log.txt` |
 | Windows | `<repo root>\log.txt` |
 
-The path resolves relative to `AGENTS.md`, so it stays correct across clones, renames, and checkouts. `log.txt` is gitignored — upload it as your chat transcript at submission time. Do not paste secrets into the chat.
+The path resolves relative to `AGENTS.md`, so it stays correct across clones, renames, and checkouts. `log.txt` is an optional local development trace: it is gitignored and never committed. Do not paste secrets into the chat.
 
 In case, the harness you are using is not in the repo root, you can explicitly ask the agent to look for the AGENTS.md in this folder & then continue.
 

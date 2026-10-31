@@ -80,4 +80,4 @@ Current state: **76 passed, 10 skipped** (venv, `pytest tests -q`). Skips re-arm
   + REF-strip miss caught by verification audit and fixed with regression test; all Criticals fixed.
 - Determinism scope: machine columns byte-identical + amount tolerance; LLM prose checked for content-invariance, never byte-equality.
 - Environment: `.venv` (pytest 9.1.1, pandas 3.0.5); `python` global is fallback only.
-- Logging: suite never touches `log.txt` (hermeticity); turns logged per AGENTS.md §5.
+- Logging: suite never touches `log.txt` (hermeticity); it is an optional local dev trace per AGENTS.md §3.

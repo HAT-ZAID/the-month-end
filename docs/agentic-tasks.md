@@ -57,8 +57,7 @@ need. A tool that always finds something to cut is a tool that lies.
 `gemma4:e2b-it-qat` on Ollama, one clause the rules cannot read:
 
 ```text
-$ python -m code.task_agent "is it wise for me to commit to that new phone right now" \
-    --provider ollama --model gemma4:e2b-it-qat --no-trace
+$ python -m code.task_agent "is it wise for me to commit to that new phone right now" --provider ollama --model gemma4:e2b-it-qat --no-trace
 [1/1] clarify (refused) intent=analysis/purchase via model
   I need one more thing before I can act: Current financial situation and phone details.
 ```
