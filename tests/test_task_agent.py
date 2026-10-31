@@ -427,3 +427,22 @@ def test_a_model_follow_up_cannot_read_a_duration_as_an_amount():
     spec = task_agent._spec_from_intent(intent, "what if it waits 2 weeks")
     assert spec.kind == "whatif"
     assert spec.params["amount"] is None
+def test_a_whatif_on_a_named_request_does_not_borrow_the_last_amount():
+    data = {
+        "requests": [
+            {"request_id": "request_1", "user_id": "user_1",
+             "request_date": "2025-08-03", "requested_amount": "40000"},
+            {"request_id": "request_27", "user_id": "user_1",
+             "request_date": "2025-08-03", "requested_amount": "6670"},
+        ],
+        "profiles": {"user_1": {"home_currency": "ZAR",
+                                "minimum_balance_to_keep": "100"}},
+    }
+    workspace = StubWorkspace({"request_1": DECISION, "request_27": DECISION}, data=data)
+    workspace.current_request_id = "request_1"
+    workspace.last_amount = Decimal("40000")
+    result = run_task("what if request_27 waits until the 20th", workspace=workspace)
+    (step,) = result.steps
+    # request_27 asks about its own 6670, not the 40000 of the previous question.
+    assert step.data["request_id"] == "request_27"
+    assert "requested_amount" not in step.data.get("overrides", {})

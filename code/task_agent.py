@@ -886,12 +886,20 @@ def _whatif(workspace: Workspace, spec: StepSpec) -> StepResult:
             "what should I test that against? name a request, e.g. "
             "`what if request_NNN waits until 2025-09-20`",
         )
+    previous_request_id = workspace.current_request_id
+    named_here = spec.params.get("request_id")
     workspace.current_request_id = request_id
     reference = _safe_date(workspace.row(request_id).get("request_date"))
     wanted_date = spec.params.get("date")
     if wanted_date is None:
         wanted_date = extract_date(spec.text, reference)
-    amount = spec.params.get("amount") or workspace.last_amount
+    # The previous amount belongs to the question it was asked about. If this
+    # clause names a different request, that request's own amount is the one to
+    # test: borrowing the earlier figure would answer a different question.
+    borrowed = workspace.last_amount
+    if named_here and str(named_here) != str(previous_request_id):
+        borrowed = None
+    amount = spec.params.get("amount") or borrowed
     overrides: dict = {}
     if wanted_date is not None:
         overrides["request_date"] = wanted_date.isoformat()
