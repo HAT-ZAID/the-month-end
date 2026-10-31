@@ -85,6 +85,9 @@ def field(row: dict, column: str) -> str:
 
 
 def parse_decimal(value: str) -> Decimal:
+    # Deliberately strict, and deliberately not ``amounts.to_decimal``: this
+    # report must fail loudly on a malformed cell rather than silently coerce it
+    # to a fallback, because a wrong number here would misstate the release.
     return Decimal(value.strip())
 
 

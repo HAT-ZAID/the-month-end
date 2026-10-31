@@ -20,7 +20,9 @@ it is dropped rather than ranked (fail closed).
 from __future__ import annotations
 
 from datetime import date
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
+
+from code.amounts import to_decimal
 
 _BLANK = ("", "nan", "none", "null", "nat", "n/a", "na")
 _FAR_FUTURE = date.max
@@ -47,11 +49,7 @@ def parse_deadline(value) -> date | None:
 
 
 def _decimal(value, default: Decimal = Decimal("Infinity")) -> Decimal:
-    try:
-        parsed = Decimal(str(value))
-    except (InvalidOperation, TypeError, ValueError):
-        return default
-    return parsed if parsed.is_finite() else default
+    return to_decimal(value, default)
 
 
 def _sort_key(option: dict):

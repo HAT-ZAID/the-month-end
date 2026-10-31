@@ -24,10 +24,11 @@ import io
 import json
 import sys
 from datetime import date, timedelta
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from pathlib import Path
 from typing import NamedTuple
 
+from code.amounts import to_decimal
 from rich.console import Console, Group
 from rich.panel import Panel
 from rich.table import Table
@@ -123,15 +124,7 @@ def _as_text(value) -> str:
 
 
 def _as_decimal(value) -> Decimal | None:
-    if value is None:
-        return None
-    try:
-        number = Decimal(str(value).strip())
-    except (InvalidOperation, ValueError, TypeError):
-        return None
-    if not number.is_finite():
-        return None
-    return number
+    return to_decimal(value)
 
 
 def _decimal_or(value, default: Decimal) -> Decimal:

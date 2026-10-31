@@ -50,10 +50,11 @@ import urllib.error
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass, field
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
+from code.amounts import to_decimal
 from code.cache import OCR_NAMESPACE, DiskCache, default_cache
 from code.ocr import extract_amount_for_event
 
@@ -111,14 +112,7 @@ def _env_float(env, name: str, default: float) -> float:
 
 
 def _decimal(value) -> Decimal | None:
-    text = _text(value).replace(",", "")
-    if not text:
-        return None
-    try:
-        number = Decimal(text)
-    except (InvalidOperation, ValueError):
-        return None
-    return number if number.is_finite() else None
+    return to_decimal(_text(value), strip_grouping=True)
 
 
 @dataclass

@@ -21,7 +21,9 @@ plainer explanation, while a shipped fabrication costs them money.
 from __future__ import annotations
 
 import re
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
+
+from code.amounts import to_decimal
 
 # --- what the model may claim ---------------------------------------------
 
@@ -62,13 +64,7 @@ _SNAKE = re.compile(r"\b(affordable_now|affordable_with_plan|affordable_later|"
 
 
 def _decimal(value) -> Decimal | None:
-    if value is None or isinstance(value, bool):
-        return None
-    try:
-        number = Decimal(str(value).replace(",", "").strip())
-    except (InvalidOperation, ValueError):
-        return None
-    return number if number.is_finite() else None
+    return to_decimal(value, None, strip_grouping=True)
 
 
 def _supported_numbers(row: dict, extra_numbers=()) -> set[Decimal]:

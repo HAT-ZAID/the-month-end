@@ -45,7 +45,7 @@ dataset/*.csv + media/images
 
 | Module | Role |
 |---|---|
-| `code/amounts.py` | Locale-aware money parsing shared by OCR, messages and reconciliation |
+| `code/amounts.py` | Locale-aware money parsing shared by OCR, messages and reconciliation, plus `to_decimal`, the single scalar-to-`Decimal` coercion used across the kernel |
 | `code/fx.py` | Exact-date FX, else nearest prior snapshot, else unknown (never an invented cross rate) |
 | `code/parser.py` | Salary and amendment facts extracted from messages |
 | `code/reconcile.py` | Conflict order: explicit cancel/settle/amend → newer same-source → settled → safer |

@@ -36,8 +36,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 
+from code.amounts import to_decimal
 from code.fx import resolve_rate
 
 HORIZON_DAYS = 90
@@ -190,14 +191,7 @@ def _as_date(value) -> date | None:
 
 
 def _decimal(value) -> Decimal | None:
-    text = _text(value)
-    if not text or text.lower() == "nan":
-        return None
-    try:
-        number = Decimal(text)
-    except (InvalidOperation, ValueError, TypeError):
-        return None
-    return number if number.is_finite() else None
+    return to_decimal(_text(value))
 
 
 def _median_int(values: list[int]) -> int:

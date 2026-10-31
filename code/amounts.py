@@ -71,6 +71,33 @@ def parse_amount(raw: str, currency: str, lang: str = "") -> Decimal | None:
     return _parse(raw, currency, lang)
 
 
+def to_decimal(value, default=None, *, strip_grouping: bool = False):
+    """Coerce one scalar to a finite :class:`Decimal`, else return ``default``.
+
+    This is the single place that turns a spreadsheet cell, a CSV string or a
+    model answer into a number.  ``None``, a bool, ``""``, ``"nan"``, NaN and
+    Infinity all fall back to ``default`` rather than leaking a non-finite value
+    into the solver.
+
+    ``strip_grouping`` removes thousands separators, for a figure lifted out of
+    free text ("1,234.50").  It is opt-in because a locale-aware path must keep
+    the separator it is about to interpret (see :func:`parse_amount`).
+    """
+    if value is None or isinstance(value, bool):
+        return default
+    text = str(value)
+    if strip_grouping:
+        text = text.replace(",", "")
+    text = text.strip()
+    if not text or text.lower() == "nan":
+        return default
+    try:
+        number = Decimal(text)
+    except (InvalidOperation, TypeError, ValueError):
+        return default
+    return number if number.is_finite() else default
+
+
 def extract_amounts(text: str, lang: str = "") -> list[dict]:
     text = (text or "").strip()
     text = _REF.sub(" ", text)

@@ -18,16 +18,14 @@ import pandas as pd
 from decimal import Decimal
 from datetime import date, timedelta
 
+from code.amounts import to_decimal
+
 DAYS_PER_INSTALLMENT_MONTH = 30
 TOTAL_TOLERANCE = Decimal("0.01")
 
 
 def _decimal(value) -> Decimal | None:
-    try:
-        parsed = Decimal(str(value).strip())
-    except Exception:
-        return None
-    return parsed if parsed.is_finite() else None
+    return to_decimal(value)
 
 
 def _int(value, default=None):
