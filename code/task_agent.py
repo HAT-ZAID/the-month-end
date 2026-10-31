@@ -994,7 +994,9 @@ def _spec_from_intent(intent, clause: str) -> StepSpec | None:
             return StepSpec("apply", clause, params)
         return StepSpec("changes", clause, params)
     if intent.intent == "follow_up":
-        params["amount"] = extract_money(clause)
+        # A waiting period is not an amount, the same rule as parse_instruction:
+        # "2 weeks" must not become a 2-unit request.
+        params["amount"] = extract_money(_DURATION.sub(" ", clause))
         # Same rule as parse_instruction: only an absolute date is resolvable
         # without the target request.
         params["date"] = extract_date(clause) if _ISO_DATE.search(clause) else None
@@ -1026,7 +1028,10 @@ def run_task(
     rules answer alone.
     """
     text = str(instruction or "").strip()
-    task_id = f"task_{datetime.now().strftime('%Y%m%dT%H%M%S')}_{abs(hash(text)) % 10000:04d}"
+    task_id = (
+        f"task_{datetime.now().strftime('%Y%m%dT%H%M%S')}_"
+        f"{hashlib.sha256(text.encode('utf-8')).hexdigest()[:8]}"
+    )
     result = TaskResult(task_id=task_id, instruction=text)
     if intent_timeout_s is None:
         raw_timeout = os.environ.get(INTENT_TIMEOUT_ENV, '')
@@ -1283,7 +1288,7 @@ def main(argv=None) -> int:
         else:
             from code.providers import privacy_warning
 
-            notice = privacy_warning(provider)
+            notice = privacy_warning(provider, honour_acceptance=False)
             if notice:
                 print(notice)
 

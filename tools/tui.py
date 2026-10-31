@@ -1532,7 +1532,7 @@ class TUI:
         if provider is not None and not self._privacy_notice:
             from code.providers import privacy_warning
 
-            notice = privacy_warning(provider)
+            notice = privacy_warning(provider, honour_acceptance=False)
             if notice:
                 self._privacy_notice = True
                 self.console.print(notice, style="yellow")

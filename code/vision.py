@@ -57,6 +57,7 @@ from typing import Protocol, runtime_checkable
 from code.amounts import to_decimal
 from code.cache import OCR_NAMESPACE, DiskCache, default_cache
 from code.ocr import extract_amount_for_event
+from code.providers import is_loopback_host
 
 OCR_BACKEND_ENV = "BUY_WAIT_OCR_BACKEND"
 VLM_BASE_URL_ENV = "BUY_WAIT_VLM_BASE_URL"
@@ -179,11 +180,12 @@ class VisionBackend(Protocol):
 
 
 def _is_loopback(base_url: str) -> bool:
+    """The shared predicate: a name that merely looks local cannot pass."""
     try:
         host = urllib.parse.urlparse(base_url).hostname or ""
     except ValueError:
         return False
-    return host in {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
+    return is_loopback_host(host)
 
 
 def image_digest(image_path: Path) -> str:

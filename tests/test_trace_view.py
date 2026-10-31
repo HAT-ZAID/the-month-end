@@ -298,3 +298,18 @@ def test_tui_trace_reports_a_missing_trace(tmp_path):
 
 def test_tui_help_lists_the_trace_command():
     assert "trace <id>" in tui.HELP_TEXT
+
+
+def test_redaction_covers_hyphenated_and_prefixed_secret_names():
+    from code.trace import sanitize
+
+    payload = {
+        "x-api-key": "SECRETVALUE",
+        "Api-Key": "SECRETVALUE",
+        "refresh-token": "SECRETVALUE",
+        "authorization": "SECRETVALUE",
+        "note": "plain",
+    }
+    cleaned = sanitize(payload)
+    assert "SECRETVALUE" not in repr(cleaned)
+    assert cleaned["note"] == "plain"

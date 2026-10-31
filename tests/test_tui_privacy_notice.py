@@ -159,16 +159,18 @@ def test_a_paid_provider_never_warns(patched):
     assert warning_text() not in plain(buffer)
 
 
-def test_an_accepted_free_tier_is_not_repeated(monkeypatch, patched):
+def test_an_accepted_free_tier_still_warns_in_the_tui(monkeypatch, patched):
     from code.providers import ACCEPT_FREE_TIER_ENV
 
+    # The acceptance switch exists for batch and task runs. An interactive
+    # surface still owes the person the notice, so a copied .env cannot hide it.
     monkeypatch.setenv(ACCEPT_FREE_TIER_ENV, "1")
     patched["provider"] = fake_provider(PRIVACY_FREE)
     app, buffer = make_app()
 
     ask(app)
 
-    assert warning_text() not in plain(buffer)
+    assert warning_text() in plain(buffer)
 
 
 def test_no_provider_means_no_privacy_warning(patched):

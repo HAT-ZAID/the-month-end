@@ -28,7 +28,12 @@ from __future__ import annotations
 import os
 from typing import Protocol, runtime_checkable
 
-from code.providers import DEFAULT_OLLAMA_BASE_URL, OLLAMA_BASE_URL_ENV
+from code.providers import (
+    DEFAULT_OLLAMA_BASE_URL,
+    OLLAMA_BASE_URL_ENV,
+    endpoint_privacy_warning,
+    is_secure_or_local_url,
+)
 from code.store import LocalStore, StoreError
 
 BACKEND_ENV = "BUY_WAIT_RAG_BACKEND"
@@ -106,6 +111,14 @@ class VectorEvidenceRetriever:
         self._embeddings = embeddings
         self.embed_model = embed_model or os.environ.get(EMBED_MODEL_ENV) or DEFAULT_EMBED_MODEL
         self.base_url = base_url or os.environ.get(OLLAMA_BASE_URL_ENV) or DEFAULT_OLLAMA_BASE_URL
+        # The embeddings client reads the same env var as the chat provider, so
+        # it obeys the same two rules: a remote endpoint must be https, and a
+        # remote endpoint gets the privacy notice before chunk text leaves.
+        if not is_secure_or_local_url(self.base_url):
+            raise RetrievalError(
+                "refusing a plaintext embedding endpoint: use https or this machine"
+            )
+        endpoint_privacy_warning(self.base_url)
         # One index per user scope: a full-dataset index would mean one embedding
         # call per chunk (~25k) on every run, and evidence is always user-scoped.
         self.max_documents = int(max_documents)

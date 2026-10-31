@@ -36,7 +36,7 @@ from code.schema import TraceEvent, stable_json
 TRACE_SCHEMA_VERSION = 2
 REDACTED = "[REDACTED]"
 _SECRET_KEY = re.compile(
-    r"(?:^|_)(?:api_?key|key|token|secret|password|authorization)(?:$|_)",
+    r"(?:^|[-_.])(?:api[-_.]?key|key|token|secret|password|authorization)(?:$|[-_.])",
     re.IGNORECASE,
 )
 #: API-key-shaped substrings inside *values* (provider errors, prompts, args).

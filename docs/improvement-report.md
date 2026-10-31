@@ -599,7 +599,7 @@ branch.
 | four audit scripts to `tools/experiments/` | **Done.** `compare_agentic`, `compare_jev`, `compare_ocr` and `verify_samples` moved, with repo-root depth fixed and every documented path updated. |
 | one Decimal coercion | **Done** for the six modules that had their own; two hand-written coercers were then found by review and folded in too. |
 | three near-identical remote providers | **Done**: one `OpenAICompatibleProvider`, three thin declarative presets, plus a `paid` class for real user data. |
-| prune the suite from 629 to "about 520" | **Refuted as stated; four assertions removed.** Only one `def test_` name repeats across the whole suite, ~28 of the 637 cases come from parametrisation, and the `test_oracle_*` files are not duplicates: they pin distinct §6.3 rules (pending credit ignored, pending debit reserved, failed/cancelled/unrealised ignored, NaN and blank fail-closed, duplicate ids de-duplicated, cancellation before settlement). Reaching 520 would have deleted about 110 one-off invariant tests. What *was* duplicated got cut: a repeated redirect test in `test_jev.py`, two of `test_packaging.py`'s three env-file restatements, and a private-helper preprocessing test whose public-reader equivalent already asserts the same thing. 639 passed, 1 skipped. |
+| prune the suite from 629 to "about 520" | **Refuted as stated.** Only one `def test_` name repeats across the whole suite, ~28 of the 637 cases come from parametrisation, and the `test_oracle_*` files are not duplicates: they pin distinct §6.3 rules (pending credit ignored, pending debit reserved, failed/cancelled/unrealised ignored, NaN and blank fail-closed, duplicate ids de-duplicated, cancellation before settlement). Reaching 520 would have deleted about 110 one-off invariant tests. Four assertions that looked redundant were cut first; the pre-push correctness review then proved three of the four were not duplicates (only the `test_jev` name repeated), so the derived coverage was restored before sign-off: the `.gitignore` negation that lets `.env.example` through, the check that every `.env.example` value is a placeholder (its absence had left `SAFE_ENV_VALUES` and `_assignments` as dead code), the upscale bound in `preprocess_image`, and the Jev redirect handler. Restoring the OCR bound also exposed a real gap: the cap applies to upscaling only, so a source wider than 2400px is passed through unchanged, and the test now pins that behaviour instead of a claim the code does not make. 652 passed, 1 skipped. |
 
 ### 10.2 The two pre-push reviews
 
@@ -652,6 +652,24 @@ directions; `agent.finish` backfilled a stale repair diff onto a run that had ag
 and the README, `code/README` and this report described the pre-release rationale
 rule, which the release itself changed.
 
+A fourth pass, the security reviewer's second look at the tip, returned BLOCK on
+three things that survived because each was a surface nobody had pointed at yet:
+
+* `BUY_WAIT_ACCEPT_FREE_TIER` silenced the notice on the two surfaces §2 names by
+  hand — the TUI and `python -m code.task_agent` — while `.env.example` promised the
+  TUI still warned. Both now pass `honour_acceptance=False`; the switch can only
+  quiet the batch pipeline, which §2 does not name.
+* the SQLite trace summary was written raw while the JSON trace was sanitised, so a
+  gateway URL with basic auth and a bearer key survived in `data/app.db` long after
+  the JSON was gone. `record_trace` now sanitises its payload.
+* the embeddings client reads `BUY_WAIT_OLLAMA_BASE_URL` too, and it neither refused
+  a plaintext endpoint nor warned: one env var put every evidence chunk on the wire
+  in cleartext, silently, on the same run that warned about the chat model. It now
+  refuses a non-secure remote endpoint and emits the same notice.
+
+The same review caught the duplicated loopback test in `code/vision.py`, which is
+the exact drift the provider fix removed; it now calls the shared predicate.
+
 ### 10.3 The disagreement note, and why it is agent-only
 
 The model's explanation used to be discarded whenever it disagreed with the computed
@@ -690,7 +708,7 @@ gains a third value, `disagreement`, and `code/main.py` still only prefers
 
 ### 10.5 The numbers this release was verified at
 
-- `pytest -q`: **639 passed, 1 skipped**.
+- `pytest -q`: **652 passed, 1 skipped**.
 - `output.csv`: 250 rows, sha256 `1f35043f…376486`, byte-identical to the committed
   file before and after every change in this release.
 - `python -m code.main` on the offline path: no network call, no stderr noise.

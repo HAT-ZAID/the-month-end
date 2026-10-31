@@ -167,6 +167,21 @@ def _cli_options(argv) -> dict:
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
+def _preferred_explanation(template: str, res: dict, agent_outcome) -> str:
+    """The kernel's text, unless an agent earned the right to replace it.
+
+    Only ``rationale_source == "candidate"`` counts as earned: the candidate
+    agreed with the computed row and its claims checked out. A
+    ``disagreement`` note records what the model thought when it did not, so it
+    belongs in the trace, never in ``output.csv``.
+    """
+    if agent_outcome is None:
+        return template
+    if agent_outcome.get("verification", {}).get("rationale_source") != "candidate":
+        return template
+    return res.get("decision_explanation") or template
+
+
 def run_pipeline(
     repo_root=None,
     *,
@@ -457,11 +472,7 @@ def run_pipeline(
             "evidence_warnings": user_warnings,
             "_usage": usage,
         })
-        if (
-            agent_outcome is not None
-            and agent_outcome["verification"].get("rationale_source") == "candidate"
-        ):
-            explanation = res.get("decision_explanation") or explanation
+        explanation = _preferred_explanation(explanation, res, agent_outcome)
         output_row = {
             "request_id": res["request_id"],
             "amount_safe_to_pay": safe_amount,

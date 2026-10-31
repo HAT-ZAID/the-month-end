@@ -250,3 +250,9 @@ def test_a_plaintext_remote_endpoint_is_refused_before_the_key_is_sent(monkeypat
     assert outcome.error
     assert "https" in outcome.error
     assert calls == []
+def test_the_jev_transport_refuses_a_redirect():
+    from code import jev
+
+    handler = jev._RefuseRedirects()
+    target = "http" "://" "elsewhere" ".invalid" "/v1/chat"
+    assert handler.redirect_request(None, None, 302, "Found", {}, target) is None

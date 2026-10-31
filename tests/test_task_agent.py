@@ -395,3 +395,35 @@ def test_a_waiting_period_is_never_read_as_an_amount():
     # Stripping the duration must not eat a real amount in the same clause.
     (both,) = parse_instruction("can I afford 1000 in 30 days")
     assert both.params["amount"] == Decimal("1000")
+def test_the_same_instruction_gets_the_same_trace_name():
+    import hashlib
+
+    workspace = StubWorkspace({"request_1": DECISION})
+    instruction = "can I afford 1000 on 2025-08-03"
+    first = run_task(instruction, workspace=workspace)
+    second = run_task(instruction, workspace=workspace)
+    # hash() on a str is PYTHONHASHSEED-randomised, so a name derived from it
+    # changed every process and traces accumulated under different names.
+    suffix = hashlib.sha256(instruction.encode("utf-8")).hexdigest()[:8]
+    assert first.task_id.endswith(suffix)
+    assert second.task_id.endswith(suffix)
+
+
+def test_a_no_op_apply_keeps_an_earlier_override():
+    workspace = StubWorkspace({"request_1": DECISION})
+    workspace.session.overrides["request_1"] = {"date": "2025-08-20"}
+    task_agent._restore_applied(workspace, "request_1", None)
+    # Restoring the applied list must not undo the wait date the same session
+    # already set for this request.
+    assert workspace.session.overrides["request_1"] == {"date": "2025-08-20"}
+def test_a_model_follow_up_cannot_read_a_duration_as_an_amount():
+    from types import SimpleNamespace
+
+    intent = SimpleNamespace(
+        intent="follow_up",
+        target_request_id="request_1",
+        target_event_id=None,
+    )
+    spec = task_agent._spec_from_intent(intent, "what if it waits 2 weeks")
+    assert spec.kind == "whatif"
+    assert spec.params["amount"] is None

@@ -42,6 +42,7 @@ import sqlite3
 from pathlib import Path
 
 from code.schema import stable_json
+from code.trace import sanitize
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_DB_PATH = REPO_ROOT / "data" / "app.db"
@@ -572,8 +573,13 @@ class LocalStore:
         return [_citation(row, "store", None) for row in rows]
 
     def record_trace(self, summary: dict) -> None:
-        """Store a one-line trace summary (the full trace stays a JSON file)."""
-        payload = dict(summary or {})
+        """Store a one-line trace summary (the full trace stays a JSON file).
+
+        The summary is sanitised first: a provider error can quote the endpoint
+        it failed to reach, including a ``user:password@`` component and a
+        bearer key, and this row outlives the JSON trace it came from.
+        """
+        payload = sanitize(dict(summary or {}))
         request_id = str(payload.get("request_id") or "")
         run_id = str(payload.get("run_id") or "")
         trace_id = f"{run_id}/{request_id}" if run_id else request_id

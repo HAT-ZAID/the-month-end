@@ -53,6 +53,14 @@ METHOD_PHRASES = {
 
 _MONEY = re.compile(r"(?<![\w.])(\d[\d,]*(?:\.\d+)?)(?![\w])")
 _ISO_DATE = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
+# A small number is only a money claim when a money word is close to it.
+_MONEY_CUE = re.compile(
+    r"\b(?:pay|paid|cost|costs|buffer|spare|keep|keeping|balance|budget|amount|"
+    r"total|save|saving|savings|salary|bill|rent|install?ment|fee|price|spend|"
+    r"spending|left|safe|afford|charge|deposit)\b",
+    re.IGNORECASE,
+)
+_CUE_WINDOW = 40
 _ACTION = re.compile(
     r"\b(stop|reduce_to):(event_\d+)(?::(\d+(?:\.\d+)?))?", re.IGNORECASE
 )
@@ -108,7 +116,11 @@ def _money_claims(text: str) -> list[tuple[str, Decimal]]:
     for match in _MONEY.finditer(unspanned):
         token = text[match.start():match.end()]
         significant = token.replace(",", "").replace(".", "")
-        if "," in token or "." in token or len(significant) >= 4:
+        # A bare three-digit figure is only money when a money word sits next
+        # to it: "pay 500" is a claim, "3 of 5 samples" is not. Without the
+        # cue, a small invented amount would pass as an unchecked count.
+        cue = _MONEY_CUE.search(unspanned[max(0, match.start() - _CUE_WINDOW):match.start()])
+        if "," in token or "." in token or len(significant) >= 4 or cue:
             number = _decimal(token)
             if number is not None:
                 claims.append((token, number))

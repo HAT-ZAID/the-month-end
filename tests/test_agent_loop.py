@@ -799,3 +799,40 @@ def test_secret_scrubbing_ignores_hyphenated_words():
 
     assert cleaned["note"] == "desk-reservation and network-provider approvals"
     assert cleaned["detail"] == REDACTED
+
+
+def test_a_provider_error_never_persists_credentials_in_the_store(tmp_path):
+    """The SQLite summary outlives the JSON trace, so it is sanitised too."""
+    root = _tiny_repo(tmp_path)
+    store = LocalStore(root / "data" / "app.db", repo_root=root)
+    store.build()
+    store.record_trace(
+        {
+            "request_id": REQUEST_ID,
+            "run_id": "run_1",
+            "fallback_reason": (
+                "provider unavailable: could not connect to "
+                + "https" "://" "gateway-user:gwpassword123@" "gw" ".invalid" "/v1 "
+                + "(Bearer sk-live-ABCDEFGH12345678)"
+            ),
+        }
+    )
+    rows = list(store.connection.execute('SELECT fallback_reason, summary_json FROM "traces"'))
+    assert len(rows) == 1
+    stored = " ".join(str(value) for value in rows[0])
+    assert "gwpassword123" not in stored
+    assert "sk-live-ABCDEFGH12345678" not in stored
+    assert REDACTED in stored
+
+
+def test_a_plaintext_embedding_endpoint_is_refused(tmp_path):
+    """The embeddings client reads the same env var, so it obeys the same rule."""
+    import pytest
+
+    from code.rag import RetrievalError
+
+    root = _tiny_repo(tmp_path)
+    store = LocalStore(root / "data" / "app.db", repo_root=root)
+    remote = "http" "://" "embed" ".invalid" ":11434"
+    with pytest.raises(RetrievalError, match="plaintext"):
+        VectorEvidenceRetriever(store, base_url=remote)

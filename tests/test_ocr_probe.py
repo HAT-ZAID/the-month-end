@@ -133,3 +133,18 @@ def test_all_current_image_event_mappings_resolve_with_family_labels(tmp_path):
     assert warnings == []
     assert all(str(row["amount"]).strip() for row in resolved)
     assert all(row["amount_evidence_path"] == str(tmp_path / f"{row['amount_evidence_id']}.png") for row in resolved)
+def test_upscaling_never_exceeds_the_maximum_dimension(tmp_path):
+    from PIL import Image
+
+    from code import ocr
+
+    # A source that would double past the 2400 cap is held at the cap.
+    small = tmp_path / "small.png"
+    Image.new("RGB", (1200, 600), color=(90, 90, 90)).save(small)
+    assert ocr.preprocess_image(small).size == (2400, 1200)
+
+    # A source already larger than the cap is never upscaled past it, and is
+    # not shrunk either: the raw source is handed to the reader unchanged.
+    large = tmp_path / "large.png"
+    Image.new("RGB", (3000, 1200), color=(90, 90, 90)).save(large)
+    assert max(ocr.preprocess_image(large).size) <= 3000

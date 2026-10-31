@@ -320,3 +320,27 @@ def test_a_disagreement_note_may_quote_the_candidate_s_own_figures():
     # The model's own figure and date are allowed: this is its record of what
     # it thought, not a claim about the ledger.
     assert "I counted amount_safe_to_pay as 1" in text
+def test_a_small_figure_beside_a_money_word_is_still_a_claim():
+    report = verify_claims("You can safely pay 500 today, keeping a 900 buffer.", dict(ROW))
+    # Both figures sit beside a money word, so they are claims about the row
+    # and neither appears in it.
+    assert report["ok"] is False
+    assert report["checked"] >= 1
+
+
+def test_the_batch_row_never_takes_a_disagreement_note():
+    from code.main import _preferred_explanation
+
+    template = "Kernel template text."
+    note = "Disagreements: the proposal disagrees with the computed ledger (fields: amount_safe_to_pay)"
+    res = {"decision_explanation": note}
+    assert _preferred_explanation(template, res, None) == template
+    assert (
+        _preferred_explanation(template, res, {"verification": {"rationale_source": "disagreement"}})
+        == template
+    )
+    assert _preferred_explanation(template, res, {"verification": {"rationale_source": "kernel"}}) == template
+    assert (
+        _preferred_explanation(template, res, {"verification": {"rationale_source": "candidate"}})
+        == note
+    )

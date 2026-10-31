@@ -242,3 +242,23 @@ def test_packaging_surface_has_no_secret_values():
             if re.search(pattern, text):
                 hits.append(f"{name}: {pattern}")
     assert hits == [], f"secret-like values in packaging surface: {hits}"
+def test_every_env_example_value_is_a_public_placeholder():
+    values = _assignments(_text(".env.example"))
+    assert values, ".env.example has no assignments"
+    unexpected = {
+        name: value
+        for name, value in values.items()
+        if value not in SAFE_ENV_VALUES
+        and not (value.startswith("<") and value.endswith(">"))
+    }
+    assert not unexpected, f"non-placeholder values in .env.example: {unexpected}"
+
+
+def test_the_env_example_is_never_ignored():
+    lines = [line.strip() for line in _text(".gitignore").splitlines()]
+    ignores = [index for index, line in enumerate(lines) if line in {".env", ".env.*"}]
+    negations = [index for index, line in enumerate(lines) if line == "!.env.example"]
+    assert ignores, ".gitignore must ignore the real env files"
+    assert negations, ".gitignore must re-include .env.example"
+    # Order matters: a negation is only read after the pattern it undoes.
+    assert min(negations) > max(ignores)

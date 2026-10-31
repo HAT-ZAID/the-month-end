@@ -617,11 +617,13 @@ def build_provider(env=None):
     return None, f"unknown {PROVIDER_ENV} {kind!r}; expected one of {', '.join(PROVIDER_KINDS)}"
 
 
-def privacy_warning(provider, env=None) -> str:
+def privacy_warning(provider, env=None, *, honour_acceptance: bool = True) -> str:
     """The warning a caller must show before ``provider`` receives free text.
 
     Empty for a local or paid endpoint, and empty once the operator has accepted
-    the free tier explicitly through ``BUY_WAIT_ACCEPT_FREE_TIER``.  An
+    the free tier explicitly through ``BUY_WAIT_ACCEPT_FREE_TIER`` — unless the
+    caller is an interactive surface, which passes ``honour_acceptance=False``
+    so a copied ``.env`` cannot silence the warning a person is owed.  An
     unclassified provider returns the warning: silence is never the default.
     """
     if provider is None:
@@ -631,7 +633,7 @@ def privacy_warning(provider, env=None) -> str:
     if getattr(provider, "privacy", None) in (PRIVACY_LOCAL, PRIVACY_PAID):
         return ""
     env = os.environ if env is None else env
-    if str(env.get(ACCEPT_FREE_TIER_ENV) or "").strip().lower() in (
+    if honour_acceptance and str(env.get(ACCEPT_FREE_TIER_ENV) or "").strip().lower() in (
         "1",
         "true",
         "yes",

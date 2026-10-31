@@ -487,3 +487,14 @@ def test_redact_url_keeps_ipv6_brackets_and_survives_a_bad_port():
     # refusal message; the host comes straight from the parsed netloc now.
     bad = "http" "://" "user:secret@" "host:abc/v1"
     assert redact_url(bad) == "http" "://" "host:abc/v1"
+
+
+def test_an_interactive_surface_ignores_the_free_tier_acceptance():
+    from code.providers import ACCEPT_FREE_TIER_ENV, privacy_warning
+
+    provider = KiloProvider(env=_env())
+    env = {ACCEPT_FREE_TIER_ENV: "1"}
+    assert privacy_warning(provider, env=env) == ""
+    # The TUI passes honour_acceptance=False: a copied .env must not silence
+    # the notice on the surface where a person types free text.
+    assert privacy_warning(provider, env=env, honour_acceptance=False) == FREE_TIER_WARNING
