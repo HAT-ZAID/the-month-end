@@ -387,3 +387,11 @@ def test_a_relative_whatif_date_uses_the_request_date_not_today():
     # request_1 is dated 2025-08-03, so "the 20th" is 2025-08-20 whatever today
     # happens to be.
     assert "2025-08-20" in step.detail
+def test_a_waiting_period_is_never_read_as_an_amount():
+    (days,) = parse_instruction("what if request_1 waits 30 days")
+    assert days.params["amount"] is None
+    (weeks,) = parse_instruction("what if I wait 2 weeks")
+    assert weeks.params["amount"] is None
+    # Stripping the duration must not eat a real amount in the same clause.
+    (both,) = parse_instruction("can I afford 1000 in 30 days")
+    assert both.params["amount"] == Decimal("1000")

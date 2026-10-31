@@ -68,6 +68,12 @@ _MONTH_DAY = re.compile(
     re.IGNORECASE,
 )
 _REQUEST_ID = re.compile(r"\brequest[_\s-]?(\d+)\b", re.IGNORECASE)
+# "waits 30 days" is a waiting period, not an amount.  Strip it before the
+# money reader runs, or the number lands in requested_amount and the answer
+# describes a different question.
+_DURATION = re.compile(
+    r"\b\d+\s*(?:day|days|week|weeks|month|months|year|years)\b", re.IGNORECASE
+)
 _EVENT_ID = re.compile(r"\bevent[_\s-]?(\d+)\b", re.IGNORECASE)
 _MONEY = re.compile(r"(?<![\w.])(\d[\d.,]*\d|\d)(?![\w])")
 
@@ -305,7 +311,7 @@ def parse_instruction(text, *, reference: date | None = None) -> list[StepSpec]:
         if request_id:
             params["request_id"] = request_id
         if kind in ("afford", "whatif"):
-            params["amount"] = extract_money(clause)
+            params["amount"] = extract_money(_DURATION.sub(" ", clause))
             # "The 12th" means nothing until the target request's own date is
             # known, so a relative date is left unset here and the step handler
             # resolves it against request_date. Resolving it against today()

@@ -599,7 +599,7 @@ branch.
 | four audit scripts to `tools/experiments/` | **Done.** `compare_agentic`, `compare_jev`, `compare_ocr` and `verify_samples` moved, with repo-root depth fixed and every documented path updated. |
 | one Decimal coercion | **Done** for the six modules that had their own; two hand-written coercers were then found by review and folded in too. |
 | three near-identical remote providers | **Done**: one `OpenAICompatibleProvider`, three thin declarative presets, plus a `paid` class for real user data. |
-| prune the suite from 629 to "about 520" | **Refuted as stated; four assertions removed.** Only one `def test_` name repeats across the whole suite, ~28 of the 637 cases come from parametrisation, and the `test_oracle_*` files are not duplicates: they pin distinct §6.3 rules (pending credit ignored, pending debit reserved, failed/cancelled/unrealised ignored, NaN and blank fail-closed, duplicate ids de-duplicated, cancellation before settlement). Reaching 520 would have deleted about 110 one-off invariant tests. What *was* duplicated got cut: a repeated redirect test in `test_jev.py`, two of `test_packaging.py`'s three env-file restatements, and a private-helper preprocessing test whose public-reader equivalent already asserts the same thing. 638 passed, 1 skipped. |
+| prune the suite from 629 to "about 520" | **Refuted as stated; four assertions removed.** Only one `def test_` name repeats across the whole suite, ~28 of the 637 cases come from parametrisation, and the `test_oracle_*` files are not duplicates: they pin distinct §6.3 rules (pending credit ignored, pending debit reserved, failed/cancelled/unrealised ignored, NaN and blank fail-closed, duplicate ids de-duplicated, cancellation before settlement). Reaching 520 would have deleted about 110 one-off invariant tests. What *was* duplicated got cut: a repeated redirect test in `test_jev.py`, two of `test_packaging.py`'s three env-file restatements, and a private-helper preprocessing test whose public-reader equivalent already asserts the same thing. 639 passed, 1 skipped. |
 
 ### 10.2 The two pre-push reviews
 
@@ -658,9 +658,12 @@ The model's explanation used to be discarded whenever it disagreed with the comp
 ledger, which is correct but silent — a reader could not tell "the kernel had nothing
 to say" from "the model said something we threw away". On the agent path only, a
 valid candidate that disagrees now ships `Disagreements: … (fields: …)`: the model's
-own words when it names at least one field that actually differs, and a neutral
-sentence when it names the wrong one. The field list comes from the verifier, not the
-model, so it cannot be talked around.
+own words when it names no field or names only fields that actually differ, and a
+neutral sentence when it names a field that does not. Prose that mentions amounts
+rather than field names is therefore kept — the note is a record of what the model
+thought, and the test `test_a_disagreement_note_may_quote_the_candidate_s_own_figures`
+pins that case. The field list comes from the verifier, not the model, so it cannot
+be talked around.
 
 `code/agent.py` opts in; `code/tools.py`'s mid-loop check and `code/main.py`'s batch
 path do not, so `output.csv` is still the kernel's text byte for byte. `rationale_source`
@@ -687,7 +690,7 @@ gains a third value, `disagreement`, and `code/main.py` still only prefers
 
 ### 10.5 The numbers this release was verified at
 
-- `pytest -q`: **638 passed, 1 skipped**.
+- `pytest -q`: **639 passed, 1 skipped**.
 - `output.csv`: 250 rows, sha256 `1f35043f…376486`, byte-identical to the committed
   file before and after every change in this release.
 - `python -m code.main` on the offline path: no network call, no stderr noise.
