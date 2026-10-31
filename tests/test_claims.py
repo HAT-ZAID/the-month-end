@@ -274,3 +274,49 @@ def test_prose_from_an_invalid_candidate_never_ships():
     assert result["verification"]["candidate_valid"] is False
     assert result["verification"]["rationale_source"] == "kernel"
     assert result["final_row"]["decision_explanation"] == ROW["decision_explanation"]
+
+
+def test_an_invented_figure_never_ships_in_a_disagreement_note():
+    candidate = {
+        "request_id": "request_demo",
+        "amount_safe_to_pay": "1",
+        "affordability_status": "affordable_now",
+        "recommended_payment_method": "full_payment",
+        "payment_plan": "2025-08-03:15656000",
+        "earliest_date_for_full_payment": "2025-08-03",
+        "spending_changes_needed": "none",
+        "evidence_sufficient": True,
+        "confidence": 0.4,
+        "rationale": (
+            "I disagree with amount_safe_to_pay: you can pay 99000000 on 2030-01-01."
+        ),
+    }
+    result = enforce_decision(candidate, dict(ROW), disagreement_note=True)
+    text = result["final_row"]["decision_explanation"]
+    assert result["verification"]["rationale_source"] == "disagreement"
+    # The invented amount and date are neither in the kernel row nor in the
+    # candidate, so the note falls back to the marked sentence.
+    assert "99000000" not in text
+    assert "2030-01-01" not in text
+    assert "amount_safe_to_pay" in text
+
+
+def test_a_disagreement_note_may_quote_the_candidate_s_own_figures():
+    candidate = {
+        "request_id": "request_demo",
+        "amount_safe_to_pay": "1",
+        "affordability_status": "affordable_now",
+        "recommended_payment_method": "full_payment",
+        "payment_plan": "2025-08-03:15656000",
+        "earliest_date_for_full_payment": "2025-08-03",
+        "spending_changes_needed": "none",
+        "evidence_sufficient": True,
+        "confidence": 0.4,
+        "rationale": "I counted amount_safe_to_pay as 1 after the 2025-08-03 bills.",
+    }
+    result = enforce_decision(candidate, dict(ROW), disagreement_note=True)
+    text = result["final_row"]["decision_explanation"]
+    assert text.startswith("Disagreements:")
+    # The model's own figure and date are allowed: this is its record of what
+    # it thought, not a claim about the ledger.
+    assert "I counted amount_safe_to_pay as 1" in text

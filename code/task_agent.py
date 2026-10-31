@@ -304,12 +304,17 @@ def parse_instruction(text, *, reference: date | None = None) -> list[StepSpec]:
         request_id = extract_request_id(clause)
         if request_id:
             params["request_id"] = request_id
-        if kind == "afford":
+        if kind in ("afford", "whatif"):
             params["amount"] = extract_money(clause)
-            params["date"] = extract_date(clause, reference)
-        elif kind == "whatif":
-            params["amount"] = extract_money(clause)
-            params["date"] = extract_date(clause, reference)
+            # "The 12th" means nothing until the target request's own date is
+            # known, so a relative date is left unset here and the step handler
+            # resolves it against request_date. Resolving it against today()
+            # would make the same instruction decide differently each day.
+            params["date"] = (
+                extract_date(clause, reference)
+                if reference is not None or _ISO_DATE.search(clause)
+                else None
+            )
         elif kind == "apply":
             params["event_id"] = extract_event_id(clause)
             params["amount"] = extract_money(clause)
@@ -984,7 +989,9 @@ def _spec_from_intent(intent, clause: str) -> StepSpec | None:
         return StepSpec("changes", clause, params)
     if intent.intent == "follow_up":
         params["amount"] = extract_money(clause)
-        params["date"] = extract_date(clause)
+        # Same rule as parse_instruction: only an absolute date is resolvable
+        # without the target request.
+        params["date"] = extract_date(clause) if _ISO_DATE.search(clause) else None
         return StepSpec("whatif", clause, params)
     if intent.intent == "question":
         return StepSpec("explain", clause, params)
@@ -1148,6 +1155,24 @@ def _write_trace(result: TaskResult, directory: Path) -> str | None:
             "length": len(instruction),
         }
         record["summary"] = ""
+        # `changed` carries the safe amount an afford computed and the
+        # before/after of every decision field an apply moved, so it is
+        # rebuilt from non-monetary metadata rather than copied.
+        changed = []
+        for entry in record.get("changed") or []:
+            if not isinstance(entry, dict):
+                continue
+            safe_entry = {
+                key: entry[key]
+                for key in ("request_id", "status", "method")
+                if key in entry
+            }
+            if "action" in entry:
+                safe_entry["action"] = _trace_safe_action(entry["action"])
+            if isinstance(entry.get("fields"), dict):
+                safe_entry["fields"] = sorted(entry["fields"])
+            changed.append(safe_entry)
+        record["changed"] = changed
         actions = []
         for entry in record.get("actions_applied") or []:
             if isinstance(entry, dict):

@@ -178,13 +178,15 @@ In case, the harness you are using is not in the repo root, you can explicitly a
 
 ## Submission
 
-Submit the following files as instructed by HackerRank:
+This table describes the September 2026 HackerRank Orchestrate submission and is
+kept for provenance. The competition is over; the repo is no longer organised
+around it.
 
 | File | Description |
 |---|---|
 | `code.zip` | Full runnable solution, prompts/configuration, README, and the required `evaluation/` folder |
 | `output.csv` | Predictions for every row in `dataset/requests.csv` |
-| `chat_transcript` | The `log.txt` described above, showing how you developed or used the system |
+| `chat_transcript` | The `log.txt` described above, showing how you developed or used the system. That transcript was a submission requirement; `log.txt` is now an optional local dev trace. |
 
 Before submitting, confirm:
 

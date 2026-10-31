@@ -860,7 +860,9 @@ def run_agent_loop(
             # Keep the repair history on the verification, and when the run ends
             # on a fallback, report what the last rejected proposal got wrong.
             verification["repair_log"] = list(state["repair_log"])
-            if not verification.get("differences"):
+            if not verification.get("differences") and not verification.get(
+                "agent_agreement"
+            ):
                 last = state["repair_log"][-1]
                 if last.get("differences"):
                     verification["differences"] = [

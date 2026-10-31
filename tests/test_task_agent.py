@@ -30,9 +30,9 @@ def test_compound_instruction_splits_into_ordered_steps():
     )
     kinds = [step.kind for step in spec]
     assert kinds == ["changes", "apply", "afford"]
-    assert spec[-1].params["date"] == date(1, 1, 1) or isinstance(
-        spec[-1].params["date"], date
-    )
+    # "the 3rd" is relative, so it is resolved by the step handler against the
+    # target request's date, not against today() at parse time.
+    assert spec[-1].params["date"] is None
 
 
 def test_afford_clause_extracts_amount_and_iso_date():
@@ -85,7 +85,8 @@ def test_stop_reduce_and_explain_are_classified_by_verb():
 def test_whatif_follow_up_is_recognised():
     (spec,) = parse_instruction("and if I wait until the 20th?")
     assert spec.kind == "whatif"
-    assert isinstance(spec.params["date"], date)
+    assert spec.params["date"] is None
+    assert spec.params["amount"] is None
 
 
 def test_undo_and_unknown_verbs():
@@ -347,3 +348,42 @@ def test_a_manual_id_never_reuses_one_the_tui_already_made(tmp_path):
     ]
     request_id = workspace.add_manual(1000, date(2025, 9, 1))
     assert request_id == "manual_0002"
+
+
+def test_a_relative_date_is_left_for_the_step_handler_to_resolve():
+    (relative,) = parse_instruction("can I afford 1.050,00 on the 12th")
+    # Not resolved at parse time: "the 12th" depends on the target request's
+    # own date, and resolving it against today() would make the same
+    # instruction decide differently on different days.
+    assert relative.params["date"] is None
+
+    (absolute,) = parse_instruction("can I afford 1.050,00 on 2025-09-12")
+    assert absolute.params["date"] == date(2025, 9, 12)
+
+
+def test_the_task_trace_keeps_no_amounts_from_changed(tmp_path):
+    from code.task_agent import TaskResult, _write_trace
+
+    result = TaskResult(
+        task_id="task_changed",
+        instruction="can I afford 40000",
+        changed=[
+            {
+                "request_id": "request_1",
+                "safe_amount": "40000.00",
+                "earliest_date": "2025-09-12",
+                "fields": {"amount_safe_to_pay": ("1", "2")},
+            }
+        ],
+    )
+    assert _write_trace(result, tmp_path) is not None
+    text = (tmp_path / "task_changed.json").read_text(encoding="utf-8")
+    assert "request_1" in text
+    assert "40000" not in text
+def test_a_relative_whatif_date_uses_the_request_date_not_today():
+    workspace = StubWorkspace({"request_1": DECISION})
+    result = run_task("what if request_1 waits until the 20th", workspace=workspace)
+    (step,) = result.steps
+    # request_1 is dated 2025-08-03, so "the 20th" is 2025-08-20 whatever today
+    # happens to be.
+    assert "2025-08-20" in step.detail

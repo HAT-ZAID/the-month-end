@@ -248,8 +248,9 @@ The loop now treats a rejection as feedback instead of a stop condition:
   `BUY_WAIT_AGENT_REPAIR_TURNS` (default 2, max 5).
 - **Claim-checked explanations.** A model's `rationale` ships only when every
   amount, date, status/method name and spending-change action in it is reproduced
-  by the kernel row (`code/claims.py`). Wrong about the plan, still allowed to
-  explain it; never allowed to invent a number.
+  by the kernel row (`code/claims.py`). A candidate that disagrees with the kernel
+  on any machine field never ships its rationale; on the agent path only, a marked
+  `Disagreements:` note ships instead. Never allowed to invent a number.
 - **Guarded spending changes.** `propose_spending_change` lets the model try a
   permitted `stop`/`reduce_to`; the kernel re-solves and accepts it only when it
   actually raises the safe amount. The shipped row still carries the kernel's own

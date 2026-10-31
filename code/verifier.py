@@ -189,6 +189,29 @@ def _disagreement_note(rationale: str, differences) -> str:
     return text
 
 
+def _candidate_figures(parsed) -> tuple[tuple, tuple]:
+    """The numbers and dates the candidate itself proposes.
+
+    A disagreement note may quote the model's own figures — that is what makes it
+    a debugging record — but nothing beyond the kernel row and the candidate.
+    """
+    numbers: list[str] = []
+    dates: list[str] = []
+    amount = str(getattr(parsed, "amount_safe_to_pay", "") or "").strip()
+    if amount:
+        numbers.append(amount)
+    earliest = str(getattr(parsed, "earliest_date_for_full_payment", "") or "").strip()
+    if earliest:
+        dates.append(earliest)
+    for part in str(getattr(parsed, "payment_plan", "") or "").split("|"):
+        day, _, leg = part.partition(":")
+        if day.strip():
+            dates.append(day.strip())
+        if leg.strip():
+            numbers.append(leg.strip())
+    return tuple(numbers), tuple(dates)
+
+
 def enforce_decision(
     candidate: DecisionCandidate | dict | None,
     kernel_result: dict,
@@ -283,7 +306,21 @@ def enforce_decision(
     ):
         # The model was wrong about the plan but may still say what it thought:
         # the note is the debugging record of the disagreement, not a decision.
-        disagreement = _disagreement_note(rationale, differences)
+        # It may quote its own figures -- that is the point -- but nothing that
+        # is neither in the kernel row nor in its own candidate, so an invented
+        # amount, date or status still falls back to the marked note.
+        grounded = ""
+        if rationale and parsed is not None:
+            own_numbers, own_dates = _candidate_figures(parsed)
+            note_report = verify_claims(
+                rationale,
+                row,
+                extra_numbers=tuple(extra_numbers or ()) + own_numbers,
+                extra_dates=tuple(extra_dates or ()) + own_dates,
+            )
+            if note_report.get("ok"):
+                grounded = rationale
+        disagreement = _disagreement_note(grounded, differences)
         rationale_source = "disagreement"
 
     final_row = dict(row)

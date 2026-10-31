@@ -372,8 +372,10 @@ Run 4 changed the contract in three ways, all without moving a single machine va
    bounded by `BUY_WAIT_AGENT_REPAIR_TURNS` (default 2).
 2. **Claim-checked prose.** The model writes the explanation; `code/claims.py`
    extracts every number, date, status and method name from it and requires each one
-   to be reproduced by the kernel row. Grounded prose ships even when the model's
-   own candidate fields differ; fabricated prose never ships.
+   to be reproduced by the kernel row. Prose ships only when the candidate also
+   agrees with the kernel on every machine field, and only then is it claim-checked;
+   a disagreeing candidate gets a marked `Disagreements:` note on the agent path.
+   Fabricated prose never ships.
 3. **Intent first.** Every instruction is classified (question / analysis / action /
    compound / follow-up) before any tool runs, so the loop reads the request the
    user actually made.
@@ -577,3 +579,97 @@ $env:BUY_WAIT_KILO_API_KEY  = "<your key>"
 ```
 
 No key is required to run, test, or evaluate the product. That is deliberate.
+
+---
+
+## 10. The release path, and what the reviews changed
+
+The agent contribution reached `main` through a curated branch, not by merging the
+competition tree. `agentic-overhaul` stays where it was (`d5fb592`); the release
+branch replayed twenty-one files onto `main`, added a production `AGENTS.md`, and
+then cut redundancy — the cuts belong on the release path, never on the experiment
+branch.
+
+### 10.1 What the cuts found
+
+| Planned cut | Outcome |
+|---|---|
+| `tools/correctness_report.py` into `tools/experiments/` | **Refuted.** Gate G0 invokes that literal path (`evaluation/run.py`), so the script stays in `tools/`. |
+| delete `tools/evaluation/` | **Refuted.** It is a load-bearing mirror of `evaluation/usage_report.md`: `evaluation/run.py` compares the two byte for byte and `tests/test_hardening.py` asserts the pair. Deleting it would have removed a provenance check, not duplicate weight. |
+| four audit scripts to `tools/experiments/` | **Done.** `compare_agentic`, `compare_jev`, `compare_ocr` and `verify_samples` moved, with repo-root depth fixed and every documented path updated. |
+| one Decimal coercion | **Done** for the six modules that had their own; two hand-written coercers were then found by review and folded in too. |
+| three near-identical remote providers | **Done**: one `OpenAICompatibleProvider`, three thin declarative presets, plus a `paid` class for real user data. |
+| prune the suite from 629 to "about 520" | **Refuted as stated; four assertions removed.** Only one `def test_` name repeats across the whole suite, ~28 of the 637 cases come from parametrisation, and the `test_oracle_*` files are not duplicates: they pin distinct §6.3 rules (pending credit ignored, pending debit reserved, failed/cancelled/unrealised ignored, NaN and blank fail-closed, duplicate ids de-duplicated, cancellation before settlement). Reaching 520 would have deleted about 110 one-off invariant tests. What *was* duplicated got cut: a repeated redirect test in `test_jev.py`, two of `test_packaging.py`'s three env-file restatements, and a private-helper preprocessing test whose public-reader equivalent already asserts the same thing. 632 passed, 1 skipped. |
+
+### 10.2 The two pre-push reviews
+
+Two independent reviews ran against the branch before the push, briefed
+adversarially — one on correctness and determinism, one on security and privacy.
+Both returned **BLOCK**, and both were right. What they found, and what changed:
+
+| Finding | Response |
+|---|---|
+| The verifier shipped a candidate's prose whenever its claims checked out, so a model that disagreed with the kernel on every machine field could still author `decision_explanation` — and prose with nothing checkable always passed | Agreement is the first gate again; claim checking narrows it. Two tests that had pinned the looser rule were rewritten and one added. |
+| `is_local_url` accepted any host starting with `127.`, which defeated the plaintext-transport refusal and silenced the free-tier warning for a remote host | The check parses the host as an IP address and asks `is_loopback`; `localhost` is the only accepted name. |
+| `python -m code.main` sent every row's facts to a free tier with no notice, and `OPENROUTER_KEY` alone was enough to trigger it | The batch path and the Jev gate warn on stderr, once per process, exactly like the TUI. |
+| `code.explanations` and `code.jev` used `urllib`, which follows a redirect and copies the `Authorization` header: a `302` could resend the key in cleartext | Both use an opener that refuses redirects and refuse a remote `http://` endpoint before the call. |
+| The task trace wrote the typed instruction and every clause verbatim, and a provider error containing a key or a URL password went in unsanitised | The trace stores a sha256 of the instruction and no step text, and the record passes through `trace.sanitize`, which now also scrubs `user:password@`. |
+| `_money_value` called `parse_amount` without its currency argument, so the `TypeError` fell into a bare `except` on every call and `1.050,00` was read as `1.05` | The locale parser is used, the money regex accepts either separator shape, and `to_decimal` is the last resort. |
+| A month name resolved to a past date; a manual `afford` never set `current_request_id`; a no-op `apply` dropped every override; the TUI rebuilt its `Workspace` on every command | All four fixed and pinned. The TUI now keeps one workspace per session, so `ask and if I wait until the 20th` works as documented. |
+| `README` called Kilo a `paid` provider while the code classifies it `free` | Table corrected. A reader who trusted it would have sent real text to a training tier expecting no warning. |
+
+The branch-wide CodeRabbit deep review returned 12 findings, 5 of them the same
+defects the two adversarial reviews had found independently — which is the useful
+part, not the count. Reviewing the fix commits against the branch turned up five
+more, four of which were in the code the first round had just written:
+
+| Second-pass finding | Response |
+|---|---|
+| A task could persist a spending-change **amount**: `reduce_to:<event_id>:<amount>` reached `actions_applied`, and the trace writer copied it through | The trace keeps `reduce_to:<event_id>` and drops the figure |
+| The trace writer emptied every step's structured `data`, losing the intent reading the TUI renders | An allowlist of intent fields (`intent`, `request_kind`, `source`, `confidence`, `ambiguity`) survives; nothing else does |
+| `"29 February"` asked in a non-leap year resolved to `None` | A month name searches forward to the next leap year |
+| A manual request id from `new` could collide with one `ask` had already created, and `row()` returns the first match — so a later question could answer with an earlier request's decision | `add_manual` skips ids already present in the dataset and in the session |
+| `extract_date` searched only two years forward | Same fix as the leap day |
+
+### 10.3 The disagreement note, and why it is agent-only
+
+The model's explanation used to be discarded whenever it disagreed with the computed
+ledger, which is correct but silent — a reader could not tell "the kernel had nothing
+to say" from "the model said something we threw away". On the agent path only, a
+valid candidate that disagrees now ships `Disagreements: … (fields: …)`: the model's
+own words when it names at least one field that actually differs, and a neutral
+sentence when it names the wrong one. The field list comes from the verifier, not the
+model, so it cannot be talked around.
+
+`code/agent.py` opts in; `code/tools.py`'s mid-loop check and `code/main.py`'s batch
+path do not, so `output.csv` is still the kernel's text byte for byte. `rationale_source`
+gains a third value, `disagreement`, and `code/main.py` still only prefers
+`candidate`, so the note can never reach a shipped row.
+
+### 10.4 What is still open, stated plainly
+
+1. **G2 is still the accepted baseline failure** (§7). Nothing in this release
+   re-baselined or silenced it.
+2. **Docker remains unverified.** No build was attempted here, and G5/G6 stay
+   NOT RUN until an archive exists.
+3. **`BUY_WAIT_ACCEPT_FREE_TIER` is process-global.** It silences the notice for
+   every free or unclassified endpoint in that process, not just the one the
+   operator accepted. A per-provider allowlist would be tighter.
+4. **The TUI's privacy notice is once per session, not per provider.** Switching
+   from one free tier to another mid-session does not re-print it.
+5. **`python -m code.task_agent` ignores `BUY_WAIT_LLM_PROVIDER`.** It only builds a
+   provider when `--provider` is passed. That fails safe (rules only, no model
+   call), but `.env.example` presents the variable as the switch.
+6. **An ambiguous single separator still needs a currency to read.** `1.050` is
+   1050 in IDR and 1.05 in USD, and the parser is called without a home currency
+   when the clause is parsed before the profile is loaded.
+
+### 10.5 The numbers this release was verified at
+
+- `pytest -q`: **632 passed, 1 skipped**.
+- `output.csv`: 250 rows, sha256 `1f35043f…376486`, byte-identical to the committed
+  file before and after every change in this release.
+- `python -m code.main` on the offline path: no network call, no stderr noise.
+- `evaluation.run --mode pr`: G0, G1, G3, G4 PASS; G2 FAIL at the recorded baseline.
+- `tools.build_release`: 80 files, 291413 bytes, `evaluation/` present, no banned
+  names, archive clean (`sha256 72e876ed…`).

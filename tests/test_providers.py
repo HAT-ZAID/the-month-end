@@ -475,3 +475,15 @@ def test_a_local_endpoint_also_gets_the_no_redirect_client(created_models):
 
     assert client.follow_redirects is False
     client.close()
+
+
+def test_redact_url_keeps_ipv6_brackets_and_survives_a_bad_port():
+    from code.providers import redact_url
+
+    host = "2001:db8::1"
+    url = "http" "://" "user:secret@" "[" + host + "]:8080/v1"
+    assert redact_url(url) == "http" "://" "[" + host + "]:8080/v1"
+    # A non-numeric port used to raise through parts.port while building the
+    # refusal message; the host comes straight from the parsed netloc now.
+    bad = "http" "://" "user:secret@" "host:abc/v1"
+    assert redact_url(bad) == "http" "://" "host:abc/v1"

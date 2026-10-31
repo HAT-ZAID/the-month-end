@@ -167,8 +167,9 @@ def redact_url(url) -> str:
         return "<unparseable url>"
     if parts.username is None and parts.password is None:
         return text
-    host = parts.hostname or ""
-    netloc = f"{host}:{parts.port}" if parts.port else host
+    # Take the host straight from the netloc the parser already split, so a
+    # malformed port cannot raise and IPv6 brackets survive.
+    netloc = parts.netloc.rpartition("@")[2]
     return parts._replace(netloc=netloc).geturl()
 
 

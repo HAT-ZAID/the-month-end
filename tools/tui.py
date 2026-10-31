@@ -630,6 +630,8 @@ class TUI:
     def __init__(self, data=None, input_fn=input, console=None, trace_dir=None) -> None:
         self.data = data
         self.session = Session()
+        # Built on first `ask`, then reused so follow-ups keep their request.
+        self._workspace = None
         self.input_fn = input_fn
         self.console = console if console is not None else Console(markup=False, highlight=False)
         # Read-only trace directory for `trace <id>`; nothing here writes to it.
@@ -752,6 +754,12 @@ class TUI:
 
     def _next_manual_id(self, data) -> str:
         existing = {str(request.get("request_id", "")) for request in data["requests"]}
+        workspace = getattr(self, "_workspace", None)
+        if workspace is not None:
+            # `ask` stores its manual requests inside the workspace, where this
+            # scan cannot see them; without this, `new` could reuse one and the
+            # workspace would answer with the earlier request's decision.
+            existing |= set(workspace._manual)
         index = self._manual_counter
         while True:
             index += 1
