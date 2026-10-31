@@ -899,6 +899,10 @@ def _whatif(workspace: Workspace, spec: StepSpec) -> StepResult:
     borrowed = workspace.last_amount
     if named_here and str(named_here) != str(previous_request_id):
         borrowed = None
+        # The stale figure belongs to the earlier question, and a following
+        # clause that names no request at all ("then what if I wait until the
+        # 25th") would inherit it and answer about the wrong money.
+        workspace.last_amount = None
     amount = spec.params.get("amount") or borrowed
     overrides: dict = {}
     if wanted_date is not None:

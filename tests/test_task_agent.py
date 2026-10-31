@@ -446,3 +446,24 @@ def test_a_whatif_on_a_named_request_does_not_borrow_the_last_amount():
     # request_27 asks about its own 6670, not the 40000 of the previous question.
     assert step.data["request_id"] == "request_27"
     assert "requested_amount" not in step.data.get("overrides", {})
+def test_a_stale_amount_does_not_leak_into_the_next_clause():
+    data = {
+        "requests": [
+            {"request_id": "request_1", "user_id": "user_1",
+             "request_date": "2025-08-03", "requested_amount": "40000"},
+            {"request_id": "request_27", "user_id": "user_1",
+             "request_date": "2025-08-05", "requested_amount": "6670"},
+        ],
+        "profiles": {"user_1": {"home_currency": "ZAR",
+                                "minimum_balance_to_keep": "100"}},
+    }
+    workspace = StubWorkspace({"request_1": DECISION, "request_27": DECISION}, data=data)
+    workspace.current_request_id = "request_1"
+    workspace.last_amount = Decimal("40000")
+    # Naming another request must not leave 40000 behind for the clause after.
+    run_task("what if request_27 waits until the 20th", workspace=workspace)
+    assert workspace.last_amount is None
+    result = run_task("then what if I wait until the 25th", workspace=workspace)
+    (step,) = result.steps
+    assert "40000" not in step.detail
+    assert step.data.get("overrides", {}).get("requested_amount") != "40000"
