@@ -694,9 +694,12 @@ gains a third value, `disagreement`, and `code/main.py` still only prefers
    re-baselined or silenced it.
 2. **Docker remains unverified.** No build was attempted here, and G5/G6 stay
    NOT RUN until an archive exists.
-3. **`BUY_WAIT_ACCEPT_FREE_TIER` is process-global.** It silences the notice for
-   every free or unclassified endpoint in that process, not just the one the
-   operator accepted. A per-provider allowlist would be tighter.
+3. **`BUY_WAIT_ACCEPT_FREE_TIER` is still process-global for the batch pipeline.**
+   It silences the notice for every free or unclassified endpoint in that process,
+   not just the one the operator accepted. The TUI and `code.task_agent` now pass
+   `honour_acceptance=False`, so a copied `.env` can no longer quiet the two
+   surfaces where a person types free text; a per-provider allowlist would still
+   be tighter for `code.main`.
 4. **The TUI's privacy notice is once per session, not per provider.** Switching
    from one free tier to another mid-session does not re-print it.
 5. **`python -m code.task_agent` ignores `BUY_WAIT_LLM_PROVIDER`.** It only builds a
@@ -705,6 +708,16 @@ gains a third value, `disagreement`, and `code/main.py` still only prefers
 6. **An ambiguous single separator still needs a currency to read.** `1.050` is
    1050 in IDR and 1.05 in USD, and the parser is called without a home currency
    when the clause is parsed before the profile is loaded.
+7. **Instruction-shaped prose can still reach `output.csv` on an `--agent` run.**
+   The `Disagreements:` note is claim-checked for invented numbers and dates, not
+   for imperatives, and on an agent run the loop row is the output row. The
+   agreeing path has always admitted model prose, so this is not a new hole — but
+   a span that dropped a sentence from `messages.csv` would be cheap to add and
+   freely available to inject through, so it is the next thing to close.
+8. **`is_loopback_host` trusts the name `localhost`.** A poisoned hosts entry
+   would let a key leave the box over `http://localhost`. Resolving the name and
+   testing the address would close it; the risk was judged below the cost of one
+   more resolver call per provider build.
 
 ### 10.5 The numbers this release was verified at
 
