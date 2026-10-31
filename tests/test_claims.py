@@ -127,6 +127,67 @@ def test_verifier_keeps_kernel_text_when_fields_disagree():
     assert result["final_row"]["affordability_status"] == "affordable_now"
     assert result["final_row"]["amount_safe_to_pay"] == "15656000"
 
+def test_the_agent_path_may_say_where_it_disagrees():
+    candidate = {
+        "request_id": "request_demo",
+        "amount_safe_to_pay": "1",  # wrong
+        "affordability_status": "affordable_now",
+        "recommended_payment_method": "full_payment",
+        "payment_plan": "2025-08-03:15656000",
+        "earliest_date_for_full_payment": "2025-08-03",
+        "spending_changes_needed": "none",
+        "evidence_sufficient": True,
+        "confidence": 0.4,
+        "rationale": "I read the balance differently, so amount_safe_to_pay is 1.",
+    }
+    result = enforce_decision(candidate, dict(ROW), disagreement_note=True)
+    text = result["final_row"]["decision_explanation"]
+    assert result["verification"]["rationale_source"] == "disagreement"
+    assert text.startswith("Disagreements:")
+    assert "amount_safe_to_pay" in text
+    assert result["verification"]["disagreement_note"] == text
+    # machine fields still come from the kernel
+    assert result["final_row"]["amount_safe_to_pay"] == "15656000"
+
+
+def test_a_note_that_names_the_wrong_field_is_replaced_by_the_real_diff():
+    candidate = {
+        "request_id": "request_demo",
+        "amount_safe_to_pay": "1",  # the only real difference
+        "affordability_status": "affordable_now",
+        "recommended_payment_method": "full_payment",
+        "payment_plan": "2025-08-03:15656000",
+        "earliest_date_for_full_payment": "2025-08-03",
+        "spending_changes_needed": "none",
+        "evidence_sufficient": True,
+        "confidence": 0.4,
+        "rationale": "I disagree about payment_plan only.",
+    }
+    result = enforce_decision(candidate, dict(ROW), disagreement_note=True)
+    text = result["final_row"]["decision_explanation"]
+    assert text.startswith("Disagreements:")
+    assert "payment_plan" not in text
+    assert "amount_safe_to_pay" in text
+
+
+def test_the_batch_path_never_ships_a_disagreement_note():
+    candidate = {
+        "request_id": "request_demo",
+        "amount_safe_to_pay": "1",
+        "affordability_status": "affordable_later",
+        "recommended_payment_method": "wait",
+        "payment_plan": "none",
+        "earliest_date_for_full_payment": "",
+        "spending_changes_needed": "none",
+        "evidence_sufficient": True,
+        "confidence": 0.4,
+        "rationale": "Spend differently.",
+    }
+    result = enforce_decision(candidate, dict(ROW))
+    assert result["verification"]["rationale_source"] == "kernel"
+    assert result["final_row"]["decision_explanation"] == ROW["decision_explanation"]
+
+
 def test_context_facts_cover_what_the_model_was_shown():
     from code.agent import _context_facts
 

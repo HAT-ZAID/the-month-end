@@ -850,6 +850,7 @@ def run_agent_loop(
                 request_context=context,
                 extra_numbers=amounts,
                 extra_dates=dates,
+                disagreement_note=True,
             )
             verification = dict(outcome["verification"])
             row = outcome["final_row"]
@@ -1190,6 +1191,7 @@ def run_agent_loop(
                 request_context=context,
                 extra_numbers=amounts,
                 extra_dates=dates,
+                disagreement_note=True,
             )
             verification = dict(outcome["verification"])
             differences = verification.get("differences") or []
@@ -1516,6 +1518,7 @@ def run_agent_once(
         request_context=context,
         extra_numbers=amounts,
         extra_dates=dates,
+        disagreement_note=True,
     )
     verification = outcome["verification"]
     final_row = outcome["final_row"]

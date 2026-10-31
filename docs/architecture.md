@@ -74,7 +74,7 @@ checks.
 | `code/agent.py` | Bounded LangChain tool-calling loop, run-wide call cap, per-turn timeout, repair turns, replay/offline paths |
 | `code/intent.py` | Instruction classification: model first, deterministic rules always, source recorded |
 | `code/claims.py` | Claim check that decides whether a model rationale may ship |
-| `code/verifier.py` | Recomputes the kernel row; ships a candidate's prose only when the candidate agrees and its claims are supported |
+| `code/verifier.py` | Recomputes the kernel row; ships a candidate's prose only when the candidate agrees and its claims are supported, and on the agent path only, ships a marked `Disagreements:` note when it does not |
 | `code/task_agent.py` | Conversational task engine (`ask`): parse, decompose, act through the kernel, trace |
 | `code/providers.py` | Provider factory: `none` (default), `replay`, `ollama`, `openrouter`, `kilo`, `paid`; every provider declares a privacy class |
 | `code/trace.py` | Per-request JSON traces with secret redaction |

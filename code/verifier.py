@@ -8,17 +8,24 @@ kernel row.  It has three guarantees:
    dict is never mutated (values are copied, not aliased).
 2. **Auditability** — ``verification`` records whether the proposal was valid,
    whether it agreed, every field that differed, and why the kernel row stood.
-3. **Claim-checked prose** — the candidate rationale ships only when every
+3. **Claim-checked prose** - the candidate rationale ships only when every
    amount, date, status/method name and spending-change action in it is
    reproduced by the kernel row (:func:`code.claims.verify_claims`).  The check is
    independent of machine-field agreement: a model may be wrong about the plan
    and still contribute a correct, grounded explanation, and it may never
    contribute an unsupported number.
 
+A caller may additionally ask for the *disagreement* note
+(``disagreement_note=True``, used by :mod:`code.agent` only): a valid candidate
+that disagreed gets to say where, in text that is marked ``Disagreements:`` and
+always carries the computed field list.  The batch path never asks for it, so
+``output.csv`` cannot depend on a model's disagreement.
+
 This module performs no LLM reasoning.
 """
 from __future__ import annotations
 
+import re
 from decimal import Decimal
 
 from code.claims import verify_claims
@@ -140,6 +147,48 @@ def _compare(candidate: DecisionCandidate, row: dict) -> tuple[list[dict], bool]
     return differences, id_mismatch
 
 
+DISAGREEMENT_PREFIX = "Disagreements:"
+
+#: The candidate fields a disagreement note may name.  A note that names a field
+#: which did not actually differ is not about this run, so its text is dropped.
+_CANDIDATE_FIELDS = (
+    "request_id",
+    "amount_safe_to_pay",
+    "affordability_status",
+    "recommended_payment_method",
+    "payment_plan",
+    "earliest_date_for_full_payment",
+    "spending_changes_needed",
+)
+
+
+def _disagreement_note(rationale: str, differences) -> str:
+    """The note a disagreeing candidate writes on the agent path.
+
+    The model narrates the disagreement in its own words, but the record has to
+    say *where* it happened: every note carries the computed field list, and a
+    note that names a field outside that list is replaced by the list alone.  A
+    note that does not open with the marker gets it, so the text is always
+    recognisable as an unendorsed disagreement rather than a decision.
+    """
+    fields = [str(item.get("field", "")) for item in differences if item.get("field")]
+    text = str(rationale or "").strip()
+    named = {
+        field
+        for field in _CANDIDATE_FIELDS
+        if re.search(rf"(?<![A-Za-z0-9_]){re.escape(field)}(?![A-Za-z0-9_])", text)
+    }
+    if not text or not named <= set(fields):
+        text = ""
+    if not text:
+        text = f"{DISAGREEMENT_PREFIX} the proposal disagrees with the computed ledger"
+    elif not text.lower().startswith(DISAGREEMENT_PREFIX.lower()):
+        text = f"{DISAGREEMENT_PREFIX} {text}"
+    if fields:
+        text = f"{text} (fields: {', '.join(fields)})"
+    return text
+
+
 def enforce_decision(
     candidate: DecisionCandidate | dict | None,
     kernel_result: dict,
@@ -147,6 +196,7 @@ def enforce_decision(
     *,
     extra_numbers=(),
     extra_dates=(),
+    disagreement_note: bool = False,
 ) -> dict:
     """Return ``{"final_row", "verification"}`` with the kernel row always winning.
 
@@ -154,6 +204,10 @@ def enforce_decision(
     (or the pipeline's fail-closed row). ``extra_numbers`` / ``extra_dates`` are
     further facts the agent legitimately saw (the request amount, the requested
     date): a rationale may cite them, so the claim check must know them.
+    ``disagreement_note`` is the agent path's opt-in: when the candidate was
+    valid but disagreed with the ledger, the row carries the model's note about
+    the disagreement, marked as such, instead of the kernel text.  The batch path
+    leaves it off, so ``output.csv`` never depends on a model's disagreement.
     """
     row = _kernel_row(kernel_result)
 
@@ -220,10 +274,23 @@ def enforce_decision(
         )
     rationale_ok = bool(agreement and claim_report and claim_report.get("ok"))
     rationale_source = "candidate" if rationale_ok else "kernel"
+    disagreement = ""
+    if (
+        disagreement_note
+        and candidate_valid
+        and not agreement
+        and not context_mismatch
+    ):
+        # The model was wrong about the plan but may still say what it thought:
+        # the note is the debugging record of the disagreement, not a decision.
+        disagreement = _disagreement_note(rationale, differences)
+        rationale_source = "disagreement"
 
     final_row = dict(row)
     if rationale_source == "candidate":
         final_row["decision_explanation"] = rationale
+    elif rationale_source == "disagreement":
+        final_row["decision_explanation"] = disagreement
 
     verification = VerificationResult(
         agent_agreement=agreement,
@@ -235,6 +302,8 @@ def enforce_decision(
     payload = verification.as_dict()
     if claim_report is not None:
         payload["claim_check"] = claim_report
+    if disagreement:
+        payload["disagreement_note"] = disagreement
     return {"final_row": final_row, "verification": payload}
 
 
