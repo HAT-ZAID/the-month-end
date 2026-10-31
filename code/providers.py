@@ -49,6 +49,7 @@ receives free text; see :func:`privacy_warning`.
 """
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -116,7 +117,7 @@ class ProviderUnavailable(RuntimeError):
     """A provider cannot serve a chat turn; the caller falls back to the kernel."""
 
 
-LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+LOCAL_HOSTS = frozenset({"localhost"})
 
 
 def url_host(url) -> str:
@@ -127,10 +128,48 @@ def url_host(url) -> str:
         return ""
 
 
+def is_loopback_host(host) -> bool:
+    """True for ``localhost`` or a loopback IP literal, never for a DNS name.
+
+    The test has to be on the resolved address, not on the text.  A prefix test
+    such as ``host.startswith("127.")`` accepts names like ``127.0.0.1.nip.io``
+    or ``127.gpu-srv.example``, which are ordinary remote hosts: both the
+    plaintext-transport rule and the privacy class would then be wrong, and the
+    free-tier warning would be silenced for a remote endpoint.
+    """
+    text = str(host or "").strip().lower().strip("[]")
+    if not text:
+        return False
+    if text in LOCAL_HOSTS:
+        return True
+    try:
+        return ipaddress.ip_address(text).is_loopback
+    except ValueError:
+        return False
+
+
 def is_local_url(url) -> bool:
     """True when ``url`` points at this machine (loopback only)."""
-    host = url_host(url)
-    return host in LOCAL_HOSTS or host.startswith("127.")
+    return is_loopback_host(url_host(url))
+
+
+def redact_url(url) -> str:
+    """The URL without any ``user:password@`` component, for a message or a trace.
+
+    A gateway may legitimately carry basic-auth credentials in its URL, and a
+    refusal message is persisted in a trace, so the userinfo must not travel
+    with it.
+    """
+    text = str(url or "")
+    try:
+        parts = urlsplit(text)
+    except ValueError:
+        return "<unparseable url>"
+    if parts.username is None and parts.password is None:
+        return text
+    host = parts.hostname or ""
+    netloc = f"{host}:{parts.port}" if parts.port else host
+    return parts._replace(netloc=netloc).geturl()
 
 
 def is_secure_or_local_url(url) -> bool:
@@ -435,7 +474,7 @@ class OpenAICompatibleProvider(ChatProvider):
         if self.base_url and not is_secure_or_local_url(self.base_url):
             raise ProviderUnavailable(
                 f"{self.base_url_env or 'base_url'} must use https unless it "
-                f"points at this machine, not {self.base_url!r}"
+                f"points at this machine, not {redact_url(self.base_url)!r}"
             )
         if not self._api_key:
             raise ProviderUnavailable(
@@ -601,6 +640,34 @@ def privacy_warning(provider, env=None) -> str:
     return FREE_TIER_WARNING
 
 
+def endpoint_privacy_class(url) -> str:
+    """The privacy class of an endpoint that is not a :class:`ChatProvider`.
+
+    The one-shot transports (:mod:`code.explanations`, :mod:`code.jev`) post
+    straight to a URL, so nothing has declared a class for them.  An address on
+    this machine is local; anything else is treated exactly like the base
+    provider class treats an unknown endpoint: as a free tier that warns.
+    """
+    return PRIVACY_LOCAL if is_local_url(url) else PRIVACY_FREE
+
+
+class _EndpointPrivacy:
+    """Provider-shaped shim so :func:`privacy_warning` can judge a bare URL."""
+
+    def __init__(self, url, env=None):
+        self.privacy = endpoint_privacy_class(url)
+        self.url = str(url or "")
+        self._env = env
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid only
+        return f"<endpoint privacy={self.privacy!r}>"
+
+
+def endpoint_privacy_warning(url, env=None) -> str:
+    """The free-tier notice for a raw endpoint, before the first plain HTTP call."""
+    return privacy_warning(_EndpointPrivacy(url, env=env), env=env)
+
+
 def load_fixtures(fixture_dir) -> dict:
     """Load ``candidates.json``; any problem yields an empty mapping."""
     path = Path(fixture_dir) / "candidates.json"
@@ -645,10 +712,14 @@ __all__ = [
     "ProviderUnavailable",
     "ReplayProvider",
     "build_provider",
+    "endpoint_privacy_class",
+    "endpoint_privacy_warning",
     "is_local_url",
+    "is_loopback_host",
     "is_secure_or_local_url",
     "load_fixtures",
     "privacy_warning",
+    "redact_url",
     "request_id_from_context",
     "url_host",
 ]

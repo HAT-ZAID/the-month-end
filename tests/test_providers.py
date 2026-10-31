@@ -35,6 +35,8 @@ from code.providers import (
     PaidProvider,
     ProviderUnavailable,
     build_provider,
+    is_local_url,
+    is_loopback_host,
     is_secure_or_local_url,
     privacy_warning,
 )
@@ -300,6 +302,60 @@ def test_a_remote_ollama_host_is_not_classified_local():
     )
     assert provider.privacy == PRIVACY_FREE
     assert privacy_warning(provider, env={}) == FREE_TIER_WARNING
+
+
+def test_only_a_loopback_address_counts_as_this_machine():
+    for url in (
+        "http" "://127.0.0.1:11434",
+        "http" "://127.0.0.5:11434",
+        "http" "://[::1]:11434",
+        "http" "://localhost:11434",
+    ):
+        assert is_local_url(url) is True, url
+        assert is_secure_or_local_url(url) is True, url
+
+
+def test_a_name_that_merely_starts_with_127_is_still_remote():
+    # A prefix test ("127.") would accept all of these; none is this machine, so
+    # a plaintext endpoint would leak the key and a remote Ollama host would
+    # lose its free-tier warning.
+    for url in (
+        "http" "://127.0.0.1.nip.io:11434",
+        "http" "://127.gpu-srv.example:11434",
+        "http" "://127.evil.example/v1",
+    ):
+        assert is_local_url(url) is False, url
+        assert is_secure_or_local_url(url) is False, url
+
+
+def test_loopback_is_decided_by_address_not_by_prefix():
+    assert is_loopback_host("127.0.0.1") is True
+    assert is_loopback_host("::1") is True
+    assert is_loopback_host("[::1]") is True
+    assert is_loopback_host("localhost") is True
+    assert is_loopback_host("127.0.0.1.nip.io") is False
+    assert is_loopback_host("127.0.0.1.invalid") is False
+    assert is_loopback_host("") is False
+
+
+def test_a_remote_dotted_127_host_still_gets_the_free_tier_warning():
+    provider = OllamaProvider(
+        env={OLLAMA_BASE_URL_ENV: "http" "://127.gpu-srv.example:11434"}
+    )
+    assert provider.privacy == PRIVACY_FREE
+    assert privacy_warning(provider, env={}) == FREE_TIER_WARNING
+
+
+def test_a_remote_plaintext_127_endpoint_cannot_smuggle_a_key():
+    provider = KiloProvider(
+        env={
+            KILO_BASE_URL_ENV: "http" "://127.0.0.1.nip.io/v1",
+            KILO_API_KEY_ENV: KILO_KEY,
+        }
+    )
+    with pytest.raises(ProviderUnavailable) as caught:
+        provider.chat_model()
+    assert KILO_KEY not in str(caught.value)
 
 
 def test_an_unrecognised_privacy_class_still_warns():
