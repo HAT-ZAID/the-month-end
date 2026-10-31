@@ -324,3 +324,51 @@ def test_provider_insufficient_evidence_is_accepted_when_grounded():
     )
     assert "unresolved" in result.lower()
     assert usage["successful"] == 1
+
+# ---------------------------------------------------------------------------
+# The configured path is a privacy boundary, not just a formatter
+# ---------------------------------------------------------------------------
+
+
+def test_a_remote_plaintext_endpoint_is_refused_before_any_call(monkeypatch):
+    monkeypatch.setenv("BUY_WAIT_LLM_ENDPOINT", "http" "://gateway.example.invalid/v1")
+    monkeypatch.setenv("BUY_WAIT_LLM_API_KEY", "sk-placeholder-key-for-tests")
+    monkeypatch.setenv("BUY_WAIT_LLM_MODEL", "example/model")
+    calls = []
+
+    def transport(*args, **kwargs):
+        calls.append(args)
+        raise AssertionError("the transport must not be reached")
+
+    monkeypatch.setattr(explanations, "urlopen", transport)
+    assert explanations._configured_call(_packet()) is None
+    assert calls == []
+
+
+def test_the_transport_never_follows_a_redirect():
+    handler = explanations._RefuseRedirects()
+    target = "http" "://evil.example/v1"
+    assert handler.redirect_request(None, None, 302, "Found", {}, target) is None
+
+
+def test_a_free_endpoint_warns_once_on_stderr(monkeypatch, capsys):
+    monkeypatch.delenv("BUY_WAIT_ACCEPT_FREE_TIER", raising=False)
+    monkeypatch.setattr(explanations, "_warned", False)
+    explanations._warn_free_tier("https" "://openrouter.ai/api/v1/chat/completions")
+    explanations._warn_free_tier("https" "://openrouter.ai/api/v1/chat/completions")
+    err = capsys.readouterr().err
+    assert err.count("privacy:") == 1
+    assert "train" in err
+
+
+def test_a_local_endpoint_says_nothing(monkeypatch, capsys):
+    monkeypatch.setattr(explanations, "_warned", False)
+    explanations._warn_free_tier("http" "://127.0.0.1:11434/v1")
+    assert capsys.readouterr().err == ""
+
+
+def test_accepting_the_free_tier_silences_the_notice(monkeypatch, capsys):
+    monkeypatch.setenv("BUY_WAIT_ACCEPT_FREE_TIER", "1")
+    monkeypatch.setattr(explanations, "_warned", False)
+    explanations._warn_free_tier("https" "://openrouter.ai/api/v1/chat/completions")
+    assert capsys.readouterr().err == ""

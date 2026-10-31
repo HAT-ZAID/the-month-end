@@ -292,13 +292,19 @@ def run_pipeline(
             }
         else:
             from code.agent import run_agent_loop
-            from code.providers import build_provider
+            from code.providers import build_provider, privacy_warning
             from code.rag import build_retriever
 
             if provider is not None:
                 resolved_provider, provider_reason = provider, None
             else:
                 resolved_provider, provider_reason = build_provider()
+            # Say which class of endpoint is about to see this user's data.  The
+            # warning goes to stderr so the CSV writer on stdout stays clean.
+            if resolved_provider is not None:
+                privacy_notice = privacy_warning(resolved_provider)
+                if privacy_notice:
+                    print(f"privacy: {privacy_notice}", file=sys.stderr)
             retriever = None
             try:
                 retriever = build_retriever(root)

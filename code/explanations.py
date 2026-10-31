@@ -4,12 +4,47 @@ import json
 import os
 import re
 import socket
-from urllib.request import Request, urlopen
+import sys
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
+from .providers import endpoint_privacy_warning, is_secure_or_local_url
 from .usage import estimate_cost_usd, MAX_PROVIDER_CALLS
 
 _REQUIRED_KEYS = ("decision_explanation", "evidence_sufficient", "supporting_facts")
 _OPTIONAL_KEYS = ("missing_evidence",)
+#: One privacy notice per process, however many rows this run decides.
+_warned = False
+
+
+class _RefuseRedirects(HTTPRedirectHandler):
+    """Never follow a redirect.
+
+    ``urllib`` copies the request headers, ``Authorization`` included, to the
+    location it is redirected to, so an endpoint answering ``302`` could resend
+    the bearer key and the prompt in cleartext to a host the operator never
+    configured.  Returning ``None`` makes urllib hand the 3xx response back
+    instead of following it, so the call fails closed.
+    """
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001
+        return None
+
+
+#: The module's transport.  It stays a plain callable under the name ``urlopen``
+#: so a test can inject a fake one without reaching into the opener.
+urlopen = build_opener(_RefuseRedirects()).open
+
+
+def _warn_free_tier(endpoint: str) -> None:
+    """Name the privacy class of ``endpoint`` once, before it receives any data."""
+    global _warned
+    if _warned:
+        return
+    notice = endpoint_privacy_warning(endpoint)
+    if not notice:
+        return
+    _warned = True
+    print(f"privacy: {notice}", file=sys.stderr)
 
 
 def _schema_ok(parsed: dict) -> bool:
@@ -49,6 +84,12 @@ def _configured_call(packet: dict) -> dict:
         model = "inclusionai/ling-3.0-flash-fin"
     if not endpoint or not api_key or not model:
         return None
+    # Same rule as the chat providers: a remote plaintext endpoint would put the
+    # key and the packet on the wire in the clear, so it is refused before it is
+    # called.  The transport below also refuses to follow a redirect.
+    if not is_secure_or_local_url(endpoint):
+        return None
+    _warn_free_tier(endpoint)
     body = {
         "model": model,
         "temperature": 0,

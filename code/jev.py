@@ -37,11 +37,14 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from .providers import endpoint_privacy_warning, is_secure_or_local_url
 
 SYSTEMONE_URL = "https://opencode.ai/inference/systemone/v1/systemone"
 JEV_BASE_URL_ENV = "BUY_WAIT_JEV_BASE_URL"
@@ -68,6 +71,37 @@ DEFAULT_TIMEOUT = 60.0
 #: The decision endpoint requires a normal client User-Agent; its edge
 #: protection answers the bare Python signature with HTTP 403 "error code: 1010".
 HTTP_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+
+
+class _RefuseRedirects(urllib.request.HTTPRedirectHandler):
+    """Never follow a redirect, so the bearer key is never re-sent elsewhere."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001
+        return None
+
+
+def _non_following_urlopen():
+    return urllib.request.build_opener(_RefuseRedirects()).open
+
+
+#: Transport for every request this module makes.  Indirected through this name
+#: so a test can replace it, and so a redirect can never carry the key along.
+_urlopen = _non_following_urlopen()
+
+#: One privacy notice per process; Jev is a free tier by default.
+_warned = False
+
+
+def _warn_free_tier(endpoint: str) -> None:
+    """Name the privacy class of ``endpoint`` once, before it receives any data."""
+    global _warned
+    if _warned:
+        return
+    notice = endpoint_privacy_warning(endpoint)
+    if not notice:
+        return
+    _warned = True
+    print(f"privacy: {notice}", file=sys.stderr)
 
 STATUS_OPTIONS = (
     "affordable_now",
@@ -182,6 +216,12 @@ class JevGate:
         key, source_err = (api_key, None) if api_key else load_api_key()
         if not key:
             return JevOutcome(model=self.model, error=f"no API key: {source_err}")
+        if not is_secure_or_local_url(self.base_url):
+            return JevOutcome(
+                model=self.model,
+                error="endpoint must use https unless it points at this machine",
+            )
+        _warn_free_tier(self.base_url)
         payload = self._body(state, questions)
         request = urllib.request.Request(
             self.base_url,
@@ -197,7 +237,7 @@ class JevGate:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+            with _urlopen(request, timeout=self.timeout) as response:
                 status = getattr(response, "status", 200)
                 if status != 200:
                     return JevOutcome(model=self.model, error=f"HTTP {status}")

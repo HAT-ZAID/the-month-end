@@ -102,7 +102,7 @@ def test_ask_posts_the_typed_body_and_parses_answers(monkeypatch):
         }
         return FakeResponse(json.dumps(envelope).encode("utf-8"))
 
-    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("code.jev._urlopen", fake_urlopen)
     _set_key(monkeypatch)
 
     gate = JevGate(model="jev-1.13-free", timeout=5)
@@ -133,7 +133,7 @@ def test_http_error_fails_open_without_raising(monkeypatch):
             SYSTEMONE_URL, 401, "Unauthorized", None, io.BytesIO(b'{"error": "bad key"}')
         )
 
-    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("code.jev._urlopen", fake_urlopen)
     _set_key(monkeypatch, "k-wrong")
     outcome = JevGate().ask({}, gate_questions())
     assert outcome.ok is False
@@ -145,7 +145,7 @@ def test_network_error_fails_open(monkeypatch):
     def fake_urlopen(request, timeout=None):
         raise urllib.error.URLError("connection refused")
 
-    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("code.jev._urlopen", fake_urlopen)
     _set_key(monkeypatch)
     outcome = JevGate().ask({}, gate_questions())
     assert outcome.ok is False
@@ -153,7 +153,7 @@ def test_network_error_fails_open(monkeypatch):
 
 
 def test_malformed_body_fails_open(monkeypatch):
-    monkeypatch.setattr("urllib.request.urlopen", lambda request, timeout=None: FakeResponse(b"<html>nope"))
+    monkeypatch.setattr("code.jev._urlopen", lambda request, timeout=None: FakeResponse(b"<html>nope"))
     _set_key(monkeypatch)
     outcome = JevGate().ask({}, gate_questions())
     assert outcome.ok is False
@@ -202,7 +202,7 @@ def test_evaluate_uses_the_full_preset(monkeypatch):
 
         return _reply({"model": "jev-1.13-free", "answers": {}})
 
-    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("code.jev._urlopen", fake_urlopen)
     _set_key(monkeypatch)
     outcome = evaluate(JevGate(), {"request": "request_01"})
     assert outcome.ok
@@ -230,3 +230,30 @@ def test_implied_choice_is_none_without_a_usable_outcome():
     assert implied_choice(failed, "status_is_", STATUS_OPTIONS) == (None, None)
     empty = JevOutcome(answers={}, model="jev-1.13-free")
     assert implied_choice(empty, "status_is_", STATUS_OPTIONS) == (None, None)
+
+
+# ---------------------------------------------------------------------------
+# The endpoint and the transport are guarded, not just configured
+# ---------------------------------------------------------------------------
+
+
+def test_a_plaintext_remote_endpoint_is_refused_before_the_key_is_sent(monkeypatch):
+    gate = JevGate(base_url="http" "://systemone.example.invalid/v1", env={})
+    calls = []
+
+    def transport(*args, **kwargs):
+        calls.append(args)
+        raise AssertionError("the transport must not be reached")
+
+    monkeypatch.setattr("code.jev._urlopen", transport)
+    outcome = gate.ask({"balance": "100"}, {}, api_key="k-test")
+    assert outcome.error
+    assert "https" in outcome.error
+    assert calls == []
+
+
+def test_the_transport_never_follows_a_redirect():
+    from code.jev import _RefuseRedirects
+
+    target = "http" "://evil.example/v1"
+    assert _RefuseRedirects().redirect_request(None, None, 302, "Found", {}, target) is None

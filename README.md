@@ -296,13 +296,15 @@ class decides what it may be trusted with:
 | Class | Provider | What it may receive |
 |---|---|---|
 | `local` | `ollama` on a loopback address | anything — nothing leaves the machine |
-| `paid` | `paid` (your endpoint) or `kilo` | user text, never secrets |
-| `free` | `openrouter`, remote Ollama, anything unclassified | development fixtures and non-sensitive text only |
+| `paid` | `paid` (your endpoint) | user text, never secrets |
+| `free` | `openrouter`, `kilo`, remote Ollama, anything unclassified | development fixtures and non-sensitive text only |
 
 **Free tiers train on the data they receive.** Before a `free` provider sees free
-text, the TUI's `ask` command and `python -m code.task_agent` print a warning that
-says so and names what must not be entered: account numbers, card numbers, identity
-documents, addresses. The TUI prints that notice once per session; setting
+text, every entry point prints a warning that says so and names what must not be
+entered: account numbers, card numbers, identity documents, addresses. That is
+`ask` and `agent` in the TUI, `python -m code.task_agent`, `python -m code.agent`,
+the batch and agent paths of `python -m code.main`, and the optional Jev gate. The
+TUI prints that notice once per session, the batch paths once per process; setting
 `BUY_WAIT_ACCEPT_FREE_TIER=1` silences it in every process that inherits the
 variable. Neither the notice nor the variable changes the provider's class.
 
@@ -318,8 +320,11 @@ python -m code.task_agent "can I afford 40,000 on the 12th" --provider paid
 
 Nothing is committed and there is no default endpoint, key or model, so an
 incomplete `paid` configuration is refused with the name of the missing variable.
-A remote `http://` base URL is refused too: the key is never sent in plaintext.
-`describe()` records the privacy class in the trace; it never records the key.
+A remote `http://` base URL is refused too: the key is never sent in plaintext, and
+no transport in this repository follows a redirect, so a `302` cannot carry the key
+to a cleartext host either. `describe()` reports the provider, the model and the
+privacy class to whoever asks for it, and never the key; a trace records the
+provider model id and the call counts, not the key.
 
 ### Docker
 
@@ -351,7 +356,10 @@ unproven and report anything it breaks.
 - Your data stays in local CSV files (`dataset/`) and a local SQLite database
   (`data/app.db`, rebuildable with `python -m code.store --rebuild`).
 - With no provider configured, the assistant makes **zero network calls** and
-  needs no credentials. The local Ollama path also stays on your machine.
+  needs no credentials. One exception to name plainly: an `OPENROUTER_KEY` in the
+  environment is treated as a configured explanation provider, so the batch run
+  will call OpenRouter (a free tier, and it warns on stderr) unless the key is
+  unset. The local Ollama path also stays on your machine.
 - Remote providers are opt-in and hard-capped; API keys are read from environment
   variables only and are never written to traces, reports or output.
 - Free tiers may train on what they receive, so the TUI and `code.task_agent` warn
