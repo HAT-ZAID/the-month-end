@@ -405,9 +405,19 @@ class OllamaProvider(ChatProvider):
             raise ProviderUnavailable(
                 f"langchain-ollama is not installed: {exc}"
             ) from exc
+        # The default provider is an HTTP client like any other: a remote
+        # endpoint must be https, and a redirect must not carry the prompt
+        # somewhere the operator never configured.
+        if not is_secure_or_local_url(self.base_url):
+            raise ProviderUnavailable(
+                "endpoint must use https unless it points at this machine"
+            )
         try:
             return ChatOllama(
-                model=self.model, base_url=self.base_url, **self.generation_options()
+                model=self.model,
+                base_url=self.base_url,
+                client_kwargs={"follow_redirects": False},
+                **self.generation_options(),
             )
         except Exception as exc:
             raise ProviderUnavailable(

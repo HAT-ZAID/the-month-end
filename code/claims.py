@@ -6,8 +6,10 @@ model may phrase things, but it may not add facts.
 
 What counts as a claim:
 
-* **money** — a token with a thousands separator, a decimal point, or four or
-  more digits (so "2 payments" is not treated as an amount);
+* **money** — every figure, whatever its length and whether or not a currency
+  code is glued to it ("ZAR50000"), except the two exempt shapes: a figure that
+  is followed by a count unit ("2 payments", "3 days"), and a small count that
+  is one side of a fraction ("3 of 5 samples");
 * **dates** — an ISO date;
 * **status / method names** — the words that name a decision outcome, in prose
   ("affordable now", "pay in full") or as a literal contract token
@@ -51,7 +53,18 @@ METHOD_PHRASES = {
     "not_recommended": ("not recommended",),
 }
 
-_MONEY = re.compile(r"(?<![\w.])(\d[\d,]*(?:\.\d+)?)(?![\w])")
+#: A currency code glued to the digits ("ZAR50000", "Rp2.000.000") is a prefix,
+#: not a word boundary, so the code is blanked before the scan and the digits
+#: become visible. Lengths are preserved, so token offsets stay valid.
+_GLUED_CURRENCY = re.compile(
+    r"(?i)\b(?:zar|idr|usd|eur|gbp|sgd|myr|thb|php|inr|jpy|aud|cad|chf|rp)(?=\d)"
+)
+#: Dot-grouped thousands ("2.000.000") are one figure, not a decimal.
+_MONEY = re.compile(
+    r"(?<![\w.])(\d{1,3}(?:\.\d{3})+|\d[\d,]*(?:\.\d+)?)(?![\w])"
+)
+#: The same figure with its thousands separators: "2.000.000" is two million.
+_DOT_GROUPED = re.compile(r"\d{1,3}(?:\.\d{3})+")
 _ISO_DATE = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
 # A figure followed by a count noun is a quantity, not an amount: "2
 # installments" and "3 of 5 samples" must not become money claims.
@@ -59,9 +72,12 @@ _ISO_DATE = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
 # small leading count qualifies, so "paid 500 of 2000" still checks 2000.
 _COUNT_PREFIX = re.compile(r"(?<![\d.])\d{1,2}\s+of\s*$", re.IGNORECASE)
 _COUNT_UNIT = re.compile(
-    r"\s*(?:install?ments?|payments?|months?|weeks?|days?|years?|times|percent|%|of\b)",
+    r"\s*(?:install?ments?|payments?|months?|weeks?|days?|years?|times|percent|%)",
     re.IGNORECASE,
 )
+#: The leading figure of a fraction is a count only when another count follows
+#: it: "3 of 5 samples" is a fraction, "2000 of your balance" is money.
+_COUNT_FOLLOWS = re.compile(r"\s+of\s+\d", re.IGNORECASE)
 _ACTION = re.compile(
     r"\b(stop|reduce_to):(event_\d+)(?::(\d+(?:\.\d+)?))?", re.IGNORECASE
 )
@@ -85,6 +101,14 @@ def _supported_numbers(row: dict, extra_numbers=()) -> set[Decimal]:
     # An installment or partial plan is a `date:amount|date:amount` string, so
     # each leg amount has to be added explicitly: the whole string is not a
     # number, and the legs are exactly what a plan explanation cites.
+    # "reduce_to:<event>:<amount>" carries the amount a change is allowed to
+    # move to; a model that explains the change has to be able to cite it.
+    for action in str(row.get("spending_changes_needed") or "").split("|"):
+        parts = action.split(":")
+        if len(parts) >= 3:
+            number = _decimal(parts[-1])
+            if number is not None:
+                numbers.add(number)
     for leg in str(row.get("payment_plan") or "").split("|"):
         _, _, amount = leg.partition(":")
         number = _decimal(amount)
@@ -112,7 +136,8 @@ def _supported_dates(row: dict, extra_dates=()) -> set[str]:
 def _money_claims(text: str) -> list[tuple[str, Decimal]]:
     # An ISO date is a date, not an amount: blank the date spans first so the
     # year/month/day digits cannot be read as money.
-    unspanned = _ISO_DATE.sub(lambda match: " " * len(match.group(0)), text)
+    unspanned = _GLUED_CURRENCY.sub(lambda match: " " * len(match.group(0)), text)
+    unspanned = _ISO_DATE.sub(lambda match: " " * len(match.group(0)), unspanned)
     claims = []
     for match in _MONEY.finditer(unspanned):
         token = text[match.start():match.end()]
@@ -121,11 +146,17 @@ def _money_claims(text: str) -> list[tuple[str, Decimal]]:
         # word list cannot be an invariant: "The ceiling is 200 today" invents
         # an amount with no money word anywhere near it, and 141 of the 250
         # requests have a safe amount under 1000.
+        significant = token.replace(",", "").replace(".", "")
         if _COUNT_UNIT.match(unspanned[match.end():]) or _COUNT_PREFIX.search(
             unspanned[:match.start()]
         ):
             continue
-        number = _decimal(token)
+        if _COUNT_FOLLOWS.match(unspanned[match.end():]) and len(significant) <= 2:
+            continue
+        if _DOT_GROUPED.fullmatch(token):
+            number = to_decimal(token.replace(".", ""), None)
+        else:
+            number = _decimal(token)
         if number is not None:
             claims.append((token, number))
     return claims

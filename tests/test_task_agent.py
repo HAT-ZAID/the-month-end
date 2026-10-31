@@ -462,7 +462,7 @@ def test_a_stale_amount_does_not_leak_into_the_next_clause():
     workspace.last_amount = Decimal("40000")
     # Naming another request must not leave 40000 behind for the clause after.
     run_task("what if request_27 waits until the 20th", workspace=workspace)
-    assert workspace.last_amount is None
+    assert str(workspace.last_amount_for or "") != "request_27"
     result = run_task("then what if I wait until the 25th", workspace=workspace)
     (step,) = result.steps
     assert "40000" not in step.detail

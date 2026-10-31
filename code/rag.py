@@ -152,7 +152,13 @@ class VectorEvidenceRetriever:
         except ImportError as exc:  # optional dependency missing
             raise RetrievalError(f"langchain-ollama is not installed: {exc}") from exc
         try:
-            return OllamaEmbeddings(model=self.embed_model, base_url=self.base_url)
+            return OllamaEmbeddings(
+                model=self.embed_model,
+                base_url=self.base_url,
+                # A remote https endpoint can still redirect the chunk text
+                # somewhere else, so the client refuses to follow one.
+                client_kwargs={"follow_redirects": False},
+            )
         except Exception as exc:  # bad config, incompatible client, ...
             raise RetrievalError(
                 f"cannot configure embeddings {self.embed_model!r}: {type(exc).__name__}: {exc}"

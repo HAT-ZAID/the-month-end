@@ -8,6 +8,7 @@ from decimal import Decimal
 import pytest
 
 from code.cache import DiskCache
+from code import vision
 from code.vision import (
     _backend_model,
     ChainedBackend,
@@ -124,7 +125,7 @@ def test_remote_base_url_allowed_when_explicitly_opted_in(tmp_path, monkeypatch)
         body = json.dumps({"response": json.dumps({"raw_text": "Total 10", "amount": "10"})})
         return FakeResponse(body.encode())
 
-    monkeypatch.setattr("code.vision.urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr(vision._OPENER, "open", fake_urlopen)
     backend = QwenVLBackend(base_url="https://api.example.com", allow_remote=True, model="m")
 
     evidence = backend.read(_image(tmp_path))
@@ -137,7 +138,7 @@ def test_connection_failure_returns_an_error_instead_of_raising(tmp_path, monkey
     def boom(request, timeout=None):
         raise OSError("connection refused")
 
-    monkeypatch.setattr("code.vision.urllib.request.urlopen", boom)
+    monkeypatch.setattr(vision._OPENER, "open", boom)
     evidence = QwenVLBackend(base_url="http://127.0.0.1:11434").read(_image(tmp_path))
 
     assert evidence.error and "connection failed" in evidence.error
@@ -149,7 +150,7 @@ def test_http_error_is_reported(tmp_path, monkeypatch):
     def boom(request, timeout=None):
         raise urllib.error.HTTPError(request.full_url, 500, "boom", {}, None)
 
-    monkeypatch.setattr("code.vision.urllib.request.urlopen", boom)
+    monkeypatch.setattr(vision._OPENER, "open", boom)
     evidence = QwenVLBackend(base_url="http://127.0.0.1:11434").read(_image(tmp_path))
 
     assert evidence.error == "HTTP 500"
@@ -163,7 +164,7 @@ def test_vlm_request_is_local_and_deterministic(tmp_path, monkeypatch):
         captured["timeout"] = timeout
         return FakeResponse(json.dumps({"response": '{"raw_text": "", "amount": ""}'}).encode())
 
-    monkeypatch.setattr("code.vision.urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr(vision._OPENER, "open", fake_urlopen)
     backend = QwenVLBackend(base_url="http://localhost:11434", model="qwen3-vl:2b", timeout=7)
     backend.read(_image(tmp_path, payload=b"\x89PNG"))
 

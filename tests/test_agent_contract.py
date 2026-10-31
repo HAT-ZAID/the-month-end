@@ -482,3 +482,33 @@ def test_context_mismatch_forces_kernel_rationale():
     assert verification["rationale_source"] == "kernel"
     assert result["final_row"]["decision_explanation"] == KERNEL["decision_explanation"]
     assert "request_other" in verification["fallback_reason"]
+
+
+def test_the_claim_check_sees_the_cents_the_csv_ships():
+    from decimal import Decimal
+
+    from code.claims import verify_claims
+    from code.verifier import _kernel_row
+
+    kernel = {field: "" for field in (
+        "request_id", "affordability_status", "recommended_payment_method",
+        "payment_plan", "earliest_date_for_full_payment", "spending_changes_needed",
+    )}
+    kernel.update(
+        {
+            "request_id": "request_31",
+            "amount_safe_to_pay": Decimal("642986.74150000000000000000"),
+            "affordability_status": "affordable_now",
+            "recommended_payment_method": "full_payment",
+            "payment_plan": "none",
+            "earliest_date_for_full_payment": "2025-08-03",
+            "spending_changes_needed": "none",
+            "decision_explanation": "",
+        }
+    )
+    row = _kernel_row(kernel)
+    # The figure the tool showed the model, and the figure output.csv holds.
+    assert verify_claims("Up to 642986.74 is safe today.", row)["checked"] >= 1
+    assert verify_claims("Up to 642986.74 is safe today.", row)["ok"] is True
+    # A figure the CSV never contains is not grounded.
+    assert verify_claims("Up to 642986.7415 is safe today.", row)["ok"] is False

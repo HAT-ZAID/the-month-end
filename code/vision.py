@@ -57,7 +57,11 @@ from typing import Protocol, runtime_checkable
 from code.amounts import to_decimal
 from code.cache import OCR_NAMESPACE, DiskCache, default_cache
 from code.ocr import extract_amount_for_event
-from code.providers import is_loopback_host
+from code.providers import (
+    endpoint_privacy_warning,
+    is_loopback_host,
+    is_secure_or_local_url,
+)
 
 OCR_BACKEND_ENV = "BUY_WAIT_OCR_BACKEND"
 VLM_BASE_URL_ENV = "BUY_WAIT_VLM_BASE_URL"
@@ -179,6 +183,17 @@ class VisionBackend(Protocol):
     def read(self, image_path: Path) -> VisionEvidence: ...
 
 
+class _RefuseRedirects(urllib.request.HTTPRedirectHandler):
+    """A 3xx from the reader must not move the request somewhere else."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001
+        return None
+
+
+_OPENER = urllib.request.build_opener(_RefuseRedirects())
+_warned: set[bool] = set()
+
+
 def _is_loopback(base_url: str) -> bool:
     """The shared predicate: a name that merely looks local cannot pass."""
     try:
@@ -232,6 +247,18 @@ class QwenVLBackend:
                 "refusing a non-loopback VLM base URL; set "
                 f"{VLM_ALLOW_REMOTE_ENV}=1 to allow it"
             )
+        if not is_secure_or_local_url(self.base_url):
+            return failed(
+                "refusing a plaintext VLM endpoint: use https or this machine"
+            )
+        if not _warned:
+            notice = endpoint_privacy_warning(self.base_url)
+            if notice:
+                # The reader is the last surface that could hand image bytes to
+                # an endpoint nobody classified, so it says the same thing the
+                # chat path does, once per process.
+                print(f"privacy: {notice}", file=sys.stderr)
+                _warned.add(True)
         try:
             image_bytes = Path(image_path).read_bytes()
         except OSError as exc:
@@ -251,7 +278,7 @@ class QwenVLBackend:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+            with _OPENER.open(request, timeout=self.timeout) as response:
                 if response.status != 200:
                     return failed(f"HTTP {response.status}")
                 body = response.read().decode("utf-8", errors="replace")

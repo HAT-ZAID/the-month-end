@@ -347,6 +347,8 @@ class Workspace:
         self._manual_counter = 0
         self.current_request_id: str | None = None
         self.last_amount: Decimal | None = None
+        #: Which request the borrowed amount was asked about.
+        self.last_amount_for: str | None = None
         self.last_date: date | None = None
 
     # -- dataset -----------------------------------------------------------
@@ -657,6 +659,7 @@ def _afford(workspace: Workspace, spec: StepSpec, result: TaskResult) -> StepRes
         question = f"{_fmt(amount)} on {request_date.isoformat()}"
 
     workspace.last_amount = amount
+    workspace.last_amount_for = request_id
     workspace.last_date = wanted_date
 
     if decision is None:
@@ -886,23 +889,17 @@ def _whatif(workspace: Workspace, spec: StepSpec) -> StepResult:
             "what should I test that against? name a request, e.g. "
             "`what if request_NNN waits until 2025-09-20`",
         )
-    previous_request_id = workspace.current_request_id
-    named_here = spec.params.get("request_id")
     workspace.current_request_id = request_id
     reference = _safe_date(workspace.row(request_id).get("request_date"))
     wanted_date = spec.params.get("date")
     if wanted_date is None:
         wanted_date = extract_date(spec.text, reference)
-    # The previous amount belongs to the question it was asked about. If this
-    # clause names a different request, that request's own amount is the one to
-    # test: borrowing the earlier figure would answer a different question.
-    borrowed = workspace.last_amount
-    if named_here and str(named_here) != str(previous_request_id):
-        borrowed = None
-        # The stale figure belongs to the earlier question, and a following
-        # clause that names no request at all ("then what if I wait until the
-        # 25th") would inherit it and answer about the wrong money.
-        workspace.last_amount = None
+    # The borrowed amount carries the request it was asked about. Testing a
+    # figure from a different request, or from a handler that merely looked at
+    # one, answers a different question than the user asked.
+    borrowed = None
+    if str(workspace.last_amount_for or "") == str(request_id):
+        borrowed = workspace.last_amount
     amount = spec.params.get("amount") or borrowed
     overrides: dict = {}
     if wanted_date is not None:
@@ -1155,7 +1152,9 @@ def _trace_safe_action(action) -> str:
 
 #: The intent reading is provenance, not user text: these fields say which
 #: classifier ran and what it concluded, and carry no clause text or amounts.
-_TRACE_INTENT_FIELDS = ("intent", "request_kind", "source", "confidence", "ambiguity")
+#: ``ambiguity`` is deliberately absent: it is model-authored prose that can
+#: echo the clause, and the trace stores a hash of the instruction, not its text.
+_TRACE_INTENT_FIELDS = ("intent", "request_kind", "source", "confidence")
 
 
 def _write_trace(result: TaskResult, directory: Path) -> str | None:

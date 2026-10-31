@@ -50,6 +50,11 @@ _SECRET_VALUE = re.compile(
 #: credentials in its base URL, and a provider error is persisted verbatim, so
 #: the userinfo part has to go even though it matches no key-name pattern.
 _URL_USERINFO = re.compile(r"(?<=://)[^/\s@]+@")
+#: CamelCase compounds (``apiKey``, ``sessionToken``, ``clientSecret``) have no
+#: separator for the pattern above to anchor on, so they are matched separately.
+_CAMEL_SECRET_KEY = re.compile(
+    r"(?:api|access|session|refresh|private|secret|client|auth)(?:Key|Token|Secret)"
+)
 _UNSTABLE_KEYS = frozenset({"duration_ms"})
 _UNSTABLE_BLOCKS = frozenset({"metadata"})
 _UNSAFE_FILE_CHARS = re.compile(r"[^A-Za-z0-9._-]+")
@@ -67,7 +72,12 @@ def sanitize(value):
         cleaned = {}
         for key, item in value.items():
             key_text = str(key)
-            cleaned[key_text] = REDACTED if _SECRET_KEY.search(key_text) else sanitize(item)
+            cleaned[key_text] = (
+                        REDACTED
+                        if _SECRET_KEY.search(key_text)
+                        or _CAMEL_SECRET_KEY.search(key_text)
+                        else sanitize(item)
+                    )
         return cleaned
     if isinstance(value, (list, tuple)):
         return [sanitize(item) for item in value]

@@ -26,7 +26,7 @@ This module performs no LLM reasoning.
 from __future__ import annotations
 
 import re
-from decimal import Decimal
+from decimal import ROUND_DOWN, Decimal
 
 from code.claims import verify_claims
 from code.schema import (
@@ -81,6 +81,11 @@ def _changes_equal(candidate_value, final_value) -> bool:
         return _as_text(candidate_value) == _as_text(final_value)
 
 
+#: Decimal money fields, and the precision the CSV writes them at.
+_CENT = Decimal("0.01")
+_CENT_FIELDS = ("amount_safe_to_pay")
+
+
 def _kernel_row(kernel_result: dict) -> dict:
     """Copy the kernel row into the output contract; never alias or mutate it."""
     if not isinstance(kernel_result, dict):
@@ -91,7 +96,13 @@ def _kernel_row(kernel_result: dict) -> dict:
     for field in FINAL_FIELDS:
         if field not in kernel_result:
             raise KeyError(f"kernel_result is missing the {field!r} field")
-        row[field] = kernel_result[field]
+        value = kernel_result[field]
+        if field in _CENT_FIELDS and isinstance(value, Decimal):
+            # The solver keeps full precision; ``output.csv`` ships cents. The
+            # claim check must see the figure that ships, or it rejects the
+            # sentence a model derived from the value it was shown.
+            value = value.quantize(_CENT, rounding=ROUND_DOWN)
+        row[field] = value
     row["decision_explanation"] = str(kernel_result.get("decision_explanation") or "")
     return row
 

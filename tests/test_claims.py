@@ -399,3 +399,30 @@ def test_a_truncated_prefix_cannot_exempt_a_large_figure():
     report = verify_claims("paid 500   of 2000", dict(ROW))
     amounts = [item["text"] for item in report["unsupported"] if item["kind"] == "amount"]
     assert "2000" in amounts
+
+
+def test_a_large_figure_before_of_is_still_money():
+    report = verify_claims("You can pay 2000 of your balance today.", dict(ROW))
+    amounts = [item["text"] for item in report["unsupported"] if item["kind"] == "amount"]
+    assert amounts == ["2000"]
+
+
+def test_a_figure_glued_to_a_currency_code_is_money():
+    report = verify_claims("You can commit ZAR50000 today.", dict(ROW))
+    amounts = [item["text"] for item in report["unsupported"] if item["kind"] == "amount"]
+    assert amounts == ["50000"]
+
+
+def test_dot_grouped_thousands_are_read_as_one_figure():
+    row = dict(ROW)
+    row["amount_safe_to_pay"] = "2000000.00"
+    report = verify_claims("You can commit Rp 2.000.000 today.", row)
+    assert report["ok"] is True
+
+
+def test_a_spending_change_amount_can_be_cited():
+    row = dict(ROW)
+    row["spending_changes_needed"] = "reduce_to:event_5:250"
+    report = verify_claims("Reduce event_5 to 250 so the request fits.", row)
+    amounts = [item["text"] for item in report["unsupported"] if item["kind"] == "amount"]
+    assert amounts == []
