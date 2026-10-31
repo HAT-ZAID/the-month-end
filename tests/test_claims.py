@@ -383,3 +383,13 @@ def test_a_figure_with_no_money_word_near_it_is_still_a_claim():
     report = verify_claims("The ceiling is 200 today.", dict(ROW))
     assert report["checked"] >= 1
     assert report["ok"] is False
+def test_both_figures_in_a_count_expression_stay_out_of_amount_claims():
+    report = verify_claims("We resolved 3 of 5 samples.", dict(ROW))
+    amounts = [item["text"] for item in report["unsupported"] if item["kind"] == "amount"]
+    assert amounts == []
+
+
+def test_a_price_beside_a_count_still_counts():
+    report = verify_claims("We resolved 3 of 5 samples for 2000.", dict(ROW))
+    amounts = [item["text"] for item in report["unsupported"] if item["kind"] == "amount"]
+    assert amounts == ["2000"]

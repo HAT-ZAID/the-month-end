@@ -55,6 +55,9 @@ _MONEY = re.compile(r"(?<![\w.])(\d[\d,]*(?:\.\d+)?)(?![\w])")
 _ISO_DATE = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
 # A figure followed by a count noun is a quantity, not an amount: "2
 # installments" and "3 of 5 samples" must not become money claims.
+# The second figure in "3 of 5 samples" is the same count as the first. Only a
+# small leading count qualifies, so "paid 500 of 2000" still checks 2000.
+_COUNT_PREFIX = re.compile(r"(?:^|[^\d])\d{1,2}\s+of\s+$", re.IGNORECASE)
 _COUNT_UNIT = re.compile(
     r"\s*(?:install?ments?|payments?|months?|weeks?|days?|years?|times|percent|%|of\b)",
     re.IGNORECASE,
@@ -118,7 +121,9 @@ def _money_claims(text: str) -> list[tuple[str, Decimal]]:
         # word list cannot be an invariant: "The ceiling is 200 today" invents
         # an amount with no money word anywhere near it, and 141 of the 250
         # requests have a safe amount under 1000.
-        if _COUNT_UNIT.match(unspanned[match.end():]):
+        if _COUNT_UNIT.match(unspanned[match.end():]) or _COUNT_PREFIX.search(
+            unspanned[max(0, match.start() - 8):match.start()]
+        ):
             continue
         number = _decimal(token)
         if number is not None:
