@@ -599,7 +599,7 @@ branch.
 | four audit scripts to `tools/experiments/` | **Done.** `compare_agentic`, `compare_jev`, `compare_ocr` and `verify_samples` moved, with repo-root depth fixed and every documented path updated. |
 | one Decimal coercion | **Done** for the six modules that had their own; two hand-written coercers were then found by review and folded in too. |
 | three near-identical remote providers | **Done**: one `OpenAICompatibleProvider`, three thin declarative presets, plus a `paid` class for real user data. |
-| prune the suite from 629 to "about 520" | **Refuted as stated; four assertions removed.** Only one `def test_` name repeats across the whole suite, ~28 of the 637 cases come from parametrisation, and the `test_oracle_*` files are not duplicates: they pin distinct §6.3 rules (pending credit ignored, pending debit reserved, failed/cancelled/unrealised ignored, NaN and blank fail-closed, duplicate ids de-duplicated, cancellation before settlement). Reaching 520 would have deleted about 110 one-off invariant tests. What *was* duplicated got cut: a repeated redirect test in `test_jev.py`, two of `test_packaging.py`'s three env-file restatements, and a private-helper preprocessing test whose public-reader equivalent already asserts the same thing. 632 passed, 1 skipped. |
+| prune the suite from 629 to "about 520" | **Refuted as stated; four assertions removed.** Only one `def test_` name repeats across the whole suite, ~28 of the 637 cases come from parametrisation, and the `test_oracle_*` files are not duplicates: they pin distinct §6.3 rules (pending credit ignored, pending debit reserved, failed/cancelled/unrealised ignored, NaN and blank fail-closed, duplicate ids de-duplicated, cancellation before settlement). Reaching 520 would have deleted about 110 one-off invariant tests. What *was* duplicated got cut: a repeated redirect test in `test_jev.py`, two of `test_packaging.py`'s three env-file restatements, and a private-helper preprocessing test whose public-reader equivalent already asserts the same thing. 638 passed, 1 skipped. |
 
 ### 10.2 The two pre-push reviews
 
@@ -630,6 +630,27 @@ more, four of which were in the code the first round had just written:
 | `"29 February"` asked in a non-leap year resolved to `None` | A month name searches forward to the next leap year |
 | A manual request id from `new` could collide with one `ask` had already created, and `row()` returns the first match — so a later question could answer with an earlier request's decision | `add_manual` skips ids already present in the dataset and in the session |
 | `extract_date` searched only two years forward | Same fix as the leap day |
+
+A third pass over the release branch found nine more, two of them major, both in
+code this release had just written:
+
+* the `Disagreements:` note shipped model prose with no claim check at all, so a
+  disagreeing model could put an invented amount or date in the row. The note may
+  now quote only figures that appear in the kernel row or in its own candidate —
+  which is what makes it a debugging record rather than a claim — and falls back
+  to the marked sentence otherwise.
+* `parse_instruction` resolved "the 12th" against `date.today()`, so the same
+  instruction decided differently on different days, and the request-relative
+  fallback in the step handlers never ran. A relative date is now left unset at
+  parse time and resolved against the target request.
+
+The other seven: `redact_url` read `parts.port` and could raise `ValueError` from
+a refusal message (and dropped IPv6 brackets); `_write_trace` copied `result.changed`
+verbatim, which carries the `afford` safe amount and the before/after of every moved
+decision field; `ask` and `new` could still collide on a manual id from opposite
+directions; `agent.finish` backfilled a stale repair diff onto a run that had agreed;
+and the README, `code/README` and this report described the pre-release rationale
+rule, which the release itself changed.
 
 ### 10.3 The disagreement note, and why it is agent-only
 
@@ -666,7 +687,7 @@ gains a third value, `disagreement`, and `code/main.py` still only prefers
 
 ### 10.5 The numbers this release was verified at
 
-- `pytest -q`: **632 passed, 1 skipped**.
+- `pytest -q`: **638 passed, 1 skipped**.
 - `output.csv`: 250 rows, sha256 `1f35043f…376486`, byte-identical to the committed
   file before and after every change in this release.
 - `python -m code.main` on the offline path: no network call, no stderr noise.
