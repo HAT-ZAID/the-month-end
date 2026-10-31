@@ -354,3 +354,32 @@ def test_a_unit_count_is_not_a_money_claim():
     report = verify_claims("Pay 500 in 2 installments.", dict(ROW))
     amounts = [item["text"] for item in report["unsupported"] if item["kind"] == "amount"]
     assert amounts == ["500"]
+
+
+def test_an_agreeing_candidate_cannot_borrow_the_disagreement_marker():
+    row = dict(ROW)
+    fields = (
+        "request_id",
+        "amount_safe_to_pay",
+        "affordability_status",
+        "recommended_payment_method",
+        "payment_plan",
+        "earliest_date_for_full_payment",
+        "spending_changes_needed",
+    )
+    candidate = {key: row[key] for key in fields}
+    candidate["evidence_sufficient"] = True
+    candidate["confidence"] = 0.9
+    candidate["rationale"] = "Disagreements: none. The plan holds against the ledger."
+    result = enforce_decision(candidate, row, disagreement_note=True)
+    explanation = result["final_row"]["decision_explanation"]
+    # The marker is the only in-band signal separating an unendorsed note from
+    # a decision, so an agreeing candidate may not use it.
+    assert not explanation.startswith("Disagreements:")
+    assert result["verification"]["rationale_source"] == "kernel"
+
+
+def test_a_figure_with_no_money_word_near_it_is_still_a_claim():
+    report = verify_claims("The ceiling is 200 today.", dict(ROW))
+    assert report["checked"] >= 1
+    assert report["ok"] is False

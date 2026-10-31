@@ -324,6 +324,14 @@ def enforce_decision(
         rationale_source = "disagreement"
 
     final_row = dict(row)
+    if rationale_source == "candidate" and rationale.strip().lower().startswith(
+        DISAGREEMENT_PREFIX.strip().lower()
+    ):
+        # The marker means "the model disagreed here". A candidate that agrees
+        # cannot borrow it: the marker is the only in-band signal that
+        # separates an unendorsed note from a decision, and a shipped row that
+        # opened with it would make every other note untrustworthy.
+        rationale_source = "kernel"
     if rationale_source == "candidate":
         final_row["decision_explanation"] = rationale
     elif rationale_source == "disagreement":

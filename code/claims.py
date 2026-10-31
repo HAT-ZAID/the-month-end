@@ -53,24 +53,10 @@ METHOD_PHRASES = {
 
 _MONEY = re.compile(r"(?<![\w.])(\d[\d,]*(?:\.\d+)?)(?![\w])")
 _ISO_DATE = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
-# A small number is only a money claim when a money word is close to it.
-_MONEY_CUE = re.compile(
-    r"\b(?:pay|paid|cost|costs|buffer|spare|keep|keeping|balance|budget|amount|"
-    r"total|save|saving|savings|salary|bill|rent|install?ment|fee|price|spend|"
-    r"spending|left|safe|afford|charge|deposit)\b",
-    re.IGNORECASE,
-)
-_CUE_WINDOW = 40
 # A figure followed by a count noun is a quantity, not an amount: "2
 # installments" and "3 of 5 samples" must not become money claims.
 _COUNT_UNIT = re.compile(
-    r"\s*(?:install?ments?|months?|weeks?|days?|years?|times|percent|%|of\b)",
-    re.IGNORECASE,
-)
-# A currency symbol or code in front of the figure marks it as money even when
-# the figure is short and no money word is near.
-_CURRENCY_MARKER = re.compile(
-    r"(?:[$€£¥₹]|\b(?:usd|idr|eur|gbp|sgd|zar|myr|thb|php|inr|jpy|aud|cad|chf)\b|rp)\s*$",
+    r"\s*(?:install?ments?|payments?|months?|weeks?|days?|years?|times|percent|%|of\b)",
     re.IGNORECASE,
 )
 _ACTION = re.compile(
@@ -127,20 +113,16 @@ def _money_claims(text: str) -> list[tuple[str, Decimal]]:
     claims = []
     for match in _MONEY.finditer(unspanned):
         token = text[match.start():match.end()]
-        significant = token.replace(",", "").replace(".", "")
-        # A bare three-digit figure is only money when a money word sits next
-        # to it: "pay 500" is a claim, "3 of 5 samples" is not. Without the
-        # cue, a small invented amount would pass as an unchecked count.
-        # "$500" is money with no word near it, and "2 installments" is a count
-        # with "pay" just before it: the unit decides first, then the marker.
+        # A figure followed by a count noun is a quantity, not money: "2
+        # installments", "3 of 5 samples". Every other figure is a claim. A
+        # word list cannot be an invariant: "The ceiling is 200 today" invents
+        # an amount with no money word anywhere near it, and 141 of the 250
+        # requests have a safe amount under 1000.
         if _COUNT_UNIT.match(unspanned[match.end():]):
             continue
-        marked = _CURRENCY_MARKER.search(unspanned[max(0, match.start() - 8):match.start()])
-        cue = _MONEY_CUE.search(unspanned[max(0, match.start() - _CUE_WINDOW):match.start()])
-        if marked or "," in token or "." in token or len(significant) >= 4 or cue:
-            number = _decimal(token)
-            if number is not None:
-                claims.append((token, number))
+        number = _decimal(token)
+        if number is not None:
+            claims.append((token, number))
     return claims
 
 
