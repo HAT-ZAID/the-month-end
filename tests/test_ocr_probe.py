@@ -84,21 +84,6 @@ def test_main_runtime_configuration_delegates(monkeypatch, tmp_path):
     from code.main import configure_runtime
     assert configure_runtime() == exe
 
-
-def test_preprocess_image_grayscales_contrasts_and_boundedly_upscales(tmp_path):
-    from PIL import Image
-
-    source = tmp_path / "source.png"
-    Image.new("RGB", (400, 200), color=(120, 120, 120)).save(source)
-
-    from code import ocr
-    processed = ocr.preprocess_image(source)
-
-    assert processed.mode == "L"
-    assert processed.size == (800, 400)
-    assert max(processed.size) <= 2400
-
-
 def test_read_image_text_preprocesses_to_grayscale_with_bounded_upscale(monkeypatch, tmp_path):
     from PIL import Image
     import code.ocr as ocr

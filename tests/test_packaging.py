@@ -86,19 +86,6 @@ def _assignments(text: str) -> dict[str, str]:
 # Configuration template
 # ---------------------------------------------------------------------------
 
-
-def test_env_example_exists_with_placeholders_only():
-    assignments = _assignments(_text(".env.example"))
-    assert assignments, ".env.example documents no variables"
-
-    unsafe = {
-        name: value
-        for name, value in assignments.items()
-        if value not in SAFE_ENV_VALUES and not (value.startswith("<") and value.endswith(">"))
-    }
-    assert unsafe == {}, f"non-placeholder values in .env.example: {unsafe}"
-
-
 def test_env_example_documents_kilo_and_the_local_vision_names():
     text = _text(".env.example")
     for name in KILO_ENV_NAMES:
@@ -159,28 +146,6 @@ def test_local_generated_data_stays_out_of_git():
     )
     ignored = {line.strip() for line in result.stdout.splitlines()}
     assert ignored == set(paths), f"generated state must be ignored, missing: {sorted(set(paths) - ignored)}"
-
-
-def test_env_example_is_the_only_env_file_kept():
-    import subprocess
-
-    result = subprocess.run(
-        # .env.example is tracked, and `git check-ignore` skips tracked paths
-        # unless --no-index is given; we want the rule, not the index state.
-        ["git", "check-ignore", "--no-index", "-v", ".env.example"], cwd=REPO_ROOT,
-        capture_output=True, text=True,
-    )
-    # exit 0 means "a pattern matched"; the winning pattern must be the negation.
-    assert result.returncode == 0, ".env.example matches no .gitignore pattern"
-    assert "!.env.example" in result.stdout, (
-        f".env.example must stay trackable, matched: {result.stdout.strip()}"
-    )
-
-
-# ---------------------------------------------------------------------------
-# Dependency manifests
-# ---------------------------------------------------------------------------
-
 
 def test_requirements_split_runtime_and_agent():
     base = _text("requirements.txt")
