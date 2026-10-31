@@ -836,3 +836,14 @@ def test_a_plaintext_embedding_endpoint_is_refused(tmp_path):
     remote = "http" "://" "embed" ".invalid" ":11434"
     with pytest.raises(RetrievalError, match="plaintext"):
         VectorEvidenceRetriever(store, base_url=remote)
+
+
+def test_a_remote_embedding_endpoint_warns_before_chunks_leave(tmp_path, capsys):
+    """A remote embeddings host gets the same notice as a remote chat model."""
+    root = _tiny_repo(tmp_path)
+    store = LocalStore(root / "data" / "app.db", repo_root=root)
+    remote = "https" "://" "embed" ".invalid" ":11434"
+    VectorEvidenceRetriever(store, base_url=remote)
+    err = capsys.readouterr().err
+    assert "privacy:" in err
+    assert "free tier" in err

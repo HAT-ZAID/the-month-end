@@ -26,6 +26,7 @@ Backend selection (``BUY_WAIT_RAG_BACKEND``):
 from __future__ import annotations
 
 import os
+import sys
 from typing import Protocol, runtime_checkable
 
 from code.providers import (
@@ -118,7 +119,12 @@ class VectorEvidenceRetriever:
             raise RetrievalError(
                 "refusing a plaintext embedding endpoint: use https or this machine"
             )
-        endpoint_privacy_warning(self.base_url)
+        notice = endpoint_privacy_warning(self.base_url)
+        if notice:
+            # The batch, the Jev gate and the TUI all say this to stderr; an
+            # embeddings host that is about to receive every evidence chunk
+            # must not be the one place that stays quiet.
+            print(f"privacy: {notice}", file=sys.stderr)
         # One index per user scope: a full-dataset index would mean one embedding
         # call per chunk (~25k) on every run, and evidence is always user-scoped.
         self.max_documents = int(max_documents)
