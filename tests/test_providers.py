@@ -10,16 +10,29 @@ from __future__ import annotations
 import pytest
 
 from code.providers import (
+    ACCEPT_FREE_TIER_ENV,
     DEFAULT_KILO_MODEL,
     DEFAULT_MAX_CALLS,
+    FREE_TIER_WARNING,
     KILO_API_KEY_ENV,
     KILO_BASE_URL_ENV,
     KILO_MODEL_ENV,
+    OLLAMA_BASE_URL_ENV,
+    OPENROUTER_BASE_URL,
+    PRIVACY_FREE,
+    PRIVACY_LOCAL,
+    PRIVACY_PAID,
     PROVIDER_ENV,
     PROVIDER_KINDS,
+    ChatProvider,
     KiloProvider,
+    OllamaProvider,
+    OpenAICompatibleProvider,
+    OpenRouterProvider,
     ProviderUnavailable,
     build_provider,
+    is_secure_or_local_url,
+    privacy_warning,
 )
 
 KILO_URL = "https://kilo.example.invalid/v1"
@@ -173,3 +186,119 @@ def test_kilo_describe_never_contains_the_secret():
     payload = KiloProvider(env=_env()).describe()
     assert KILO_KEY not in repr(payload)
     assert "api_key" not in payload
+
+
+# ---------------------------------------------------------------------------
+# Privacy classes: one declaration per provider, and a warning that fires
+# ---------------------------------------------------------------------------
+
+
+def test_privacy_class_is_declared_per_provider():
+    assert OllamaProvider(env=_env()).privacy == PRIVACY_LOCAL
+    assert OpenRouterProvider("some/model", env=_env()).privacy == PRIVACY_FREE
+    assert KiloProvider(env=_env()).privacy == PRIVACY_FREE
+
+
+def test_an_unclassified_provider_defaults_to_the_free_class():
+    """Silence must never be the default: an unknown endpoint warns."""
+    assert ChatProvider.privacy == PRIVACY_FREE
+    assert privacy_warning(ChatProvider(), env={}) == FREE_TIER_WARNING
+
+
+def test_describe_reports_the_privacy_class_and_no_key():
+    payload = KiloProvider(env=_env()).describe()
+    assert payload["privacy"] == PRIVACY_FREE
+    assert KILO_KEY not in repr(payload)
+
+
+def test_privacy_warning_is_empty_for_local_and_paid_providers():
+    assert privacy_warning(OllamaProvider(env=_env()), env={}) == ""
+    paid = ChatProvider()
+    paid.privacy = PRIVACY_PAID
+    assert privacy_warning(paid, env={}) == ""
+
+
+def test_privacy_warning_is_silenced_only_by_an_explicit_acceptance():
+    provider = KiloProvider(env=_env())
+    assert privacy_warning(provider, env={}) == FREE_TIER_WARNING
+    for accepted in ("1", "true", "yes", "on", " TRUE "):
+        assert privacy_warning(provider, env={ACCEPT_FREE_TIER_ENV: accepted}) == ""
+    assert privacy_warning(provider, env={ACCEPT_FREE_TIER_ENV: "0"}) == FREE_TIER_WARNING
+
+
+def test_free_tier_warning_says_the_provider_may_train_on_the_data():
+    lowered = FREE_TIER_WARNING.lower()
+    assert "train" in lowered
+    assert "sensitive" in lowered
+
+
+def test_no_provider_is_constructible_without_declaring_privacy():
+    for kind in (OllamaProvider, OpenRouterProvider, KiloProvider):
+        assert issubclass(kind, ChatProvider)
+        assert kind.privacy in (PRIVACY_LOCAL, PRIVACY_PAID, PRIVACY_FREE)
+
+
+# ---------------------------------------------------------------------------
+# The two OpenAI-compatible providers now share one implementation
+# ---------------------------------------------------------------------------
+
+
+def test_openai_compatible_presets_only_declare_their_endpoint():
+    assert issubclass(OpenRouterProvider, OpenAICompatibleProvider)
+    assert issubclass(KiloProvider, OpenAICompatibleProvider)
+    # The env var names are the public contract; they must survive the merge.
+    assert OpenRouterProvider.model_env_name() == "BUY_WAIT_LLM_MODEL"
+    assert KiloProvider.model_env_name() == "BUY_WAIT_KILO_MODEL"
+    assert OpenRouterProvider()
+    assert OpenRouterProvider(env={}).base_url == OPENROUTER_BASE_URL
+    assert KiloProvider(env={}).base_url == ""
+    assert KiloProvider(env={}).has_credentials() is False
+
+
+def test_kilo_does_not_fall_back_to_the_openrouter_key():
+    provider = KiloProvider(env={KILO_BASE_URL_ENV: KILO_URL, "OPENROUTER_KEY": "router-key"})
+    assert provider._api_key == ""
+    assert provider.has_credentials() is False
+
+
+# ---------------------------------------------------------------------------
+# Transport and endpoint class both have to be honest
+# ---------------------------------------------------------------------------
+
+
+def test_secure_or_local_url_accepts_https_and_loopback_only():
+    assert is_secure_or_local_url("https" "://kilo.example.invalid/v1") is True
+    assert is_secure_or_local_url("http" "://localhost:11434") is True
+    assert is_secure_or_local_url("http" "://127.0.0.1:11434") is True
+    assert is_secure_or_local_url("http" "://[::1]:11434") is True
+    assert is_secure_or_local_url("http" "://kilo.example.invalid/v1") is False
+    assert is_secure_or_local_url("ftp" "://kilo.example.invalid/v1") is False
+    assert is_secure_or_local_url("") is False
+    assert is_secure_or_local_url(None) is False
+
+
+def test_a_plaintext_remote_base_url_is_refused_before_a_key_is_sent():
+    provider = KiloProvider(
+        env={
+            KILO_BASE_URL_ENV: "http" "://kilo.example.invalid/v1",
+            KILO_API_KEY_ENV: KILO_KEY,
+        }
+    )
+    with pytest.raises(ProviderUnavailable) as caught:
+        provider.chat_model()
+    assert "https" in str(caught.value)
+    assert KILO_KEY not in str(caught.value)
+
+
+def test_a_remote_ollama_host_is_not_classified_local():
+    provider = OllamaProvider(
+        env={OLLAMA_BASE_URL_ENV: "http" "://gpu-box.lan:11434"}
+    )
+    assert provider.privacy == PRIVACY_FREE
+    assert privacy_warning(provider, env={}) == FREE_TIER_WARNING
+
+
+def test_an_unrecognised_privacy_class_still_warns():
+    provider = OllamaProvider(env=_env())
+    provider.privacy = "public-ish"
+    assert privacy_warning(provider, env={}) == FREE_TIER_WARNING

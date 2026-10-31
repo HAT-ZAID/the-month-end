@@ -37,7 +37,12 @@ Environment:
 ``BUY_WAIT_KILO_BASE_URL``    required: the user's Kilo OpenAI-compatible base URL
 ``BUY_WAIT_KILO_API_KEY``     required: the user's Kilo API key
 ``BUY_WAIT_KILO_MODEL``       default ``nemotron-3-ultra``
+``BUY_WAIT_ACCEPT_FREE_TIER`` ``1`` silences the free-tier privacy warning
 ============================  ===============================================
+
+Every provider declares a privacy class (``local``, ``paid`` or ``free``).  The
+base default is ``free``, so an endpoint nobody classified still warns before it
+receives free text; see :func:`privacy_warning`.
 """
 from __future__ import annotations
 
@@ -45,6 +50,7 @@ import json
 import os
 from pathlib import Path
 from typing import Protocol, runtime_checkable
+from urllib.parse import urlsplit
 
 from code.schema import DecisionCandidate, parse_candidate
 
@@ -78,9 +84,58 @@ KILO_MODEL_ENV = "BUY_WAIT_KILO_MODEL"
 DEFAULT_KILO_MODEL = "nemotron-3-ultra"
 PROVIDER_KINDS = ("replay", "ollama", "openrouter", "kilo", "none")
 
+# Privacy classes. What a provider may see is a product decision, so every
+# provider declares one, and the base class assumes the least-trusted class:
+# an endpoint nobody classified still gets the free-tier warning.
+PRIVACY_LOCAL = "local"  # nothing leaves the machine
+PRIVACY_PAID = "paid"    # paid endpoint with no-training terms
+PRIVACY_FREE = "free"    # free tier: the provider may train on what it receives
+
+ACCEPT_FREE_TIER_ENV = "BUY_WAIT_ACCEPT_FREE_TIER"
+FREE_TIER_WARNING = (
+    "free tier: this provider may train on the data it receives. Do not enter "
+    "sensitive information (account or card numbers, identity documents, "
+    "addresses). Use the local or a paid provider for real user data."
+)
+
 
 class ProviderUnavailable(RuntimeError):
     """A provider cannot serve a chat turn; the caller falls back to the kernel."""
+
+
+LOCAL_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+
+
+def url_host(url) -> str:
+    """Lower-cased host of ``url``, or an empty string when it is unparseable."""
+    try:
+        return (urlsplit(str(url or "")).hostname or "").lower()
+    except ValueError:
+        return ""
+
+
+def is_local_url(url) -> bool:
+    """True when ``url`` points at this machine (loopback only)."""
+    host = url_host(url)
+    return host in LOCAL_HOSTS or host.startswith("127.")
+
+
+def is_secure_or_local_url(url) -> bool:
+    """True for ``https`` anywhere, or ``http`` on the loopback interface.
+
+    A plaintext request to a remote host would put the API key and the prompt
+    on the wire in the clear, so that combination is refused rather than run.
+    """
+    try:
+        parts = urlsplit(str(url or ""))
+    except ValueError:
+        return False
+    scheme = (parts.scheme or "").lower()
+    if scheme == "https":
+        return True
+    if scheme == "http":
+        return is_local_url(url)
+    return False
 
 
 def request_id_from_context(request_context) -> str:
@@ -174,6 +229,8 @@ class ChatProvider:
     kind = "none"
     name = "none"
     default_model = ""
+    #: Privacy class of the endpoint (see the PRIVACY_* constants).
+    privacy = PRIVACY_FREE
 
     def __init__(self, model=None, *, max_calls=None, env=None):
         env = os.environ if env is None else env
@@ -220,6 +277,7 @@ class ChatProvider:
             "name": self.name,
             "model": self.model,
             "kind": self.kind,
+            "privacy": self.privacy,
             "max_calls": self.max_calls,
             "calls_used": self.calls_used,
             "remaining_calls": self.remaining_calls,
@@ -232,6 +290,7 @@ class OllamaProvider(ChatProvider):
     kind = "ollama"
     name = "ollama"
     default_model = DEFAULT_OLLAMA_MODEL
+    privacy = PRIVACY_LOCAL
 
     def __init__(self, model=None, *, base_url=None, max_calls=None, env=None):
         super().__init__(model, max_calls=max_calls, env=env)
@@ -241,6 +300,11 @@ class OllamaProvider(ChatProvider):
             or env.get(OLLAMA_BASE_URL_ENV)
             or DEFAULT_OLLAMA_BASE_URL
         ).strip()
+        # A configured Ollama host need not be this machine, so the class
+        # default is only a claim about the usual case.  Classify the endpoint
+        # that was actually resolved: a remote host is off-machine data.
+        if not is_local_url(self.base_url):
+            self.privacy = PRIVACY_FREE
 
     @classmethod
     def model_env_name(cls) -> str:
@@ -298,33 +362,71 @@ class OllamaProvider(ChatProvider):
             ) from exc
 
 
-class OpenRouterProvider(ChatProvider):
-    """Opt-in OpenRouter chat model; the model id must come from the environment."""
+class OpenAICompatibleProvider(ChatProvider):
+    """One OpenAI-compatible chat client; a preset only declares its endpoint.
 
-    kind = "openrouter"
-    name = "openrouter"
-    default_model = ""  # deliberately none: OpenRouter has no sane default
+    This replaces two near-identical classes: everything that differed between
+    them is a class attribute, so the key/base-URL resolution and the error
+    strings live in exactly one place.  No committed host or key: both are
+    user-supplied environment variables.
+    """
+
+    base_url_env = ""
+    default_base_url = ""
+    api_key_env = ""
+    api_key_fallbacks: tuple[str, ...] = ()
+    model_env = MODEL_ENV
+    #: A self-hosted or user-deployed endpoint has no sane default, so an empty
+    #: base URL makes it unusable; a preset with a public default can omit it.
+    requires_base_url = False
 
     @classmethod
     def model_env_name(cls) -> str:
-        return MODEL_ENV
+        return cls.model_env
 
-    def __init__(self, model=None, *, max_calls=None, env=None):
+    def __init__(self, model=None, *, base_url=None, max_calls=None, env=None):
         super().__init__(model, max_calls=max_calls, env=env)
         env = self.env
-        # Read at construction only; never stored in a trace, a prompt or a file.
-        self._api_key = str(env.get("BUY_WAIT_LLM_API_KEY") or env.get("OPENROUTER_KEY") or "").strip()
-        self.base_url = OPENROUTER_BASE_URL
+        # A blank or whitespace-only model env var survives the base class, so
+        # the preset default is applied here rather than assumed there.
+        if not self.model:
+            self.model = self.default_model
+        configured = env.get(self.base_url_env) if self.base_url_env else None
+        self.base_url = str(
+            base_url or configured or self.default_base_url or ""
+        ).strip()
+        # Read once at construction; never stored in a trace, a prompt or a file.
+        self._api_key = ""
+        for key in (self.api_key_env, *self.api_key_fallbacks):
+            if not key:
+                continue
+            candidate = str(env.get(key) or "").strip()
+            if candidate:
+                self._api_key = candidate
+                break
 
     def has_credentials(self) -> bool:
+        if self.requires_base_url and not self.base_url:
+            return False
         return bool(self._api_key)
 
     def chat_model(self):
         if not self.model:
-            raise ProviderUnavailable(f"{MODEL_ENV} is required for the openrouter provider")
+            raise ProviderUnavailable(
+                f"{self.model_env} is required for the {self.kind} provider"
+            )
+        if self.requires_base_url and not self.base_url:
+            raise ProviderUnavailable(
+                f"{self.base_url_env} is required for the {self.kind} provider"
+            )
+        if self.base_url and not is_secure_or_local_url(self.base_url):
+            raise ProviderUnavailable(
+                f"{self.base_url_env or 'base_url'} must use https unless it "
+                f"points at this machine, not {self.base_url!r}"
+            )
         if not self._api_key:
             raise ProviderUnavailable(
-                "BUY_WAIT_LLM_API_KEY is required for the openrouter provider"
+                f"{self.api_key_env} is required for the {self.kind} provider"
             )
         try:
             from langchain_openai import ChatOpenAI
@@ -345,7 +447,20 @@ class OpenRouterProvider(ChatProvider):
             ) from exc
 
 
-class KiloProvider(ChatProvider):
+class OpenRouterProvider(OpenAICompatibleProvider):
+    """Opt-in OpenRouter chat model; the model id must come from the environment."""
+
+    kind = "openrouter"
+    name = "openrouter"
+    default_model = ""  # deliberately none: OpenRouter has no sane default
+    model_env = MODEL_ENV
+    default_base_url = OPENROUTER_BASE_URL
+    api_key_env = "BUY_WAIT_LLM_API_KEY"
+    api_key_fallbacks = ("OPENROUTER_KEY",)
+    privacy = PRIVACY_FREE
+
+
+class KiloProvider(OpenAICompatibleProvider):
     """Kilo's OpenAI-compatible endpoint serving Nemotron Ultra.
 
     This is the final remote deployment path.  Both the base URL and the API key
@@ -356,49 +471,11 @@ class KiloProvider(ChatProvider):
     kind = "kilo"
     name = "kilo"
     default_model = DEFAULT_KILO_MODEL
-
-    @classmethod
-    def model_env_name(cls) -> str:
-        return KILO_MODEL_ENV
-
-    def __init__(self, model=None, *, base_url=None, max_calls=None, env=None):
-        super().__init__(model, max_calls=max_calls, env=env)
-        env = self.env
-        # Read once at construction; the key is never stored in a trace or a file.
-        self.base_url = str(base_url or env.get(KILO_BASE_URL_ENV) or "").strip()
-        self._api_key = str(env.get(KILO_API_KEY_ENV) or "").strip()
-        if not self.model:
-            self.model = DEFAULT_KILO_MODEL
-
-    def has_credentials(self) -> bool:
-        return bool(self.base_url and self._api_key)
-
-    def chat_model(self):
-        if not self.base_url:
-            raise ProviderUnavailable(
-                f"{KILO_BASE_URL_ENV} is required for the kilo provider"
-            )
-        if not self._api_key:
-            raise ProviderUnavailable(
-                f"{KILO_API_KEY_ENV} is required for the kilo provider"
-            )
-        try:
-            from langchain_openai import ChatOpenAI
-        except ImportError as exc:
-            raise ProviderUnavailable(
-                f"langchain-openai is not installed: {exc}"
-            ) from exc
-        try:
-            return ChatOpenAI(
-                model=self.model,
-                base_url=self.base_url,
-                api_key=self._api_key,
-                temperature=0,
-            )
-        except Exception as exc:
-            raise ProviderUnavailable(
-                f"cannot create ChatOpenAI model {self.model!r}: {type(exc).__name__}: {exc}"
-            ) from exc
+    model_env = KILO_MODEL_ENV
+    base_url_env = KILO_BASE_URL_ENV
+    api_key_env = KILO_API_KEY_ENV
+    requires_base_url = True
+    privacy = PRIVACY_FREE
 
 
 def build_provider(env=None):
@@ -437,6 +514,30 @@ def build_provider(env=None):
     return None, f"unknown {PROVIDER_ENV} {kind!r}; expected one of {', '.join(PROVIDER_KINDS)}"
 
 
+def privacy_warning(provider, env=None) -> str:
+    """The warning a caller must show before ``provider`` receives free text.
+
+    Empty for a local or paid endpoint, and empty once the operator has accepted
+    the free tier explicitly through ``BUY_WAIT_ACCEPT_FREE_TIER``.  An
+    unclassified provider returns the warning: silence is never the default.
+    """
+    if provider is None:
+        return ""
+    # Only the two known-safe classes silence the warning.  An unrecognised or
+    # missing class is treated as free, because silence must never be default.
+    if getattr(provider, "privacy", None) in (PRIVACY_LOCAL, PRIVACY_PAID):
+        return ""
+    env = os.environ if env is None else env
+    if str(env.get(ACCEPT_FREE_TIER_ENV) or "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    ):
+        return ""
+    return FREE_TIER_WARNING
+
+
 def load_fixtures(fixture_dir) -> dict:
     """Load ``candidates.json``; any problem yields an empty mapping."""
     path = Path(fixture_dir) / "candidates.json"
@@ -452,6 +553,7 @@ def load_fixtures(fixture_dir) -> dict:
 
 
 __all__ = [
+    "ACCEPT_FREE_TIER_ENV",
     "ChatProvider",
     "DecisionProvider",
     "DEFAULT_FIXTURE_DIR",
@@ -459,18 +561,27 @@ __all__ = [
     "DEFAULT_MAX_CALLS",
     "DEFAULT_OLLAMA_BASE_URL",
     "DEFAULT_OLLAMA_MODEL",
+    "FREE_TIER_WARNING",
     "KILO_API_KEY_ENV",
     "KILO_BASE_URL_ENV",
     "KILO_MODEL_ENV",
     "KiloProvider",
     "NullProvider",
     "OllamaProvider",
+    "OpenAICompatibleProvider",
     "OPENROUTER_BASE_URL",
     "OpenRouterProvider",
+    "PRIVACY_FREE",
+    "PRIVACY_LOCAL",
+    "PRIVACY_PAID",
     "PROVIDER_KINDS",
     "ProviderUnavailable",
     "ReplayProvider",
     "build_provider",
+    "is_local_url",
+    "is_secure_or_local_url",
     "load_fixtures",
+    "privacy_warning",
     "request_id_from_context",
+    "url_host",
 ]
