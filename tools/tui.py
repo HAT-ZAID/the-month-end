@@ -658,6 +658,7 @@ class TUI:
         # read-only, this directory is the only thing `ask` writes.
         self.task_trace_dir = REPO_ROOT / "traces" / "tasks"
         self._provider_notice = False
+        self._privacy_notice = False
 
     # -- plumbing ----------------------------------------------------------
 
@@ -1527,6 +1528,13 @@ class TUI:
                 f"no model configured ({provider_reason}); classifying with the rules",
                 style="dim",
             )
+        if provider is not None and not self._privacy_notice:
+            from code.providers import privacy_warning
+
+            notice = privacy_warning(provider)
+            if notice:
+                self._privacy_notice = True
+                self.console.print(notice, style="yellow")
         workspace = Workspace(data=data, session=self.session)
         result = run_task(
             instruction,

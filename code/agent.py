@@ -1575,7 +1575,7 @@ def main(argv=None) -> int:
         ),
     )
     parser.add_argument("--request-id", required=True, help="request_id from dataset/requests.csv")
-    parser.add_argument("--provider", default=None, help="replay|ollama|openrouter|kilo|none")
+    parser.add_argument("--provider", default=None, help="replay|ollama|openrouter|kilo|paid|none")
     parser.add_argument("--trace-dir", default=None, help="write one JSON trace per request")
     parser.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT_S, help="per-turn timeout (s)")
     args = parser.parse_args(argv)
@@ -1587,12 +1587,18 @@ def main(argv=None) -> int:
         reason = "no provider requested (demo defaults to the deterministic kernel)"
     else:
         import os
+        import sys
 
         env = dict(os.environ)
         env["BUY_WAIT_LLM_PROVIDER"] = kind
         provider, reason = build_provider(env)
         if provider is None:
             raise SystemExit(f"provider {kind!r} unavailable: {reason}")
+        from code.providers import privacy_warning
+
+        notice = privacy_warning(provider)
+        if notice:
+            print(notice, file=sys.stderr)
 
     from code.tools import DatasetBundle, Toolbox
     from code.trace import TraceRecorder

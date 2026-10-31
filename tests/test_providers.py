@@ -19,6 +19,9 @@ from code.providers import (
     KILO_MODEL_ENV,
     OLLAMA_BASE_URL_ENV,
     OPENROUTER_BASE_URL,
+    PAID_API_KEY_ENV,
+    PAID_BASE_URL_ENV,
+    PAID_MODEL_ENV,
     PRIVACY_FREE,
     PRIVACY_LOCAL,
     PRIVACY_PAID,
@@ -29,6 +32,7 @@ from code.providers import (
     OllamaProvider,
     OpenAICompatibleProvider,
     OpenRouterProvider,
+    PaidProvider,
     ProviderUnavailable,
     build_provider,
     is_secure_or_local_url,
@@ -302,3 +306,116 @@ def test_an_unrecognised_privacy_class_still_warns():
     provider = OllamaProvider(env=_env())
     provider.privacy = "public-ish"
     assert privacy_warning(provider, env={}) == FREE_TIER_WARNING
+
+
+# ---------------------------------------------------------------------------
+# The paid class: the safe path for real user data
+# ---------------------------------------------------------------------------
+
+PAID_URL = "https" "://paid.example.invalid/v1"
+PAID_KEY = "paid-placeholder-key-for-tests"
+
+
+def _paid_env(**overrides) -> dict:
+    env = {
+        PAID_BASE_URL_ENV: PAID_URL,
+        PAID_API_KEY_ENV: PAID_KEY,
+        PAID_MODEL_ENV: "frontier-model",
+    }
+    env.update(overrides)
+    return {key: value for key, value in env.items() if value is not None}
+
+
+def test_the_paid_provider_is_listed_and_declares_no_defaults():
+    assert "paid" in PROVIDER_KINDS
+    assert PaidProvider.default_model == ""
+    assert PaidProvider.privacy == PRIVACY_PAID
+    assert PaidProvider.base_url_env == PAID_BASE_URL_ENV
+    assert PaidProvider.api_key_env == PAID_API_KEY_ENV
+
+
+def test_a_paid_provider_is_built_from_the_users_own_endpoint():
+    provider, reason = build_provider({PROVIDER_ENV: "paid", **_paid_env()})
+
+    assert reason is None
+    assert isinstance(provider, PaidProvider)
+    assert provider.privacy == PRIVACY_PAID
+    assert provider.model == "frontier-model"
+    assert provider.base_url == PAID_URL
+
+
+def test_a_paid_provider_never_warns_about_training():
+    provider, _reason = build_provider({PROVIDER_ENV: "paid", **_paid_env()})
+
+    assert privacy_warning(provider, env={}) == ""
+    assert privacy_warning(provider, env={ACCEPT_FREE_TIER_ENV: "0"}) == ""
+
+
+def test_a_paid_provider_sends_the_key_to_the_users_own_endpoint(created_models):
+    provider, _reason = build_provider({PROVIDER_ENV: "paid", **_paid_env()})
+
+    model = provider.chat_model()
+
+    assert model.kwargs["base_url"] == PAID_URL
+    assert model.kwargs["api_key"] == PAID_KEY
+    assert model.kwargs["model"] == "frontier-model"
+    assert model.kwargs["temperature"] == 0
+
+
+@pytest.mark.parametrize(
+    "missing, expected",
+    [
+        (PAID_MODEL_ENV, PAID_MODEL_ENV),
+        (PAID_BASE_URL_ENV, PAID_BASE_URL_ENV),
+        (PAID_API_KEY_ENV, PAID_API_KEY_ENV),
+    ],
+)
+def test_an_incomplete_paid_configuration_is_refused_with_its_env_name(missing, expected):
+    provider, reason = build_provider(
+        {PROVIDER_ENV: "paid", **_paid_env(**{missing: None})}
+    )
+
+    assert provider is None
+    assert expected in reason
+    assert reason.endswith("paid provider")
+
+
+def test_a_paid_provider_refuses_a_plaintext_remote_endpoint(created_models):
+    provider, _reason = build_provider(
+        {
+            PROVIDER_ENV: "paid",
+            **_paid_env(**{PAID_BASE_URL_ENV: "http" "://paid.example.invalid/v1"}),
+        }
+    )
+
+    with pytest.raises(ProviderUnavailable) as caught:
+        provider.chat_model()
+    assert "https" in str(caught.value)
+    assert PAID_KEY not in str(caught.value)
+    assert created_models == []
+
+
+def test_the_http_client_never_follows_a_redirect(created_models):
+    """A 307 keeps the body, so a redirect could resend the key in cleartext."""
+    provider, _reason = build_provider({PROVIDER_ENV: "paid", **_paid_env()})
+
+    model = provider.chat_model()
+    client = model.kwargs["http_client"]
+
+    assert client.follow_redirects is False
+    client.close()
+
+
+def test_a_local_endpoint_also_gets_the_no_redirect_client(created_models):
+    provider = KiloProvider(
+        env={
+            KILO_BASE_URL_ENV: "http" "://127.0.0.1:8080/v1",
+            KILO_API_KEY_ENV: KILO_KEY,
+        }
+    )
+
+    model = provider.chat_model()
+    client = model.kwargs["http_client"]
+
+    assert client.follow_redirects is False
+    client.close()

@@ -288,6 +288,39 @@ If the URL or key is missing the two entry points behave differently, on purpose
 
 The 50-call cap is shared with the other remote providers.
 
+### 7. Providers, privacy classes, and the paid path
+
+Every provider declares one of three privacy classes (`code/providers.py`), and the
+class decides what it may be trusted with:
+
+| Class | Provider | What it may receive |
+|---|---|---|
+| `local` | `ollama` on a loopback address | anything — nothing leaves the machine |
+| `paid` | `paid` (your endpoint) or `kilo` | user text, never secrets |
+| `free` | `openrouter`, remote Ollama, anything unclassified | development fixtures and non-sensitive text only |
+
+**Free tiers train on the data they receive.** Before a `free` provider sees free
+text, the TUI's `ask` command and `python -m code.task_agent` print a warning that
+says so and names what must not be entered: account numbers, card numbers, identity
+documents, addresses. The TUI prints that notice once per session; setting
+`BUY_WAIT_ACCEPT_FREE_TIER=1` silences it in every process that inherits the
+variable. Neither the notice nor the variable changes the provider's class.
+
+For real user data use `local`, or a `paid` endpoint you control:
+
+```bash
+export BUY_WAIT_PAID_BASE_URL="<your OpenAI-compatible base URL>"   # https, or http on loopback
+export BUY_WAIT_PAID_API_KEY="<your key>"
+export BUY_WAIT_PAID_MODEL="<model id you are entitled to call>"
+
+python -m code.task_agent "can I afford 40,000 on the 12th" --provider paid
+```
+
+Nothing is committed and there is no default endpoint, key or model, so an
+incomplete `paid` configuration is refused with the name of the missing variable.
+A remote `http://` base URL is refused too: the key is never sent in plaintext.
+`describe()` records the privacy class in the trace; it never records the key.
+
 ### Docker
 
 ```bash
@@ -321,9 +354,13 @@ unproven and report anything it breaks.
   needs no credentials. The local Ollama path also stays on your machine.
 - Remote providers are opt-in and hard-capped; API keys are read from environment
   variables only and are never written to traces, reports or output.
+- Free tiers may train on what they receive, so the TUI and `code.task_agent` warn
+  before a `free` provider sees free text. Use `local` or `paid` for real user data.
 - Messages and images are **untrusted evidence**. They may confirm, amend, delay
   or cancel a financial fact, but instructions embedded in them are ignored, and
   anything they cannot prove is flagged rather than guessed.
+  The TUI prints the notice once per session; setting `BUY_WAIT_ACCEPT_FREE_TIER=1`
+  suppresses it in every process that inherits the variable.
 - The pipeline fails closed: unresolved image evidence, unknown FX, or an
   over-claimed amount produces a conservative row with a warning, never an
   invented number.

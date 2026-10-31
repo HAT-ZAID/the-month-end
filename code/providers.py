@@ -25,7 +25,7 @@ Everything is lazy and env-driven:
 Environment:
 
 ============================  ===============================================
-``BUY_WAIT_LLM_PROVIDER``     ``replay`` | ``ollama`` | ``openrouter`` | ``kilo`` | ``none``
+``BUY_WAIT_LLM_PROVIDER``     ``replay`` | ``ollama`` | ``openrouter`` | ``kilo`` | ``paid`` | ``none``
 ``BUY_WAIT_LLM_MODEL``        model id (required for OpenRouter)
 ``BUY_WAIT_LLM_MAX_CALLS``    total provider calls per run (default 50)
 ``BUY_WAIT_OLLAMA_MODEL``     local model (default ``qwen2.5:1.5b``)
@@ -37,6 +37,9 @@ Environment:
 ``BUY_WAIT_KILO_BASE_URL``    required: the user's Kilo OpenAI-compatible base URL
 ``BUY_WAIT_KILO_API_KEY``     required: the user's Kilo API key
 ``BUY_WAIT_KILO_MODEL``       default ``nemotron-3-ultra``
+``BUY_WAIT_PAID_BASE_URL``    required for ``paid``: the user's own endpoint
+``BUY_WAIT_PAID_API_KEY``     required for ``paid``: the user's own key
+``BUY_WAIT_PAID_MODEL``       required for ``paid``: the model id to call
 ``BUY_WAIT_ACCEPT_FREE_TIER`` ``1`` silences the free-tier privacy warning
 ============================  ===============================================
 
@@ -72,6 +75,11 @@ OLLAMA_TOP_P_ENV = "BUY_WAIT_OLLAMA_TOP_P"
 OLLAMA_TOP_K_ENV = "BUY_WAIT_OLLAMA_TOP_K"
 OLLAMA_REPEAT_PENALTY_ENV = "BUY_WAIT_OLLAMA_REPEAT_PENALTY"
 DEFAULT_NUM_CTX = 8192
+# Transport defaults for the OpenAI-compatible clients. They mirror the SDK's
+# own defaults; the point is the redirect policy in ``_http_client``, not a
+# shorter timeout.
+DEFAULT_HTTP_TIMEOUT_S = 600.0
+DEFAULT_CONNECT_TIMEOUT_S = 5.0
 # Written as two literals: a bare scheme-plus-host string trips the submission's
 # hardcoded-absolute-path gate (it flags any letter-colon-slash pair) even though
 # a URL is not a filesystem path.
@@ -82,7 +90,12 @@ KILO_BASE_URL_ENV = "BUY_WAIT_KILO_BASE_URL"
 KILO_API_KEY_ENV = "BUY_WAIT_KILO_API_KEY"
 KILO_MODEL_ENV = "BUY_WAIT_KILO_MODEL"
 DEFAULT_KILO_MODEL = "nemotron-3-ultra"
-PROVIDER_KINDS = ("replay", "ollama", "openrouter", "kilo", "none")
+# A paid endpoint the user names itself. This is the recommended class for real
+# user data: no training terms, and the user owns both the URL and the key.
+PAID_BASE_URL_ENV = "BUY_WAIT_PAID_BASE_URL"
+PAID_API_KEY_ENV = "BUY_WAIT_PAID_API_KEY"
+PAID_MODEL_ENV = "BUY_WAIT_PAID_MODEL"
+PROVIDER_KINDS = ("replay", "ollama", "openrouter", "kilo", "paid", "none")
 
 # Privacy classes. What a provider may see is a product decision, so every
 # provider declares one, and the base class assumes the least-trusted class:
@@ -440,11 +453,34 @@ class OpenAICompatibleProvider(ChatProvider):
                 base_url=self.base_url,
                 api_key=self._api_key,
                 temperature=0,
+                http_client=self._http_client(),
             )
+        except ProviderUnavailable:
+            raise
         except Exception as exc:
             raise ProviderUnavailable(
                 f"cannot create ChatOpenAI model {self.model!r}: {type(exc).__name__}: {exc}"
             ) from exc
+
+    def _http_client(self):
+        """An HTTP client that never follows a redirect.
+
+        The OpenAI SDK follows redirects by default, and a 307 keeps the method
+        and the body, so an endpoint that redirects to ``http://`` would resend
+        the prompt and the key in cleartext.  The scheme check above only covers
+        the configured URL, so the transport has to refuse the rest.  Timeouts
+        mirror the SDK defaults rather than shortening them.
+        """
+        try:
+            import httpx
+        except ImportError as exc:  # pragma: no cover - openai depends on httpx
+            raise ProviderUnavailable(
+                f"cannot enforce a safe transport: httpx is not installed: {exc}"
+            ) from exc
+        return httpx.Client(
+            follow_redirects=False,
+            timeout=httpx.Timeout(DEFAULT_HTTP_TIMEOUT_S, connect=DEFAULT_CONNECT_TIMEOUT_S),
+        )
 
 
 class OpenRouterProvider(OpenAICompatibleProvider):
@@ -476,6 +512,24 @@ class KiloProvider(OpenAICompatibleProvider):
     api_key_env = KILO_API_KEY_ENV
     requires_base_url = True
     privacy = PRIVACY_FREE
+
+
+class PaidProvider(OpenAICompatibleProvider):
+    """A paid OpenAI-compatible endpoint the user names in the environment.
+
+    This is the class to reach for with real user data: paid endpoints do not
+    train on what they receive.  Nothing is committed and there is no default
+    endpoint or key, so an unconfigured install simply cannot use it.
+    """
+
+    kind = "paid"
+    name = "paid"
+    default_model = ""  # deliberately none: the user names the model
+    model_env = PAID_MODEL_ENV
+    base_url_env = PAID_BASE_URL_ENV
+    api_key_env = PAID_API_KEY_ENV
+    requires_base_url = True
+    privacy = PRIVACY_PAID
 
 
 def build_provider(env=None):
@@ -510,6 +564,15 @@ def build_provider(env=None):
             return None, f"{KILO_BASE_URL_ENV} is required for the kilo provider"
         if not provider.has_credentials():
             return None, f"{KILO_API_KEY_ENV} is required for the kilo provider"
+        return provider, None
+    if kind == "paid":
+        provider = PaidProvider(env=env)
+        if not provider.model:
+            return None, f"{PAID_MODEL_ENV} is required for the paid provider"
+        if not provider.base_url:
+            return None, f"{PAID_BASE_URL_ENV} is required for the paid provider"
+        if not provider.has_credentials():
+            return None, f"{PAID_API_KEY_ENV} is required for the paid provider"
         return provider, None
     return None, f"unknown {PROVIDER_ENV} {kind!r}; expected one of {', '.join(PROVIDER_KINDS)}"
 
@@ -571,6 +634,10 @@ __all__ = [
     "OpenAICompatibleProvider",
     "OPENROUTER_BASE_URL",
     "OpenRouterProvider",
+    "PAID_API_KEY_ENV",
+    "PAID_BASE_URL_ENV",
+    "PAID_MODEL_ENV",
+    "PaidProvider",
     "PRIVACY_FREE",
     "PRIVACY_LOCAL",
     "PRIVACY_PAID",

@@ -1120,7 +1120,7 @@ def main(argv=None) -> int:
     parser.add_argument(
         "--provider",
         default=None,
-        choices=("none", "ollama", "openrouter", "kilo"),
+        choices=("none", "ollama", "openrouter", "kilo", "paid"),
         help=(
             "model used for intent classification when the rules cannot read a "
             "clause (default: none, rules only)"
@@ -1141,11 +1141,18 @@ def main(argv=None) -> int:
                 "ollama": "BUY_WAIT_OLLAMA_MODEL",
                 "openrouter": "BUY_WAIT_LLM_MODEL",
                 "kilo": "BUY_WAIT_KILO_MODEL",
+                "paid": "BUY_WAIT_PAID_MODEL",
             }[args.provider]
             os.environ[model_env] = args.model
         provider, reason = build_provider()
         if provider is None:
             print(f"provider unavailable: {reason}")
+        else:
+            from code.providers import privacy_warning
+
+            notice = privacy_warning(provider)
+            if notice:
+                print(notice)
 
     instruction = " ".join(args.instruction)
     result = run_task(
