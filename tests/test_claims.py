@@ -393,3 +393,9 @@ def test_a_price_beside_a_count_still_counts():
     report = verify_claims("We resolved 3 of 5 samples for 2000.", dict(ROW))
     amounts = [item["text"] for item in report["unsupported"] if item["kind"] == "amount"]
     assert amounts == ["2000"]
+def test_a_truncated_prefix_cannot_exempt_a_large_figure():
+    # "paid 500   of 2000" pads past the eight-character window the count rule
+    # used to inspect, so a slice could start mid-number and look like "00 of".
+    report = verify_claims("paid 500   of 2000", dict(ROW))
+    amounts = [item["text"] for item in report["unsupported"] if item["kind"] == "amount"]
+    assert "2000" in amounts
