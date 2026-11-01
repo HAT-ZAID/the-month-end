@@ -57,7 +57,8 @@ re-deriving the evidence. It contains:
   proved unreliable in use, so it is not the primary. Keep it only as a prose/fallback model, never
   as the tool chooser, and never as the authority on a number.
 - **Cloud models do not appear in `/api/tags`.** `code/models.py` discovery therefore misses
-  `gpt-oss:20b-cloud`; a menu entry has to be added explicitly (build-mode step 7).
+  `gemma4:31b-cloud` and `gpt-oss:20b-cloud`; menu entries have to be added explicitly
+  (build-mode step 7).
 - **`.env` is not loaded by any code.** It contains exactly one key, `OLLAMA_API_KEY` (57 chars),
   and no module calls `load_dotenv`; the interactive probes read it explicitly. Either load it
   deliberately (and keep it out of traces) or export it before the process starts. Never print it.
@@ -941,8 +942,9 @@ used at all, disable thinking to keep the turn cheap.
 1. `.env` holds `OLLAMA_API_KEY` and **nothing loads it**. Options: a small `code/envfile.py` that
    parses `.env` without exporting it into traces, or a documented `set` before running. Either way,
    the key must never appear in a trace, a report or a commit.
-2. `code/models.py::ollama_models` reads `/api/tags`, which omits cloud models. Add a configured
-   cloud entry (`gpt-oss:20b-cloud`) behind an explicit flag, labelled with its privacy class.
+2. `code/models.py::ollama_models` reads `/api/tags`, which omits cloud models. Add configured
+   cloud entries (`gemma4:31b-cloud` primary, `gpt-oss:20b-cloud` fallback) behind an explicit flag,
+   labelled with their privacy class.
 3. `code/providers.py::OllamaProvider` builds `ChatOllama`; confirm it forwards an API key and a
    `base_url` for a cloud model, otherwise the loop will fail with a provider error rather than a
    clear message.
