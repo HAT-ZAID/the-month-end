@@ -794,3 +794,67 @@ def test_the_environment_key_is_registered_as_a_secret(monkeypatch):
     assert sanitize({"e": "403 key envkeyvalue12345 rejected"})["e"] == (
         f"403 key {REDACTED} rejected"
     )
+
+
+# --- the final correctness blockers ---------------------------------------
+
+
+def test_denying_the_recommended_method_is_a_claim():
+    for method, text in (
+        ("full_payment", "Do not pay in full now."),
+        ("installments", "Do not use installments."),
+        ("partial_payment", "Do not pay part of it now."),
+        ("wait", "You should not wait."),
+    ):
+        row = _row(recommended_payment_method=method)
+        assert verify_claims(text, row)["ok"] is False, text
+
+
+def test_the_printed_second_leg_is_a_supported_figure():
+    row = _row(
+        recommended_payment_method="partial_payment",
+        amount_safe_to_pay="32036.45",
+        payment_plan="2024-12-03:32036.455|2024-12-15:17413.545",
+        earliest_date_for_full_payment="2024-12-15",
+    )
+    # The CSV prints the residual of the printed first leg, not its truncation.
+    assert verify_claims("Pay 32036.45 today and 17413.55 on 2024-12-15.", row)["ok"] is True
+
+
+def test_a_figure_in_the_wrong_role_is_a_claim():
+    requested = _row(requested_amount="15657000")
+    assert verify_claims(
+        "The request of 15657000 is safe to pay today.", requested
+    )["ok"] is False
+    floor = _row(minimum_balance="9000")
+    assert verify_claims(
+        "You can pay up to 9000 and still keep the minimum.", floor
+    )["ok"] is False
+
+
+def test_the_event_window_looks_both_ways():
+    row = _row(spending_changes_needed="stop:event_3085")
+    assert verify_claims("Cancel event_99999 instead.", row)["ok"] is False
+    assert verify_claims("event_99999 should be stopped.", row)["ok"] is False
+    # An evidence citation carries no change verb, so it is not an instruction.
+    assert verify_claims(
+        "The event_99999 charge remains unresolved.", row
+    )["ok"] is True
+
+
+def test_an_article_figure_and_a_vague_span_are_claims():
+    assert verify_claims("a thousand is safe today", _row())["ok"] is False
+    assert verify_claims("a couple hundred is safe today", _row())["ok"] is False
+    for text in ("Wait until Monday.", "It becomes safe in a week.",
+                 "Check again later this week.", "The safe point is mid-month."):
+        assert verify_claims(text, _row())["ok"] is False, text
+
+
+def test_the_natural_wait_phrasing_ships():
+    row = _row(
+        affordability_status="affordable_later",
+        recommended_payment_method="wait",
+        earliest_date_for_full_payment="2026-05-15",
+    )
+    assert verify_claims("Wait until 2026-05-15 and then pay in full.", row)["ok"] is True
+    assert verify_claims("The plan pays in full on 2026-05-15.", row)["ok"] is True

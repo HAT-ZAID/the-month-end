@@ -510,6 +510,11 @@ def run_pipeline(
             "evidence_warnings": user_warnings,
             "_usage": usage,
         })
+        template_text = str(explanation or "")
+        # The kernel's own sentence, captured before either writer touches the
+        # row: falling back to the row handed in would hand back the very prose
+        # that was just rejected.
+        kernel_text = str(res.get("decision_explanation") or template_text)
         explanation = _preferred_explanation(explanation, res, agent_outcome)
         explanation = _checked_explanation(
             explanation,
@@ -524,7 +529,9 @@ def run_pipeline(
                 "spending_changes_needed": _money_action(
                     res["spending_changes_needed"]
                 ),
-                "decision_explanation": res.get("decision_explanation"),
+                "decision_explanation": kernel_text,
+                "requested_amount": req["requested_amount"],
+                "minimum_balance": profile.get("minimum_balance_to_keep"),
             },
             extra_numbers=(
                 req["requested_amount"],

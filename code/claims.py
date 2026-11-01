@@ -154,14 +154,38 @@ _NUMBER_WORD = re.compile(
 #: month" names a date nothing can confirm.
 _RELATIVE_DATE = re.compile(
     r"\b(?:tomorrow|next\s+(?:week|month|year)"
-    r"|in\s+(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven"
+    r"|in\s+(?:\d+|an?|one|two|three|four|five|six|seven|eight|nine|ten|eleven"
     r"|twelve)\s+(?:days?|weeks?|months?|years?)"
     r"|\b(?:a|one)\s+fortnight\b"
     r"|\b(?:by|in|until|before|from|during|after)\s+(?:the\s+)?"
     r"(?:january|february|march|april|may|june|july|august|september|"
     r"october|november|december)\b"
+    r"|\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b"
+    r"|\b(?:this|later\s+this|next|early|mid)\s+(?:week|month)\b"
+    r"|\bmid-month\b|\bsoon\b|\bshortly\b"
     r"|end\s+of\s+(?:the\s+)?(?:month|week|year|january|february|march|april|may|"
     r"june|july|august|september|october|november|december))\b",
+    re.IGNORECASE,
+)
+
+#: A method the prose *denies* is a claim about the method column. The phrase
+#: table is polarity-blind on its own: "Do not pay in full now" contains "pay in
+#: full", so without this the sentence reads as a recommendation.
+_NEGATED_METHOD = re.compile(
+    r"\b(?:do not|don't|dont|does not|should not|shouldn't|must not|will not|"
+    r"won't|cannot|can't|never|avoid|no need to|not)\b[^.]{0,24}"
+    r"\b(full payment|pay in full|partial payment|pay part|installments?|"
+    r"instalments?|wait)\b",
+    re.IGNORECASE,
+)
+#: A figure presented in the wrong role: the requested amount is not what is
+#: safe today, and the minimum balance is never payable at all.
+_ROLE_SAFE = re.compile(r"\b(?:pay|paying|spend|buy|purchase|afford|commit|safe)\b",
+                        re.IGNORECASE)
+_ROLE_NOW = re.compile(r"\b(?:now|today|immediately|right away)\b", re.IGNORECASE)
+#: An indefinite article before a scale word is a figure: "a thousand is safe".
+_ARTICLE_FIGURE = re.compile(
+    r"\b(?:a|an|one|couple|few|several)\s+(?:hundred|thousand|million|lakh|crore)\b",
     re.IGNORECASE,
 )
 
@@ -261,11 +285,23 @@ def _supported_numbers(row: dict, extra_numbers=()) -> set[Decimal]:
             number = _decimal(parts[-1])
             if number is not None:
                 numbers.add(_to_cents(number))
-    for leg in str(row.get("payment_plan") or "").split("|"):
+    legs = str(row.get("payment_plan") or "").split("|")
+    for leg in legs:
         _, _, amount = leg.partition(":")
         number = _decimal(amount)
         if number is not None:
             numbers.add(_to_cents(number))
+    if len(legs) == 2:
+        # A partial plan's legs sum to the requested amount, and the printed
+        # second leg is the residual of the printed first one, not its own
+        # truncation: deriving it the same way is the only way a correct
+        # sentence citing the shipped schedule can pass.
+        amounts = [
+            _decimal(leg.partition(":")[2]) for leg in legs
+        ]
+        if all(item is not None for item in amounts):
+            first = _to_cents(amounts[0])
+            numbers.add(_to_cents(sum(amounts) - first))
     for value in extra_numbers or ():
         number = _decimal(value)
         if number is not None:
@@ -650,6 +686,54 @@ def verify_claims(
             unsupported.append({"kind": "amount", "text": token, "expected": sorted(
                 _fmt(item) for item in numbers
             )})
+    for match in _NEGATED_METHOD.finditer(prose):
+        # A denied method is a claim about the method: "do not pay in full now"
+        # contradicts a row that recommends full payment.
+        lowered = match.group(1).lower()
+        for variant, canonical, _span in _phrase_claims(lowered, METHOD_PHRASES):
+            checked += 1
+            if canonical == kernel_method:
+                unsupported.append({"kind": "method", "text": match.group(0),
+                                    "expected": kernel_method})
+            break
+    article = _ARTICLE_FIGURE.search(prose)
+    if article:
+        # "a thousand is safe" is a figure the row cannot support.
+        checked += 1
+        unsupported.append({"kind": "amount", "text": article.group(0),
+                            "expected": sorted(_fmt(item) for item in numbers)})
+    requested = _decimal(row.get("requested_amount"))
+    safe_now = _decimal(row.get("amount_safe_to_pay"))
+    minimum = _decimal(row.get("minimum_balance"))
+    for match in _MONEY.finditer(prose):
+        number = _decimal(match.group(0))
+        if number is None:
+            continue
+        clause = _clause_at(prose, match.start(), match.end())
+        if (
+            requested is not None
+            and number == requested
+            and requested != safe_now
+            and _ROLE_SAFE.search(clause)
+            and _ROLE_NOW.search(clause)
+        ):
+            # The requested amount is not what is safe today; only the safe
+            # amount may be presented as payable on the request date.
+            checked += 1
+            unsupported.append({
+                "kind": "amount",
+                "text": match.group(0),
+                "expected": _fmt(safe_now) if safe_now is not None else "0",
+            })
+        elif minimum is not None and number == minimum and _ROLE_SAFE.search(clause):
+            # The minimum balance is a floor to keep, never money to spend.
+            checked += 1
+            unsupported.append({
+                "kind": "amount",
+                "text": match.group(0),
+                "expected": "the minimum balance is not payable",
+            })
+
     for match in _ISO_DATE.finditer(prose):
         checked += 1
         if match.group(0) not in dates:
@@ -712,7 +796,7 @@ def verify_claims(
         # may cite the evidence it weighed ("the charge on the event is
         # unresolved"). Only a change verb, or the token form, makes it an
         # action claim.
-        near = prose[max(0, match.start() - 40):match.start()]
+        near = _clause_at(prose, match.start(), match.end())
         if not (
             re.search(rf"\b{_CHANGE_VERB}\b", near, re.IGNORECASE)
             or re.search(r"(?:stop|reduce_to)\s*:\s*$", near, re.IGNORECASE)
@@ -758,6 +842,14 @@ def verify_claims(
                     unsupported.append({"kind": "date",
                                         "text": cited or variant,
                                         "expected": expected})
+                continue
+        if canonical == "full_payment" and kernel_method == "wait":
+            # Waiting *is* a deferred full payment, so naming one is not a
+            # contradiction when the sentence also names the date it becomes
+            # safe on.
+            expected = str(row.get("earliest_date_for_full_payment") or "").strip()
+            span_clause = _clause_at(prose, span[0], span[1])
+            if expected and _cited_date(span_clause) == expected:
                 continue
         checked += 1
         if canonical != kernel_method:
