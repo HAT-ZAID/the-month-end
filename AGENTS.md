@@ -90,7 +90,12 @@ Rules:
 
 ### 6.1 Dataset Contract
 
-Product inputs are inside `dataset/`.
+The fixture directory is `mock_dataset/` (it was `dataset/`). Its name says what it is:
+calibration and test material for the engine, never a user's money. `code/paths.py`
+resolves `mock_dataset/` first and falls back to `dataset/` so an older checkout or a
+throw-away test fixture still reads.
+
+Fixture inputs are inside `mock_dataset/`.
 
 ```text
 dataset/

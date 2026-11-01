@@ -355,6 +355,25 @@ tests and ships with the repository, but it has not been built here because the
 development machine ran out of disk space. Treat the first real build as
 unproven and report anything it breaks.
 
+## Use it on your own money
+
+The fixture is calibration material. To use the product on your own figures:
+
+```bash
+python -m tools.app      # the modern interface (Textual)
+python -m tools.tui      # the Rich interface, kept as the fallback
+```
+
+`tools.app` opens on **Position** for the person last loaded, or on onboarding
+when nobody is stored. A person is a name in a local SQLite file
+(`data/accounts.db`, gitignored); facts are recorded one at a time and survive a
+restart. Nothing on those screens reads `mock_dataset/`, and no figure is summed
+in the interface: every amount comes from `code.solver.position` or
+`code.solver.solve_request` with its assumptions attached.
+
+The **Report** tab is the old dashboard, relabelled. It describes the mock
+fixture the engine was calibrated and tested on, and says so on screen.
+
 ## Data and privacy
 
 - Your data stays in local CSV files (`dataset/`) and a local SQLite database
