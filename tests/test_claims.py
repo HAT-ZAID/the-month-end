@@ -634,3 +634,33 @@ def test_a_plan_leg_is_compared_at_the_cents_the_csv_prints():
     assert verify_claims(
         "Pay 32036.45 today and 17413.55 on 2025-01-15.", row
     )["ok"] is True
+
+
+def test_the_bare_adjective_is_affordable_in_any_form():
+    later = dict(ROW)
+    later["affordability_status"] = "affordable_later"
+    later["recommended_payment_method"] = "wait"
+    assert verify_claims("This is affordable.", later)["ok"] is True
+
+    plan = dict(ROW)
+    plan["affordability_status"] = "affordable_with_plan"
+    assert verify_claims("You can afford this.", plan)["ok"] is True
+
+    never = dict(ROW)
+    never["affordability_status"] = "not_affordable"
+    never["recommended_payment_method"] = "not_recommended"
+    assert verify_claims("This is affordable.", never)["ok"] is False
+
+
+def test_a_balance_statement_is_not_a_spending_denial():
+    row = dict(ROW)
+    row["spending_changes_needed"] = "stop:event_9"
+    assert verify_claims("The current balance is unchanged.", row)["ok"] is True
+    assert verify_claims("You have to stop that payment.", row)["ok"] is True
+
+
+def test_a_cookie_header_is_redacted_whole():
+    from code.trace import sanitize
+
+    cleaned = sanitize({"e": "Cookie: theme=light; sessionid=opaque12345"})
+    assert "opaque12345" not in cleaned["e"]

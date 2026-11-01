@@ -36,6 +36,7 @@ from code.amounts import to_decimal
 #: compares that value with the kernel's, so a sentence that denies an affordable
 #: request is caught by the status it actually claims.
 STATUS_PHRASES = {
+    "affordable_any": ("affordable", "can afford", "could afford", "afford"),
     "affordable_now": ("affordable now", "affordable today"),
     "affordable_with_plan": (
         "affordable with plan",
@@ -326,7 +327,7 @@ def _normalise_action(token: str) -> str:
 #: statement about spending, or the field itself set to none.
 _NEG_AUX = (
     r"(?:won't|will not|wouldn't|would not|cannot|can't|needn't|need not|no need"
-    r"|don't|do not|doesn't|does not|didn't|did not|have to|has to|not)"
+    r"|don't|do not|doesn't|does not|didn't|did not|not)"
 )
 _CHANGE_VERB = r"(?:cut|reduc|stop|cancel|trim|chang|drop|paus|adjust)\w*"
 _NO_CHANGES = re.compile(
@@ -336,8 +337,6 @@ _NO_CHANGES = re.compile(
     r"|\b(?:spending|budget|plan)\b[^.]{0,24}\b(?:can\s+|could\s+|will\s+)?"
     r"\b(?:stay|stays|stayed|remain|remains|remained)\b[^.]{0,24}"
     r"\b(?:as it is|the same|unchanged|intact)\b"
-    r"\b(?:unchanged|the same|stays? (?:as it is|the same|unchanged)"
-    r"|remains? (?:as it is|the same|unchanged)|intact)\b"
     r"|\b(?:spending|budget|plan)\b[^.]{0,40}\b(?:unchanged|the same|as it is|intact)\b"
     r"|\b(?:your\s+)?(?:spending|budget|plan)\s+(?:is|are|was|were)\s+"
     r"(?:unchanged|the same|intact)\b"
@@ -461,6 +460,14 @@ def verify_claims(
 
     for variant, canonical in _phrase_claims(prose, STATUS_PHRASES):
         checked += 1
+        if canonical == "affordable_any":
+            # The bare adjective says "this is affordable in some form", which
+            # every affordable_* status satisfies and not_affordable does not.
+            if kernel_status.startswith("affordable"):
+                continue
+            unsupported.append({"kind": "status", "text": variant,
+                                "expected": kernel_status})
+            continue
         if canonical != kernel_status:
             unsupported.append({"kind": "status", "text": variant,
                                 "expected": kernel_status})

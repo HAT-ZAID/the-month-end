@@ -62,7 +62,7 @@ _PASSWORD_ASSIGNMENT = re.compile(
     r"(?:\b(?:received|invalid|rejected|missing|wrong|bad)\s+)?"
     r"\b(?:password|passwd|pwd|pass|passphrase|secret|token|sig|signature|accountkey"
     r"|api[\s_-]?key)\b\s*[=:]\s*\S+"
-    r"|(?i:(?:set-)?cookie)\s*:\s*[^;\n]+"
+    r"|(?i:(?:set-)?cookie)\s*:\s*[^\n]+"
     r"|[?&]sig=\S+"
     r"|\b(?i:api[\s_-]?key|token|secret|password)\b\s+(?:for|is|was)\s+\S+",
     re.IGNORECASE,
