@@ -12,7 +12,8 @@ from code.ocr import (
 )
 
 REPO = Path(__file__).resolve().parents[2]
-MEDIA = REPO / "dataset" / "media" / "images"
+from code.paths import fixture_dir
+MEDIA = fixture_dir(REPO) / "media" / "images"
 
 
 def test_absent_binary_routes_to_flagged_reserve():
@@ -106,8 +107,8 @@ def test_read_image_text_preprocesses_to_grayscale_with_bounded_upscale(monkeypa
 
 
 def test_all_current_image_event_mappings_resolve_with_family_labels(tmp_path):
-    events = pd.read_csv(REPO / "dataset" / "financial_events.csv", dtype=str, keep_default_na=False)
-    images = pd.read_csv(REPO / "dataset" / "images.csv", dtype=str, keep_default_na=False)
+    events = pd.read_csv(fixture_dir(REPO) / "financial_events.csv", dtype=str, keep_default_na=False)
+    images = pd.read_csv(fixture_dir(REPO) / "images.csv", dtype=str, keep_default_na=False)
     blank_events = events[events["amount"] == ""]
     expected = {}
     event_by_id = blank_events.set_index("event_id").to_dict("index")

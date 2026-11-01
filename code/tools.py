@@ -258,8 +258,10 @@ class DatasetBundle:
     def load(cls, repo_root=None) -> "DatasetBundle":
         import pandas as pd
 
+        from code.paths import fixture_dir
+
         root = Path(repo_root) if repo_root is not None else REPO_ROOT
-        dataset = root / "dataset"
+        dataset = fixture_dir(root)
 
         def read(name: str):
             return pd.read_csv(dataset / name, dtype=str, keep_default_na=False)

@@ -7,6 +7,7 @@ import pytest
 
 from code.evidence import resolve_event_amounts
 from code.ocr import configure_tesseract, extract_amount_from_text
+from code.paths import fixture_dir
 
 
 def test_extract_amount_from_ocr_text_matches_expected_currency():
@@ -181,12 +182,13 @@ def test_all_sixteen_current_image_event_mappings_resolve_or_fail_closed():
     if configure_tesseract() is None:
         pytest.skip("native OCR unavailable")
     repo = Path(__file__).resolve().parents[2]
-    images = pd.read_csv(repo / "dataset/images.csv", dtype=str, keep_default_na=False)
-    events = pd.read_csv(repo / "dataset/financial_events.csv", dtype=str, keep_default_na=False).to_dict("records")
+    fixture = fixture_dir(repo)
+    images = pd.read_csv(fixture / "images.csv", dtype=str, keep_default_na=False)
+    events = pd.read_csv(fixture / "financial_events.csv", dtype=str, keep_default_na=False).to_dict("records")
     expected = json.loads((repo / "tests/fixtures/ocr_expected_amounts.json").read_text(encoding="utf-8"))
 
     resolved, warnings = resolve_event_amounts(
-        images, events, repo / "dataset/media/images", ocr_available=True
+        images, events, fixture / "media" / "images", ocr_available=True
     )
     by_event = {event["event_id"]: event for event in resolved}
     by_image = dict(zip(images["image_id"], images["related_event_id"]))
