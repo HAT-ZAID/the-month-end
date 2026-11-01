@@ -165,7 +165,7 @@ class TaskResult:
             "summary": self.summary,
             "trace_path": self.trace_path,
             "actions_applied": list(self.actions_applied),
-            "concerns": list(self.concerns),
+            "concerns": [_trace_concern(item) for item in self.concerns],
             "changed": list(self.changed),
         }
 
@@ -1135,6 +1135,17 @@ def run_task(
     if trace_dir is not None:
         result.trace_path = _write_trace(result, Path(trace_dir))
     return result
+
+
+#: The only concern strings the engine raises. Anything else is model or
+#: provider prose and is recorded as a code, never as text.
+_CONCERN_CODES = frozenset({"dataset unavailable", "provider unavailable"})
+
+
+def _trace_concern(text) -> str:
+    """A concern code, so a trace never carries a handler's prose."""
+    value = str(text or "").strip()
+    return value if value in _CONCERN_CODES else "other"
 
 
 def _trace_safe_action(action) -> str:

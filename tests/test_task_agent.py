@@ -481,3 +481,24 @@ def test_a_whatif_on_the_same_request_borrows_its_amount():
     # The follow-up is about the request the afford created, so it borrows that
     # amount rather than asking for a new one.
     assert str(overrides.get("requested_amount") or "") not in {"", "0"}
+
+
+def test_a_trace_keeps_only_a_known_concern_code(tmp_path):
+    from code.task_agent import (
+        STATUS_OK,
+        TaskResult,
+        StepResult,
+        _write_trace,
+    )
+
+    result = TaskResult(
+        task_id="task_concern",
+        instruction="anything",
+        concerns=["4111111111111111 and 4321", "dataset unavailable"],
+        steps=[StepResult(kind="afford", status=STATUS_OK, text="afford")],
+    )
+    assert _write_trace(result, tmp_path) is not None
+    text = (tmp_path / "task_concern.json").read_text(encoding="utf-8")
+    assert "4111111111111111" not in text
+    assert "dataset unavailable" in text
+    assert "other" in text

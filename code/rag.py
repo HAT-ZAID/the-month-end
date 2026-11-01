@@ -119,7 +119,7 @@ class VectorEvidenceRetriever:
             raise RetrievalError(
                 "refusing a plaintext embedding endpoint: use https or this machine"
             )
-        notice = endpoint_privacy_warning(self.base_url)
+        notice = endpoint_privacy_warning(self.base_url, honour_acceptance=False)
         if notice:
             # The batch, the Jev gate and the TUI all say this to stderr; an
             # embeddings host that is about to receive every evidence chunk

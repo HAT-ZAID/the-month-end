@@ -44,7 +44,13 @@ _SECRET_KEY = re.compile(
 #: keeps ordinary hyphenated words (``desk-booking``, ``risk-free``) intact while
 #: still matching a key at a token boundary.
 _SECRET_VALUE = re.compile(
-    r"(?:\b(?:sk|pk|rk)-[A-Za-z0-9_-]{8,}|(?i:Bearer\s+)[A-Za-z0-9._-]{8,})"
+    r"(?:\b(?:sk|pk|rk)-[A-Za-z0-9_-]{8,}"
+    r"|\b(?:AKIA|ASIA)[0-9A-Z]{16}\b"
+    r"|\bgh[pousr]_[A-Za-z0-9]{20,}"
+    r"|\bxox[abprs]-[A-Za-z0-9-]{10,}"
+    r"|\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}"
+    r"|(?i:Bearer\s+)[A-Za-z0-9._-]{8,}"
+    r"|(?i:Basic\s+)[A-Za-z0-9+/=]{8,})"
 )
 #: ``user:password@`` inside a URL.  A gateway may legitimately carry basic-auth
 #: credentials in its base URL, and a provider error is persisted verbatim, so

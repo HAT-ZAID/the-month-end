@@ -349,3 +349,19 @@ def test_redaction_covers_capitalised_and_cookie_secret_names():
     for name in ("PrivateKey", "SessionToken", "ClientSecret", "IdToken"):
         assert cleaned[name] == REDACTED, name
     assert cleaned["total_tokens"] == 12
+
+
+def test_redaction_covers_cloud_and_oauth_token_prefixes():
+    from code.trace import REDACTED, sanitize
+
+    secrets = [
+        "AKIAIOSFODNN7EXAMPLE",
+        "ghp_0123456789abcdefghijABCDEFGHIJ012345",
+        "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U",
+    ]
+    for value in secrets:
+        cleaned = sanitize({"detail": f"failed with {value} attached"})
+        assert value not in cleaned["detail"]
+        assert REDACTED in cleaned["detail"]
+    basic = sanitize({"detail": "Authorization: Basic dXNlcjpwYXNzd29yZA=="})
+    assert "dXNlcjpwYXNzd29yZA" not in basic["detail"]

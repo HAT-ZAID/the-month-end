@@ -847,3 +847,15 @@ def test_a_remote_embedding_endpoint_warns_before_chunks_leave(tmp_path, capsys)
     err = capsys.readouterr().err
     assert "privacy:" in err
     assert "free tier" in err
+
+
+def test_a_remote_embedding_notice_ignores_the_accept_switch(tmp_path, capsys, monkeypatch):
+    from code.providers import ACCEPT_FREE_TIER_ENV
+
+    monkeypatch.setenv(ACCEPT_FREE_TIER_ENV, "1")
+    root = _tiny_repo(tmp_path)
+    store = LocalStore(root / "data" / "app.db", repo_root=root)
+    VectorEvidenceRetriever(store, base_url="https" "://" "embed" ".invalid" ":11434")
+    err = capsys.readouterr().err
+    assert "privacy:" in err
+    assert "free tier" in err

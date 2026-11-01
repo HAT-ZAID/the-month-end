@@ -252,7 +252,7 @@ class QwenVLBackend:
                 "refusing a plaintext VLM endpoint: use https or this machine"
             )
         if not _warned:
-            notice = endpoint_privacy_warning(self.base_url)
+            notice = endpoint_privacy_warning(self.base_url, honour_acceptance=False)
             if notice:
                 # The reader is the last surface that could hand image bytes to
                 # an endpoint nobody classified, so it says the same thing the

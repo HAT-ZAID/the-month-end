@@ -676,9 +676,16 @@ class _EndpointPrivacy:
         return f"<endpoint privacy={self.privacy!r}>"
 
 
-def endpoint_privacy_warning(url, env=None) -> str:
-    """The free-tier notice for a raw endpoint, before the first plain HTTP call."""
-    return privacy_warning(_EndpointPrivacy(url, env=env), env=env)
+def endpoint_privacy_warning(url, env=None, *, honour_acceptance: bool = True) -> str:
+    """The free-tier notice for a raw endpoint, before the first plain HTTP call.
+
+    ``honour_acceptance=False`` is for the surfaces that move the most data -
+    the embeddings index and the image reader - so a copied ``.env`` cannot
+    quiet the one notice that covers them.
+    """
+    return privacy_warning(
+        _EndpointPrivacy(url, env=env), env=env, honour_acceptance=honour_acceptance
+    )
 
 
 def load_fixtures(fixture_dir) -> dict:
