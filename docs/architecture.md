@@ -87,7 +87,7 @@ contribution paths today:
 
 | Path | Guard |
 |---|---|
-| `decision_explanation` | the candidate must agree with the kernel row on every machine field, and then every amount, date, status/method name and spending-change action in its prose must be reproduced by the kernel row, the supplied request facts (requested amount, minimum balance) or the profile facts it was shown (`code/claims.py`) |
+| `decision_explanation` | the candidate must agree with the kernel row on every machine field; then every amount, date and action in its prose must be reproduced by the kernel row, the supplied request facts (requested amount, minimum balance) or the profile facts it was shown; an explanation that discusses the outcome must name the row's own status and method, and every event id it mentions must be one the row acts on; and a statement about the earliest full-payment date must equal that column. Rejection means the kernel's text ships, so an unrecognised wording costs an explanation, never a figure (`code/claims.py`) |
 | `spending_changes_needed` | `propose_spending_change` is accepted only when the kernel re-solve raises the safe amount and the event is permitted and unprotected; the shipped row keeps the kernel's value, so an accepted proposal is advice, not an edit |
 | Intent / routing | `code/intent.py`; a wrong reading costs a turn, never a number |
 | Concerns | `raise_concern` writes to the trace only |

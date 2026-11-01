@@ -852,6 +852,19 @@ gains a third value, `disagreement`, and `code/main.py` still only prefers
    testing the address would close it; the risk was judged below the cost of one
    more resolver call per provider build.
 
+9. **The explanation guard is an obligation, not a deny-list.** Until the eleventh
+   pass it rejected prose it recognised — a word list of denials, of statuses, of
+   methods — so an explanation could deny a required change, recommend stopping
+   someone else's event, or cite the wrong earliest date simply by wording it a way
+   the list did not contain; measurement put that at 42 of 42 id-naming denials and
+   114 of 150 contradictory status/method sentences. The rule is now positive: an
+   explanation that discusses the outcome must name the row's own status and method,
+   every event id it mentions must be one the row acts on, and an earliest-date
+   statement must equal that column. The residual is vocabulary, not correctness —
+   a correct sentence phrased with a status word the table lacks is demoted to the
+   kernel's text, which is always true, so the cost is an explanation and never a
+   figure.
+
 ### 10.5 The numbers this release was verified at
 
 - `pytest -q`: **365 passed** (release gate); `pytest tests/review`: **450 passed, 1 skipped**.
