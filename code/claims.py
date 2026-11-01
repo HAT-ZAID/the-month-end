@@ -60,6 +60,23 @@ _GLUED_CURRENCY = re.compile(
     r"(?i)\b(?:zar|idr|usd|eur|gbp|sgd|myr|thb|php|inr|jpy|aud|cad|chf|rp)(?=\d)"
 )
 #: Dot-grouped thousands ("2.000.000") are one figure, not a decimal.
+#: Month names a model may write, so "12 September" and "the 12th of September"
+#: are dates rather than a figure followed by a word.
+_MONTHS = {
+    "january": 1, "february": 2, "march": 3, "april": 4, "may": 5, "june": 6,
+    "july": 7, "august": 8, "september": 9, "october": 10, "november": 11,
+    "december": 12, "jan": 1, "feb": 2, "mar": 3, "apr": 4, "jun": 6, "jul": 7,
+    "aug": 8, "sep": 9, "sept": 9, "oct": 10, "nov": 11, "dec": 12,
+}
+_MONTH_WORD = "|".join(sorted(_MONTHS, key=len, reverse=True))
+#: A written date in either order, with an optional day suffix and year.
+_SPELLED_DATE = re.compile(
+    rf"\b(?:(?P<day1>\d{{1,2}})(?:st|nd|rd|th)?\s+(?:of\s+)?"
+    rf"(?P<month1>{_MONTH_WORD})(?:,?\s+(?P<year1>\d{{4}}))?"
+    rf"|(?P<month2>{_MONTH_WORD})\s+(?P<day2>\d{{1,2}})(?:st|nd|rd|th)?"
+    rf"(?:,?\s+(?P<year2>\d{{4}}))?)\b",
+    re.IGNORECASE,
+)
 _MONEY = re.compile(
     r"(?<![\w.])(\d{1,3}(?:\.\d{3})+|\d[\d,]*(?:\.\d+)?)(?![\w])"
 )
@@ -138,6 +155,9 @@ def _money_claims(text: str) -> list[tuple[str, Decimal]]:
     # year/month/day digits cannot be read as money.
     unspanned = _GLUED_CURRENCY.sub(lambda match: " " * len(match.group(0)), text)
     unspanned = _ISO_DATE.sub(lambda match: " " * len(match.group(0)), unspanned)
+    # The same for a written date: "12 September 2025" is a date, and its
+    # day and year are not amounts.
+    unspanned = _SPELLED_DATE.sub(lambda match: " " * len(match.group(0)), unspanned)
     claims = []
     for match in _MONEY.finditer(unspanned):
         token = text[match.start():match.end()]
@@ -190,6 +210,30 @@ def _normalise_action(token: str) -> str:
     return f"reduce_to:{event_id}:{_decimal(amount)}"
 
 
+def _spelled_date(match) -> tuple[int, int, int | None] | None:
+    """(month, day, year-or-None) for a written date, or None if unreadable."""
+    day = match.group("day1") or match.group("day2")
+    month = match.group("month1") or match.group("month2")
+    year = match.group("year1") or match.group("year2")
+    if not day or not month:
+        return None
+    number = _MONTHS.get(str(month).lower())
+    if number is None:
+        return None
+    return number, int(day), (int(year) if year else None)
+
+
+def _date_parts(dates) -> list[tuple[int, int, int]]:
+    parts = []
+    for value in dates:
+        try:
+            year, month, day = (int(part) for part in str(value).split("-"))
+        except ValueError:
+            continue
+        parts.append((month, day, year))
+    return parts
+
+
 def verify_claims(
     text,
     row: dict,
@@ -230,6 +274,21 @@ def verify_claims(
     for match in _ISO_DATE.finditer(prose):
         checked += 1
         if match.group(0) not in dates:
+            unsupported.append({"kind": "date", "text": match.group(0),
+                                "expected": sorted(dates)})
+    spelled = _date_parts(dates)
+    for match in _SPELLED_DATE.finditer(prose):
+        parsed = _spelled_date(match)
+        if parsed is None:
+            continue
+        month, day, year = parsed
+        checked += 1
+        if not any(
+            month == item_month
+            and day == item_day
+            and (year is None or year == item_year)
+            for item_month, item_day, item_year in spelled
+        ):
             unsupported.append({"kind": "date", "text": match.group(0),
                                 "expected": sorted(dates)})
 

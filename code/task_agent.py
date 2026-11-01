@@ -349,7 +349,6 @@ class Workspace:
         self.last_amount: Decimal | None = None
         #: Which request the borrowed amount was asked about.
         self.last_amount_for: str | None = None
-        self.last_date: date | None = None
 
     # -- dataset -----------------------------------------------------------
 
@@ -660,7 +659,6 @@ def _afford(workspace: Workspace, spec: StepSpec, result: TaskResult) -> StepRes
 
     workspace.last_amount = amount
     workspace.last_amount_for = request_id
-    workspace.last_date = wanted_date
 
     if decision is None:
         return StepResult(

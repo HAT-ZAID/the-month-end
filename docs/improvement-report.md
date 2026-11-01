@@ -599,7 +599,7 @@ branch.
 | four audit scripts to `tools/experiments/` | **Done.** `compare_agentic`, `compare_jev`, `compare_ocr` and `verify_samples` moved, with repo-root depth fixed and every documented path updated. |
 | one Decimal coercion | **Done** for the six modules that had their own; two hand-written coercers were then found by review and folded in too. |
 | three near-identical remote providers | **Done**: one `OpenAICompatibleProvider`, three thin declarative presets, plus a `paid` class for real user data. |
-| prune the suite from 629 to "about 520" | **Refuted as stated.** Only one `def test_` name repeats across the whole suite, ~28 of the 637 cases come from parametrisation, and the `test_oracle_*` files are not duplicates: they pin distinct §6.3 rules (pending credit ignored, pending debit reserved, failed/cancelled/unrealised ignored, NaN and blank fail-closed, duplicate ids de-duplicated, cancellation before settlement). Reaching 520 would have deleted about 110 one-off invariant tests. Four assertions that looked redundant were cut first; the pre-push correctness review then proved three of the four were not duplicates (only the `test_jev` name repeated), so the derived coverage was restored before sign-off: the `.gitignore` negation that lets `.env.example` through, the check that every `.env.example` value is a placeholder (its absence had left `SAFE_ENV_VALUES` and `_assignments` as dead code), the upscale bound in `preprocess_image`, and the Jev redirect handler. Restoring the OCR bound also exposed a real gap: the cap applies to upscaling only, so a source wider than 2400px is passed through unchanged, and the test now pins that behaviour instead of a claim the code does not make. 667 passed, 1 skipped. |
+| prune the suite from 629 to "about 520" | **Refuted as stated.** Only one `def test_` name repeats across the whole suite, ~28 of the 637 cases come from parametrisation, and the `test_oracle_*` files are not duplicates: they pin distinct §6.3 rules (pending credit ignored, pending debit reserved, failed/cancelled/unrealised ignored, NaN and blank fail-closed, duplicate ids de-duplicated, cancellation before settlement). Reaching 520 would have deleted about 110 one-off invariant tests. Four assertions that looked redundant were cut first; the pre-push correctness review then proved three of the four were not duplicates (only the `test_jev` name repeated), so the derived coverage was restored before sign-off: the `.gitignore` negation that lets `.env.example` through, the check that every `.env.example` value is a placeholder (its absence had left `SAFE_ENV_VALUES` and `_assignments` as dead code), the upscale bound in `preprocess_image`, and the Jev redirect handler. Restoring the OCR bound also exposed a real gap: the cap applies to upscaling only, so a source wider than 2400px is passed through unchanged, and the test now pins that behaviour instead of a claim the code does not make. 670 passed, 1 skipped. |
 
 ### 10.2 The two pre-push reviews
 
@@ -676,7 +676,9 @@ findings were in the newest code of all:
 * the claim check counted a short figure as money only when a money word sat near
   it, so `The ceiling is 200 today.` shipped 200 that appears nowhere in the row —
   and 141 of the 250 requests have a safe amount under 1,000. The rule is now
-  inverted: every figure is a claim unless a count unit follows it. A word list is
+  inverted: every figure is a claim unless a count unit follows it or it is one side of a small fraction ("3 of 5
+samples"). A currency code glued to the digits ("ZAR50000") is a prefix, not a
+word boundary, so it can no longer hide a figure. A word list is
   not an invariant.
 * an agreeing candidate could open its rationale with `Disagreements:`, which is the
   only in-band signal that separates an unendorsed note from a decision. A candidate
@@ -739,7 +741,7 @@ gains a third value, `disagreement`, and `code/main.py` still only prefers
 
 ### 10.5 The numbers this release was verified at
 
-- `pytest -q`: **667 passed, 1 skipped**.
+- `pytest -q`: **670 passed, 1 skipped**.
 - `output.csv`: 250 rows, sha256 `1f35043f…376486`, byte-identical to the committed
   file before and after every change in this release.
 - `python -m code.main` on the offline path: no network call, no stderr noise.

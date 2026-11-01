@@ -426,3 +426,20 @@ def test_a_spending_change_amount_can_be_cited():
     report = verify_claims("Reduce event_5 to 250 so the request fits.", row)
     amounts = [item["text"] for item in report["unsupported"] if item["kind"] == "amount"]
     assert amounts == []
+
+
+def test_a_written_date_is_checked_and_not_read_as_money():
+    row = dict(ROW)
+    row["earliest_date_for_full_payment"] = "2025-09-12"
+    report = verify_claims("The safest date is the 12th of September 2025.", row)
+    assert [item for item in report["unsupported"] if item["kind"] == "amount"] == []
+    assert report["ok"] is True
+    wrong = verify_claims("The safest date is 15 September 2025.", row)
+    assert [item["kind"] for item in wrong["unsupported"]] == ["date"]
+
+
+def test_a_written_date_without_a_year_reads_against_the_row():
+    row = dict(ROW)
+    row["earliest_date_for_full_payment"] = "2025-09-12"
+    assert verify_claims("12 September is the safest day.", row)["ok"] is True
+    assert verify_claims("13 September is the safest day.", row)["ok"] is False

@@ -173,6 +173,18 @@ _CANDIDATE_FIELDS = (
 )
 
 
+#: Emphasis and invisible characters a model may wrap around the marker.
+_MARKER_NOISE = str.maketrans({character: None for character in "*_`~"})
+_MARKER_LEAD = "\ufeff\u200b\u200c\u200d\u2060"
+
+
+def _opens_with_marker(text) -> bool:
+    """True when the prose opens with the disagreement marker, however styled."""
+    cleaned = str(text or "").strip().lstrip(_MARKER_LEAD)
+    cleaned = cleaned.translate(_MARKER_NOISE).lstrip().lstrip(_MARKER_LEAD)
+    return re.match(r"disagreements?\s*:", cleaned, re.IGNORECASE) is not None
+
+
 def _disagreement_note(rationale: str, differences) -> str:
     """The note a disagreeing candidate writes on the agent path.
 
@@ -335,9 +347,7 @@ def enforce_decision(
         rationale_source = "disagreement"
 
     final_row = dict(row)
-    if rationale_source == "candidate" and rationale.strip().lower().startswith(
-        DISAGREEMENT_PREFIX.strip().lower()
-    ):
+    if rationale_source == "candidate" and _opens_with_marker(rationale):
         # The marker means "the model disagreed here". A candidate that agrees
         # cannot borrow it: the marker is the only in-band signal that
         # separates an unendorsed note from a decision, and a shipped row that
