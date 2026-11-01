@@ -12,7 +12,7 @@ Section numbering in §6 is load-bearing: `code/changes.py`, `code/options.py`, 
 
 1. Read this file.
 2. Never invent a financial fact. The deterministic kernel owns every machine field; the model explains, classifies intent, and proposes — it does not compute balances.
-3. Run `pytest -q` before claiming anything works. Baseline: **696 passed, 1 skipped**.
+3. Run `pytest -q` before claiming anything works. Baseline: **704 passed, 1 skipped**.
 4. A major change gets a CodeRabbit deep review iterated until clean, then two independent reviews immediately before push.
 5. Secrets come from the environment only. A free model tier warns before it touches free text.
 

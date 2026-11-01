@@ -191,7 +191,10 @@ def _opens_with_marker(text) -> bool:
     cleaned = _MARKER_INVISIBLE.sub("", str(text or ""))
     cleaned = cleaned.replace("\uff1a", ":").replace("\u2236", ":")
     cleaned = cleaned.translate(_MARKER_NOISE).strip()
-    cleaned = _MARKER_STRUCTURE.sub("", cleaned).lstrip()
+    cleaned = _MARKER_STRUCTURE.sub("", cleaned)
+    # Any leading punctuation a model decorates the marker with: a bullet we
+    # did not think of must not become a way to ship unendorsed prose.
+    cleaned = re.sub(r"^[^\w]+", "", cleaned).lstrip()
     return re.match(r"disagreements?\s*:", cleaned, re.IGNORECASE) is not None
 
 

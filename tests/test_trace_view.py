@@ -403,3 +403,30 @@ def test_redaction_covers_the_shapes_a_provider_error_carries():
     assert cleaned["google"] == "[REDACTED]"
     assert "abcdefghijkl" not in cleaned["azure"]
     assert cleaned["keep"] == "account balance 500000"
+
+
+def test_redaction_covers_the_shapes_a_gateway_error_echoes():
+    from code.trace import sanitize
+
+    for text in (
+        "401 Received API Key = gwk_live_7f3a9c2e rejected",
+        "invalid API key for abcdef123456",
+        "sigv4 Sig=deadbeefdeadbeefdeadbeef",
+        "url?sv=2022&sig=abcdef123456",
+        "Cookie: sid=abcdef123456",
+        "Set-Cookie: sid=abcdef123456",
+    ):
+        assert "[REDACTED]" in sanitize({"e": text})["e"], text
+
+
+def test_a_registered_secret_is_redacted_whatever_its_shape():
+    from code.trace import register_secret, sanitize
+
+    register_secret("plainkeyvalue12345")
+    assert sanitize({"e": "boom plainkeyvalue12345 today"})["e"] == "boom [REDACTED] today"
+
+
+def test_a_set_value_is_serialisable():
+    from code.trace import sanitize
+
+    assert sanitize({"e": {"b", "a"}}) == {"e": ["a", "b"]}

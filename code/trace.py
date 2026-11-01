@@ -51,7 +51,7 @@ _SECRET_VALUE = re.compile(
     r"|\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}"
     r"|(?i:Bearer\s+)[A-Za-z0-9._-]{8,}"
     r"|(?i:Basic\s+)[A-Za-z0-9+/=]{8,}"
-    r"|-{5}BEGIN [A-Z ]*PRIVATE KEY-{5}[\s\S]*?-{5}END [A-Z ]*PRIVATE KEY-{5}"
+    r"|-{5}BEGIN [A-Z0-9 ]*PRIVATE KEY[A-Z ]*-{5}[\s\S]*?-{5}END [A-Z0-9 ]*PRIVATE KEY[A-Z ]*-{5}"
     r"|\bAIza[A-Za-z0-9_-]{30,}"
     r"|\b(?:hf|npm|whsec)_[A-Za-z0-9]{16,})"
 )
@@ -59,8 +59,12 @@ _SECRET_VALUE = re.compile(
 #: above because an inline ``(?i:`` group reads as a drive letter to the
 #: submission scan.
 _PASSWORD_ASSIGNMENT = re.compile(
-    r"\b(?:password|passwd|secret|token|api[-_]?key|accountkey)"
-    r"\s*[=:]\s*\S{6,}",
+    r"(?:\b(?:received|invalid|rejected|missing|wrong|bad)\s+)?"
+    r"\b(?:password|passwd|pwd|pass|passphrase|secret|token|sig|signature|accountkey"
+    r"|api[\s_-]?key)\b\s*[=:]\s*\S+"
+    r"|(?i:(?:set-)?cookie)\s*:\s*[^;\n]+"
+    r"|[?&]sig=\S+"
+    r"|\b(?i:api[\s_-]?key|token|secret|password)\b\s+(?:for|is|was)\s+\S+",
     re.IGNORECASE,
 )
 #: ``user:password@`` inside a URL.  A gateway may legitimately carry basic-auth
@@ -77,6 +81,19 @@ _UNSTABLE_KEYS = frozenset({"duration_ms"})
 _UNSTABLE_BLOCKS = frozenset({"metadata"})
 _UNSAFE_FILE_CHARS = re.compile(r"[^A-Za-z0-9._-]+")
 MAX_TEXT_CHARS = 1200
+
+
+#: Literal secrets this process holds.  A provider error can quote the key it
+#: rejected, and a trace outlives the process, so the exact strings are
+#: registered by whoever holds them and replaced before any shape is guessed.
+_KNOWN_SECRETS: set[str] = set()
+
+
+def register_secret(value) -> None:
+    """Remember a literal secret so every later redaction can replace it."""
+    text = str(value or "").strip()
+    if len(text) >= 8:
+        _KNOWN_SECRETS.add(text)
 
 
 def _safe_name(value) -> str:
@@ -101,9 +118,14 @@ def sanitize(value):
         return [sanitize(item) for item in value]
     if hasattr(value, "as_dict") and callable(value.as_dict):
         return sanitize(value.as_dict())
+    if isinstance(value, (set, frozenset)):
+        return [sanitize(item) for item in sorted(value, key=str)]
     if isinstance(value, str):
         cleaned = _URL_USERINFO.sub(f"{REDACTED}@", value)
         cleaned = _SECRET_VALUE.sub(REDACTED, cleaned)
+        for secret in _KNOWN_SECRETS:
+            if secret in cleaned:
+                cleaned = cleaned.replace(secret, REDACTED)
         return _PASSWORD_ASSIGNMENT.sub(REDACTED, cleaned)
     return value
 

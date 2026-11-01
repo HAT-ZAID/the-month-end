@@ -36,20 +36,21 @@ from code.amounts import to_decimal
 #: compares that value with the kernel's, so a sentence that denies an affordable
 #: request is caught by the status it actually claims.
 STATUS_PHRASES = {
-    "affordable_now": (
-        "affordable now",
-        "affordable today",
-        "affordable",
-        "can afford",
-        "could afford",
-    ),
+    "affordable_now": ("affordable now", "affordable today"),
     "affordable_with_plan": (
         "affordable with plan",
         "affordable with a plan",
         "affordable with the plan",
         "affordable with some changes",
     ),
-    "affordable_later": ("affordable later", "affordable next"),
+    "affordable_later": (
+        "affordable later",
+        "affordable next",
+        "not affordable yet",
+        "not affordable now",
+        "not affordable today",
+        "cannot afford it now",
+    ),
     "not_affordable": (
         "not affordable",
         "cannot afford",
@@ -100,6 +101,8 @@ METHOD_PHRASES = {
 
 #: Money fields the CSV writes at cent precision.
 _CENT_FIELDS = ("amount_safe_to_pay",)
+#: Fields whose money arrives inside a string ("date:amount" legs, actions).
+_CENT_LEG_FIELDS = ("payment_plan", "spending_changes_needed")
 
 #: A currency code glued to the digits ("ZAR50000", "Rp2.000.000") is a prefix,
 #: not a word boundary, so the code is blanked before the scan and the digits
@@ -179,6 +182,11 @@ def _decimal(value) -> Decimal | None:
     return to_decimal(value, None, strip_grouping=True)
 
 
+def _to_cents(number: Decimal) -> Decimal:
+    """The cents ``output.csv`` writes for this figure."""
+    return number.quantize(Decimal("0.01"), rounding=ROUND_DOWN)
+
+
 def _supported_numbers(row: dict, extra_numbers=()) -> set[Decimal]:
     numbers: set[Decimal] = set()
     for field, value in row.items():
@@ -188,7 +196,7 @@ def _supported_numbers(row: dict, extra_numbers=()) -> set[Decimal]:
         if field in _CENT_FIELDS:
             # ``output.csv`` ships cents, so that is the figure a correct
             # explanation cites; the solver's full precision is not.
-            number = number.quantize(Decimal("0.01"), rounding=ROUND_DOWN)
+            number = _to_cents(number)
         numbers.add(number)
     # An installment or partial plan is a `date:amount|date:amount` string, so
     # each leg amount has to be added explicitly: the whole string is not a
@@ -200,12 +208,12 @@ def _supported_numbers(row: dict, extra_numbers=()) -> set[Decimal]:
         if len(parts) >= 3:
             number = _decimal(parts[-1])
             if number is not None:
-                numbers.add(number)
+                numbers.add(_to_cents(number))
     for leg in str(row.get("payment_plan") or "").split("|"):
         _, _, amount = leg.partition(":")
         number = _decimal(amount)
         if number is not None:
-            numbers.add(number)
+            numbers.add(_to_cents(number))
     for value in extra_numbers or ():
         number = _decimal(value)
         if number is not None:
@@ -293,6 +301,9 @@ def _phrase_claims(text: str, table: dict[str, tuple[str, ...]]) -> list[tuple[s
             span = match.span()
             if any(start <= span[0] < end for start, end in consumed):
                 continue
+            before = lowered[: span[0]].rstrip()
+            if before.endswith("not") and canonical.startswith("affordable"):
+                continue  # "not affordable today" is the negative variant
             consumed.append(span)
             found.append((variant, canonical))
     return found
@@ -310,12 +321,28 @@ def _normalise_action(token: str) -> str:
 #: machine field a sentence can contradict without naming a number, so the
 #: wordings are enumerated rather than guessed: "no cuts", "need not stop",
 #: "spending stays as it is", "spending_changes_needed: none".
+#: A denial of a required change, matched by shape rather than by enumerating
+#: wordings: an auxiliary negation followed by a change verb, an absence-of-change
+#: statement about spending, or the field itself set to none.
+_NEG_AUX = (
+    r"(?:won't|will not|wouldn't|would not|cannot|can't|needn't|need not|no need"
+    r"|don't|do not|doesn't|does not|didn't|did not|have to|has to|not)"
+)
+_CHANGE_VERB = r"(?:cut|reduc|stop|cancel|trim|chang|drop|paus|adjust)\w*"
 _NO_CHANGES = re.compile(
-    r"\b(?:no|without(?: any)?|needs? no|need not|do(?:es)? not need|don't need)\s+"
-    r"(?:to\s+)?(?:spending\s+)?(?:changes?|cuts?|reductions?|trims?|stops?|cancellations?|pauses?|stop|cut|reduce|trim|cancel|pause)\b"
-    r"|\bnothing\b[^.]{0,24}\b(?:stop|cut|reduce|change|cancel)\b"
-    r"|\bspending_changes_needed\s*[:=]\s*none\b"
-    r"|\bspending\s+(?:stays|remains)\b",
+    rf"\b{_NEG_AUX}\b[^.]{{0,40}}\b{_CHANGE_VERB}\b"
+    rf"|\bwithout(?: any)?\b[^.]{{0,24}}\b{_CHANGE_VERB}\b"
+    rf"|\b(?:nothing|no)\b[^.]{{0,24}}\b{_CHANGE_VERB}\b"
+    r"|\b(?:spending|budget|plan)\b[^.]{0,24}\b(?:can\s+|could\s+|will\s+)?"
+    r"\b(?:stay|stays|stayed|remain|remains|remained)\b[^.]{0,24}"
+    r"\b(?:as it is|the same|unchanged|intact)\b"
+    r"\b(?:unchanged|the same|stays? (?:as it is|the same|unchanged)"
+    r"|remains? (?:as it is|the same|unchanged)|intact)\b"
+    r"|\b(?:spending|budget|plan)\b[^.]{0,40}\b(?:unchanged|the same|as it is|intact)\b"
+    r"|\b(?:your\s+)?(?:spending|budget|plan)\s+(?:is|are|was|were)\s+"
+    r"(?:unchanged|the same|intact)\b"
+    r"|\bnothing (?:changes|else changes)\b"
+    r"|\bspending_changes_needed\s*[:=]\s*none\b",
     re.IGNORECASE,
 )
 
@@ -423,6 +450,9 @@ def verify_claims(
     # covered it.
     for match in _DAY_ORDINAL.finditer(prose):
         if any(start <= match.start() < end for start, end in spelled_spans):
+            continue
+        # "1st installment" is a count, not a day.
+        if _COUNT_UNIT.match(prose[match.end():]):
             continue
         checked += 1
         if int(match.group(1)) not in {item_day for _, item_day, _ in spelled}:

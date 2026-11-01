@@ -592,3 +592,45 @@ def test_a_day_only_ordinal_is_checked_against_the_row_dates():
     assert verify_claims("Make the payment on the 3rd.", row)["ok"] is True
     wrong = verify_claims("Make the payment on the 14th.", row)
     assert [item["kind"] for item in wrong["unsupported"]] == ["date"]
+
+
+def test_an_ordinal_count_is_not_a_date():
+    report = verify_claims("The 1st installment is due.", dict(ROW))
+    assert [item for item in report["unsupported"] if item["kind"] == "date"] == []
+
+
+def test_the_shape_of_a_denial_is_a_claim_not_a_list_of_words():
+    row = dict(ROW)
+    row["spending_changes_needed"] = "stop:event_9"
+    for sentence in (
+        "You won't need to cut anything.",
+        "You will not have to reduce anything.",
+        "Your spending is unchanged.",
+        "Nothing changes in your spending.",
+        "You do not have to stop that payment.",
+        "You do not need to make any cuts.",
+        "Spending can stay exactly as it is.",
+        "No payments need to be cancelled.",
+    ):
+        assert verify_claims(sentence, row)["ok"] is False, sentence
+
+
+def test_a_correct_wait_explanation_still_ships():
+    row = dict(ROW)
+    row["affordability_status"] = "affordable_later"
+    row["recommended_payment_method"] = "wait"
+    row["earliest_date_for_full_payment"] = "2026-05-15"
+    assert verify_claims("Not affordable today, but yes later.", row)["ok"] is True
+    # A sentence that states both polarities in one clause is treated as a
+    # denial: the conservative reading costs an explanation, not money.
+    assert verify_claims(
+        "You cannot afford this today, but you can on 2026-05-15.", row
+    )["ok"] is False
+
+
+def test_a_plan_leg_is_compared_at_the_cents_the_csv_prints():
+    row = dict(ROW)
+    row["payment_plan"] = "2024-12-15:32036.45|2025-01-15:17413.55"
+    assert verify_claims(
+        "Pay 32036.45 today and 17413.55 on 2025-01-15.", row
+    )["ok"] is True

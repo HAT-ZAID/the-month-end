@@ -582,6 +582,24 @@ class PaidProvider(OpenAICompatibleProvider):
     privacy = PRIVACY_PAID
 
 
+def _register_secrets(env) -> None:
+    """Hand the trace scrubber every secret this process is configured with.
+
+    A gateway that rejects a key often echoes it in the error body, and that
+    body is persisted.  Registering the exact strings catches a key of any
+    shape; the regexes stay as the second line for keys we do not hold.
+    """
+    from code.trace import register_secret
+
+    for name in (KILO_API_KEY_ENV, PAID_API_KEY_ENV, "OPENROUTER_KEY", "OPENCODE_API_KEY"):
+        register_secret(env.get(name))
+    for name in (KILO_BASE_URL_ENV, PAID_BASE_URL_ENV, OLLAMA_BASE_URL_ENV):
+        try:
+            register_secret(urlsplit(str(env.get(name) or "")).password)
+        except ValueError:
+            continue
+
+
 def build_provider(env=None):
     """Return ``(provider, reason)``; ``provider`` is ``None`` when unusable.
 
@@ -590,6 +608,7 @@ def build_provider(env=None):
     on the first chat turn, where the loop falls back to the kernel.
     """
     env = os.environ if env is None else env
+    _register_secrets(env)
     kind = str(env.get(PROVIDER_ENV) or "none").strip().lower()
     if kind in ("", "none", "null", "off"):
         return None, f"{PROVIDER_ENV} is unset or 'none'"
