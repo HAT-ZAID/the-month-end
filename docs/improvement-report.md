@@ -776,6 +776,33 @@ None of it is an argument against the earlier passes. Each one closed a real pat
 and the pattern they trace is the one worth recording: a check written as a list of
 words will always be one sentence short.
 
+A ninth pass stopped patching and changed the rule. Four rounds had widened the
+list of ways a sentence can deny a required spending change, and each round left
+sentences beside the ones it had just covered: "no cuts" closed, "need not stop"
+open; "spending is unchanged" closed, "the plan stays within the minimum" newly
+rejected as if it were a denial. The check was answering the wrong question.
+
+The question that can be decided is not "does this sentence deny the change" —
+that is open-ended English — but "does this explanation name what the row does".
+On a row that carries an action, a model's rationale now ships only if it names
+that action. Six rows in 250 carry one, the kernel text is never wrong, and the
+gate closes every phrasing at once, including a contradiction written in the
+prose form of an action token the column never prints ("you should stop
+event_…" with the wrong event). The deny-list stays as a second line for the
+sentences that also name the action.
+
+The same pass turned the rule round in three smaller places: a "pay in full"
+mention is a date statement only when it names the earliest-date column, so an
+installments row no longer ships "pay in full on <date>"; an absence claim needs
+its predicate, so a sentence about solvency is not read as a denial; and a
+sentence that names the action is describing the change rather than denying it.
+
+It also corrects the record: the eighth pass's commit message described an NFKC
+normalisation that was never written, and the compatibility-form "Ｄｉｓａｇｒｅｅｍｅｎｔｓ"
+still shipped as a decision. The normalisation exists now, with a test. A release
+note that describes an intended fix as a landed one is a worse defect than the
+fix being late, and this document exists to keep that from happening quietly.
+
 ### 10.3 The disagreement note, and why it is agent-only
 
 The model's explanation used to be discarded whenever it disagreed with the computed
