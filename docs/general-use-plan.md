@@ -46,11 +46,28 @@ Baselines: `pytest -q` → **365 passed**; `pytest -q tests/review` → **475 pa
 | `code/accounts.py` | **new, untracked** | SQLite store for named users |
 | `docs/general-use-plan.md` | **new, untracked** | This file |
 | `docs/improvement-report-2.md` | **new, untracked** | The findings behind this phase |
-| `tests/review/test_account.py` | **does not exist** | Must be written in phase 0 |
-| `tests/review/test_accounts.py` | **does not exist** | Must be written in phase 0 |
+| `code/service.py` | committed | The engine: users, facts, position, decide, buy, history |
+| `code/chat.py` | committed | The conversation: model chooses tools, kernel answers, no-provider says so |
+| `code/paths.py` | committed | Resolves `mock_dataset/` first, falls back to `dataset/` |
+| `code/solver.py` | committed | Gained `position(...)`: the only place a position figure is computed |
+| `tools/app.py` | committed | The Textual interface: Position, Purchase, Ledger, Decisions, Report, Chat |
+| `tests/review/test_general_use.py` | committed | 19 focused tests: account, store, engine, screens, conversation |
 
-Nothing has been committed since `3370f07`. Phase 0 is therefore: write the two test files, make
-them pass, and commit the foundation. Do not build UI on uncommitted foundations again.
+Phases 0, 1, 1b, 1c, 2 and 3 are done and committed; phase 4 is done except the release
+gates, which run only after every phase is complete (the user's instruction). The Phase 1
+command surface ships as screens in `tools/app.py` rather than as `user`/`add`/`buy` REPL
+commands, because the chosen interface is Textual; `tools/tui.py` keeps its dataset commands as
+the fallback and now prints a pointer to the new app.
+
+Focused tests only, per the user's instruction: `pytest -q tests/review/test_general_use.py` ->
+19 passed, `pytest -q tests/test_submission.py tests/test_hardening.py` -> 18 passed,
+`pytest -q tests/test_submission.py tests/test_invariants.py tests/test_packaging.py
+tests/test_hardening.py tests/test_evaluation.py` -> 50 passed. No full-suite run yet, and no
+review rounds yet: both are gated on all phases being complete.
+
+One pre-existing fact worth recording: at `3370f07` the pipeline re-run produces
+`BFF8447F...`, not the committed `1F35043F...`. The drift is in the batch explanation text and
+exists without this branch's changes; the committed `output.csv` is restored and untouched.
 
 ---
 
