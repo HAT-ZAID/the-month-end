@@ -113,6 +113,16 @@ FREE_TIER_WARNING = (
 )
 
 
+def is_cloud_model(model) -> bool:
+    """A ``-cloud`` Ollama tag runs off this machine whatever the URL says.
+
+    ``/api/tags`` never lists these, so a selector has to name them, and the
+    endpoint being ``localhost`` must not launder them into the local class.
+    """
+    tag = str(model or "").strip().lower()
+    return tag.endswith("-cloud") or tag.endswith(":cloud")
+
+
 class ProviderUnavailable(RuntimeError):
     """A provider cannot serve a chat turn; the caller falls back to the kernel."""
 
@@ -357,6 +367,10 @@ class OllamaProvider(ChatProvider):
         # default is only a claim about the usual case.  Classify the endpoint
         # that was actually resolved: a remote host is off-machine data.
         if not is_local_url(self.base_url):
+            self.privacy = PRIVACY_FREE
+        # A cloud tag executes on the provider's hardware even though the URL
+        # is loopback: the prompt still leaves this machine.
+        if is_cloud_model(self.model):
             self.privacy = PRIVACY_FREE
 
     @classmethod
@@ -684,6 +698,140 @@ def privacy_warning(provider, env=None, *, honour_acceptance: bool = True) -> st
     return FREE_TIER_WARNING
 
 
+# ---------------------------------------------------------------------------
+# Interactive model selection
+# ---------------------------------------------------------------------------
+
+MODEL_CHOICES_ENV = "BUY_WAIT_MODEL_CHOICES"
+OLLAMA_TAGS_TIMEOUT_S = 2.0
+
+#: Models an interactive surface offers by name.  An Ollama cloud tag is never
+#: listed in ``/api/tags``, so a selector has to state it; the local entry comes
+#: first because it is the only one that never sends data off the machine.
+DEFAULT_MODEL_CHOICES = (
+    ("gemma4:e2b-it-qat", "gemma4 e2b, local"),
+    ("gemma4:31b-cloud", "gemma4 31b, cloud"),
+    ("gpt-oss:20b-cloud", "gpt-oss 20b, cloud"),
+)
+
+_REMOTE_MODEL_KINDS = (
+    ("openrouter", OpenRouterProvider),
+    ("kilo", KiloProvider),
+    ("paid", PaidProvider),
+)
+
+
+def _ollama_tags(base_url: str, timeout: float) -> list[str] | None:
+    """Model names served by the Ollama daemon, or ``None`` when unreachable."""
+    if not is_secure_or_local_url(base_url):
+        return None
+    import json
+    from urllib.request import urlopen
+
+    try:
+        with urlopen(base_url.rstrip("/") + "/api/tags", timeout=timeout) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except Exception:
+        return None
+    names = []
+    for item in payload.get("models") or ():
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or item.get("model") or "").strip()
+        if name:
+            names.append(name)
+    return names
+
+
+def _model_catalogue(env) -> tuple[tuple[str, str], ...]:
+    raw = str(env.get(MODEL_CHOICES_ENV) or "").strip()
+    if not raw:
+        return DEFAULT_MODEL_CHOICES
+    entries = []
+    for item in raw.split(","):
+        model, _, label = item.strip().partition("=")
+        model = model.strip()
+        if model:
+            entries.append((model, label.strip() or model))
+    return tuple(entries) or DEFAULT_MODEL_CHOICES
+
+
+def model_choices(env=None, *, probe: bool = True, timeout: float = OLLAMA_TAGS_TIMEOUT_S):
+    """Selectable models for an interactive surface, safest first.
+
+    Never raises: an unreachable daemon marks the Ollama entries
+    ``available=False`` so the caller can say why a model will not answer.
+    """
+    env = os.environ if env is None else env
+    base_url = str(env.get(OLLAMA_BASE_URL_ENV) or DEFAULT_OLLAMA_BASE_URL).strip()
+    discovered = _ollama_tags(base_url, timeout) if probe else None
+
+    entries: list[dict] = []
+    seen: set[tuple[str, str]] = set()
+
+    def add(kind, model, label, privacy, available, note=""):
+        if not model or (kind, model) in seen:
+            return
+        seen.add((kind, model))
+        entries.append(
+            {
+                "kind": kind,
+                "model": model,
+                "label": label,
+                "privacy": privacy,
+                "available": available,
+                "note": note,
+            }
+        )
+
+    for model, label in _model_catalogue(env):
+        cloud = is_cloud_model(model)
+        add(
+            "ollama",
+            model,
+            label,
+            PRIVACY_FREE if cloud else PRIVACY_LOCAL,
+            (discovered is not None) if probe else None,
+            "leaves this machine" if cloud else "",
+        )
+    for model in sorted(discovered or ()):
+        add("ollama", model, model, PRIVACY_LOCAL, True)
+
+    configured = str(env.get(PROVIDER_ENV) or "").strip().lower()
+    for kind, cls in _REMOTE_MODEL_KINDS:
+        if configured != kind:
+            continue
+        try:
+            provider = cls(env=env)
+        except Exception:
+            continue
+        if provider.model and provider.has_credentials():
+            add(kind, provider.model, f"{kind}: {provider.model}", provider.privacy, True)
+    return entries
+
+
+def provider_for_choice(choice, env=None):
+    """Build the provider a catalogue entry names.
+
+    Raises :class:`ProviderUnavailable` for an unknown kind; a missing key is
+    reported by the provider's own ``has_credentials`` check at call time.
+    """
+    env = os.environ if env is None else env
+    kind = str(choice.get("kind") or "ollama").strip().lower()
+    model = str(choice.get("model") or "").strip()
+    if kind == "ollama":
+        return OllamaProvider(model or None, env=env)
+    if kind == "openrouter":
+        return OpenRouterProvider(model or None, env=env)
+    if kind == "kilo":
+        return KiloProvider(model or None, env=env)
+    if kind == "paid":
+        return PaidProvider(model or None, env=env)
+    if kind == "replay":
+        return ReplayProvider()
+    raise ProviderUnavailable(f"unknown model kind {kind!r}")
+
+
 def endpoint_privacy_class(url) -> str:
     """The privacy class of an endpoint that is not a :class:`ChatProvider`.
 
@@ -740,6 +888,7 @@ __all__ = [
     "DEFAULT_FIXTURE_DIR",
     "DEFAULT_KILO_MODEL",
     "DEFAULT_MAX_CALLS",
+    "DEFAULT_MODEL_CHOICES",
     "DEFAULT_OLLAMA_BASE_URL",
     "DEFAULT_OLLAMA_MODEL",
     "FREE_TIER_WARNING",
@@ -766,6 +915,10 @@ __all__ = [
     "endpoint_privacy_class",
     "endpoint_privacy_warning",
     "is_local_url",
+    "is_cloud_model",
+    "model_choices",
+    "MODEL_CHOICES_ENV",
+    "provider_for_choice",
     "is_loopback_host",
     "is_secure_or_local_url",
     "load_fixtures",

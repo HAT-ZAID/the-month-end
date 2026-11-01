@@ -46,7 +46,7 @@ arithmetic.
 | H11/D5 | `request_25` fails closed on a missing USD→IDR rate | Refuted | Exact 2024-03-15 rate 15833.33 resolves; `fail_closed=False`. Safe is 0 because the day-0 lump leaves 18.98M against a 23.38M floor |
 | H12 | Gold wait date equals the deadline | Refuted | Gold wait dates are salary 15ths; `request_04` waits to 2024-06-15 though its deadline is 2024-06-19 |
 | H13 | Event-status filtering | Refuted | Dropping `scheduled`, `pending`, `settled`, or keeping settled-only never yields an informative exact; dropping `scheduled` loses `request_01` |
-| H14–H16, H18 | Category synonyms, dedup, window start, request-date FX | Refuted | Window start at next month scores 3 exact (worse); the rest have no matching row |
+| H14–H16, H18 | Category synonyms, dedup, window start, request-date FX | Partly tested | Window start at next month scores 3 exact (worse than 4); H14 (synonyms), H15 (dedup) and H18 (request-date FX) were **not** run individually — none can close a gap where no informative row matches |
 | H19 | Gold explanations disagree with today's profiles/events | Refuted | Every stated minimum equals `minimum_balance_to_keep`; every cited spending-change event exists with the described category |
 | H20 | Gold violates the §6.2 output contract | Refuted | All rows satisfy range, status/earliest coupling, installment-plan and partial-plan rules; `request_12`'s installments are consistent with `payment_methods_user_will_consider` |
 | D1 | Month-to-date double count | Confirmed as a defect, not a G2 fix | Removing it changes nothing on gold |
@@ -108,3 +108,40 @@ test pins the 15th-to-the-15th projection.
    is informative and reproducible, to identify the missing term.
 2. Failing that, G2's 20/25 target should be re-baselined explicitly rather than
    left failing silently. This report does not change the threshold.
+
+## Second pass (same day): the search after the first report
+
+Nine further hypotheses were built and scored. None produced an informative
+exact match.
+
+| ID | Hypothesis | Verdict | Evidence |
+|---|---|---|---|
+| H21 | The trailing partial bucket is charged a full month (it runs past the horizon) | Confirmed defect, not the missing term | Prorating it changes MAPE 0.613 → 0.604 and no match count |
+| H22 | Gold scores against `desired_completion_date`, not a fixed 90 days | Refuted | Deadline horizons of 12–77 days: 4 exact, 0 informative, in every MTD/proration combination |
+| H23 | The category budget uses a shorter history window | Refuted | 2/3/4/5/6/7/8/10/12 months and all-history: 4 exact, 0 informative |
+| H24 | Gold charges `full − mtd` (remaining current month) | Refuted | The ratio is ≈1.0 on 19/21 rows, but no row matches within one unit; exhaustive search over all 8,191 category subsets finds no subset matching four rows |
+| H25 | Gold's arithmetic is learnable from request-time features | Refuted | Random forest LOO: 2/25 exact, median relative error 0.714, R² 0.716; a depth-25 tree memorises 25/25 in sample but generalises to nothing |
+| A1 | A 31B model can name the rule | Refuted | `gemma4:31b-cloud` returned `D = full − mtd` — the same rule H24 already refuted (`docs/agentic-runs/`) |
+
+### The decisive constraint
+
+`git log` shows `sample_requests.csv` and its completed gold arrived in the
+original challenge dataset commits (`6b07d86`, `ffd788d`, `d675abf`), before any
+code in this repository existed; only three commits have ever touched
+`code/forecast.py`, and none of them is the generator. The gold is the
+organiser's reference output over an implementation this repo does not contain.
+
+Consequently the target is not a function of the features a request exposes:
+
+- a random forest over balance, floor, requested amount, category budgets,
+  month-to-date spend, days left, deadline distance, day of month and category
+  count generalises to 2/25 rows with a 71% median error;
+- a deep tree reproduces 25/25 in sample, which is memorisation, not a rule;
+- no category subset, horizon, proration rule, MTD scope, estimator, history
+  window or income cadence reproduces even one row where `0 < gold < requested`.
+
+`amount_safe_to_pay` therefore cannot be closed by further search inside this
+repository. Reaching G2's 20/25 requires the organiser's reference arithmetic,
+extra labelled rows, or an explicit re-baseline of the threshold — a product
+decision, not something this report performs.
+

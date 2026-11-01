@@ -119,6 +119,8 @@ DEFAULTS = {
     "rounding": "none",         # none | cents | units
     "window_start": "request",  # request | next_month
     "horizon_days": 90,         # ledger length scored
+    "tail_proration": "off",    # off | on: prorate a bucket that runs past the horizon
+    "history_months": 0,        # 0 = all available, else keep the last N months
     "income_cadence": "interval",  # interval | calendar
     "income_amount": "latest",     # latest | median
     "income_cap": 2,               # MAX_INCOME_OCCURRENCES analogue
@@ -216,9 +218,15 @@ def _history_variant(events, req_date, *, home_currency, fx_rows, warnings, opts
         per_month[key] = per_month.get(key, 0) + 1
 
     budgets = {}
+    keep_months = int(opts.get("history_months") or 0)
     for category, months in monthly.items():
         if len(months) < forecast.MIN_BUDGET_MONTHS:
             continue
+        if keep_months:
+            cutoff = sorted(months)[-keep_months:]
+            months = {key: months[key] for key in cutoff}
+            if len(months) < forecast.MIN_BUDGET_MONTHS:
+                continue
         budgets[category] = _estimator(
             opts["estimator"],
             months,
@@ -279,6 +287,10 @@ def _forecast_variant(
         first = False
     while cursor <= window_end:
         bucket_end = forecast._next_bucket_start(cursor)
+        span_days = max(1, (bucket_end - cursor).days)
+        tail_days = None
+        if opts.get("tail_proration") == "on" and bucket_end > window_end:
+            tail_days = (window_end - cursor).days + 1
         for category in sorted(budgets):
             amount = budgets[category]
             is_bill = category in recurring
@@ -295,6 +307,11 @@ def _forecast_variant(
                 amount = amount * Decimal(numerator) / denominator
                 if proration == "current":
                     amount = min(budgets[category], amount)
+            if tail_days is not None:
+                # A bucket that runs past the horizon covers only the days the
+                # ledger actually projects; charging a whole month for it
+                # invents spending that never happens inside the window.
+                amount = amount * Decimal(tail_days) / Decimal(span_days)
             if first:
                 apply_mtd = (
                     opts["mtd_scope"] == "all"
