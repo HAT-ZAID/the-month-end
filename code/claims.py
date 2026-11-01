@@ -138,11 +138,13 @@ _SPELLED_DATE = re.compile(
     rf"\b(?:(?P<day1>\d{{1,2}})(?:st|nd|rd|th)?\s+(?:of\s+)?"
     rf"(?P<month1>{_MONTH_WORD})(?:,?\s+(?P<year1>\d{{4}}))?"
     rf"|(?P<month2>{_MONTH_WORD})\s+(?P<day2>\d{{1,2}})(?:st|nd|rd|th)"
-    rf"(?:,?\s+(?P<year3>\d{{4}}))?|(?P<month3>{_MONTH_WORD})\s+(?P<day3>\d{{1,2}}),?\s+(?P<year3b>\d{{4}}))\b",
+    rf"(?:,?\s+(?P<year3>\d{{4}}))?|(?P<month3>{_MONTH_WORD})\s+"
+    rf"(?P<day3>\d{{1,2}}),?\s+(?P<year3b>\d{{4}})"
+    rf"|(?P<month4>{_MONTH_WORD})\s+(?P<day4>\d{{1,2}})(?!\d))\b",
     re.IGNORECASE,
 )
 _MONEY = re.compile(
-    r"(?<![\w.,])(\d{1,3}(?:\.\d{3})+|\d[\d,]*(?:\.\d+)?)(?!\d)"
+    r"(?<![\w.,])(\d{1,3}(?:\.\d{3})+|\d[\d,]*(?:\.\d+)?)(?!\d|st\b|nd\b|rd\b|th\b)"
 )
 #: The same figure with its thousands separators: "2.000.000" is two million.
 _DOT_GROUPED = re.compile(r"\d{1,3}(?:\.\d{3})+")
@@ -226,10 +228,14 @@ def _money_claims(text: str) -> list[tuple[str, Decimal]]:
     unspanned = _ISO_DATE.sub(lambda match: " " * len(match.group(0)), unspanned)
     # The same for a written date: "12 September 2025" is a date, and its
     # day and year are not amounts.
-    unspanned = _SPELLED_DATE.sub(lambda match: " " * len(match.group(0)), unspanned)
-    # "March 14" without an ordinal or a year is still a date to a reader:
-    # blank it so the day is neither an amount nor an unverified date claim.
-    unspanned = _MONTH_DAY_PAIR.sub(lambda match: " " * len(match.group(0)), unspanned)
+    # Only a date the checker can verify is blanked.  A modal "14 may be early"
+    # must stay visible to the amount scan, or neither check would see the 14.
+    span_pieces = list(unspanned)
+    for match in _SPELLED_DATE.finditer(unspanned):
+        if _spelled_date(match) is not None:
+            for index in range(match.start(), match.end()):
+                span_pieces[index] = " "
+    unspanned = "".join(span_pieces)
     # "50k" is fifty thousand: read the multiplier, then blank the span so the
     # "50" is not claimed as a bare fifty.
     shorthand = []
@@ -312,8 +318,18 @@ _NO_CHANGES = re.compile(
 
 def _spelled_date(match) -> tuple[int, int, int | None] | None:
     """(month, day, year-or-None) for a written date, or None if unreadable."""
-    day = match.group("day1") or match.group("day2") or match.group("day3")
-    month = match.group("month1") or match.group("month2") or match.group("month3")
+    day = (
+        match.group("day1")
+        or match.group("day2")
+        or match.group("day3")
+        or match.group("day4")
+    )
+    month = (
+        match.group("month1")
+        or match.group("month2")
+        or match.group("month3")
+        or match.group("month4")
+    )
     year = match.group("year1") or match.group("year3") or match.group("year3b")
     if not day or not month:
         return None
@@ -322,7 +338,8 @@ def _spelled_date(match) -> tuple[int, int, int | None] | None:
         return None
     if not year and str(month) != str(month).capitalize():
         # "the 14 may be too early" is a modal, not May: a lower-case month word
-        # only counts as a date when a year pins it down.
+        # only counts as a date when a year pins it down.  The caller then leaves
+        # those digits visible to the amount check.
         return None
     return number, int(day), (int(year) if year else None)
 

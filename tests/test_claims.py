@@ -563,3 +563,24 @@ def test_a_month_and_a_day_are_not_read_as_money():
     assert [item for item in verify_claims(
         "March 14 is the day.", row
     )["unsupported"] if item["kind"] == "amount"] == []
+
+
+def test_a_spelled_date_without_a_year_is_verified():
+    row = dict(ROW)
+    row["earliest_date_for_full_payment"] = "2025-09-12"
+    wrong = verify_claims("The payment is due March 14.", row)
+    assert [item["kind"] for item in wrong["unsupported"]] == ["date"]
+    right = verify_claims("The payment is due September 12.", row)
+    assert right["ok"] is True
+
+
+def test_an_ordinal_suffix_is_a_date_not_an_amount():
+    report = verify_claims("Make the payment on the 14th.", dict(ROW))
+    assert [item for item in report["unsupported"] if item["kind"] == "amount"] == []
+
+
+def test_a_modal_month_leaves_its_number_to_the_amount_check():
+    report = verify_claims("Paying 14 may be too early.", dict(ROW))
+    assert [item["text"] for item in report["unsupported"] if item["kind"] == "amount"] == [
+        "14"
+    ]

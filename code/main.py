@@ -386,7 +386,7 @@ def run_pipeline(
                         "request": req.to_dict(),
                         "profile": profile,
                     },
-                    provider=provider,
+                    provider=resolved_provider,
                     tools=agent_state["toolbox"],
                     trace=agent_state["recorder"],
                     kernel_result=res,
