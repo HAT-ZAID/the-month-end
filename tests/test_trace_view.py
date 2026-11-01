@@ -365,3 +365,22 @@ def test_redaction_covers_cloud_and_oauth_token_prefixes():
         assert REDACTED in cleaned["detail"]
     basic = sanitize({"detail": "Authorization: Basic dXNlcjpwYXNzd29yZA=="})
     assert "dXNlcjpwYXNzd29yZA" not in basic["detail"]
+
+
+def test_redaction_covers_cookie_fields():
+    from code.trace import sanitize
+
+    cleaned = sanitize(
+        {
+            "Cookie": "session=abc123",
+            "Set-Cookie": "session=def456",
+            "setCookie": "ghi789",
+            "SetCookie": "jkl012",
+            "CookieJar": "mno345",
+            "keep": "pqr678",
+        }
+    )
+    for name in ("Cookie", "Set-Cookie", "setCookie", "SetCookie"):
+        assert cleaned[name] == "[REDACTED]"
+    assert cleaned["CookieJar"] == "mno345"
+    assert cleaned["keep"] == "pqr678"

@@ -181,7 +181,7 @@ _MARKER_INVISIBLE = re.compile(
     r"[\u00ad\u180e\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]"
 )
 #: Leading list or quote structure: "> Disagreements:", "1. Disagreements:".
-_MARKER_STRUCTURE = re.compile(r"^(?:\d+[.)]|[>#+\-])\s*")
+_MARKER_STRUCTURE = re.compile(r"^(?:(?:\d+[.)]|[>#+\-])\s*)+")
 
 
 def _opens_with_marker(text) -> bool:

@@ -478,3 +478,28 @@ def test_denying_a_required_change_is_a_claim():
     quiet = dict(ROW)
     quiet["spending_changes_needed"] = "none"
     assert verify_claims("No spending changes are needed.", quiet)["ok"] is True
+
+
+def test_a_stacked_marker_prefix_is_still_the_marker():
+    candidate = {
+        "request_id": "request_demo",
+        "amount_safe_to_pay": "1",
+        "affordability_status": "affordable_now",
+        "recommended_payment_method": "full_payment",
+        "payment_plan": "2025-08-03:15656000",
+        "earliest_date_for_full_payment": "2025-08-03",
+        "spending_changes_needed": "none",
+        "evidence_sufficient": True,
+        "confidence": 0.4,
+        "rationale": "> 1. Disagreements: the plan holds against the ledger.",
+    }
+    result = enforce_decision(candidate, dict(ROW), disagreement_note=True)
+    assert result["verification"]["rationale_source"] != "candidate"
+
+
+def test_denying_a_required_change_without_the_word_any_is_a_claim():
+    row = dict(ROW)
+    row["spending_changes_needed"] = "stop:event_9"
+    report = verify_claims("This works without spending changes.", row)
+    assert report["ok"] is False
+    assert [item["kind"] for item in report["unsupported"]] == ["changes"]

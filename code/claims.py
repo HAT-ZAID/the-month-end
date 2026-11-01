@@ -239,7 +239,7 @@ def _normalise_action(token: str) -> str:
 
 
 _NO_CHANGES = re.compile(
-    r"\b(?:no|without any|needs? no)\s+(?:spending\s+)?changes?\b"
+    r"\b(?:no|without(?: any)?|needs? no)\s+(?:spending\s+)?changes?\b"
     r"|\bnothing\b[^.]{0,20}\b(?:stop|cut|reduce)\b",
     re.IGNORECASE,
 )
