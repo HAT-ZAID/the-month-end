@@ -97,11 +97,13 @@ G2 is reachable at all.
 - `dataset/` is calibration material; it is now `mock_dataset/`.
 - Fitting the forecast to the 25 labels is allowed **as a diagnostic only**, not as the shipped
   result.
-- Models: `gpt-oss:20b-cloud` is the primary reasoner for agentic work (verified for tool calls);
+- Models: `gemma4:31b-cloud` is the primary reasoner for agentic work (32.7 B; correct tool choice
+  in 3/3 tests); `gpt-oss:20b-cloud` is demoted because its tool selection was unreliable;
   `gemma4:e2b-it-qat` is the local default and the only local model that answered bill-semantics
   questions correctly; `llama3.2:3b` and `qwen3-vl` are unreliable for accounting (1/3 each);
-  Kilo only if both fail; no parallel model jobs.
-- The cloud model is non-local: it may see fixtures only, never an account from `data/accounts.db`.
+  Kilo only if all fail; no parallel model jobs.
+- Cloud models are non-local: they may see fixtures only, never an account from
+  `data/accounts.db`.
 - CodeRabbit passes, then two subagent reviews, then the gates — after the G2 work.
 
 ---
@@ -121,9 +123,11 @@ G2 is reachable at all.
   it afterwards with `git checkout -- output.csv`).
 - **`.env` is not loaded by any code.** It contains `OLLAMA_API_KEY` and nothing reads it; probes
   parse it explicitly. Never print or commit the value.
-- **Cloud models are absent from `/api/tags`.** `gpt-oss:20b-cloud` works (tools included) but must
-  be added to the menu explicitly; discovery will not find it.
-- Pass `think=False` to `gpt-oss:20b-cloud` in probe loops: the same tool-call turn cost 68 vs 272
-  eval tokens.
-- `gpt-oss:20b-cloud` is a cloud model, so it is not `local` under `AGENTS.md` §2 — fixtures only,
-  and the UI must label it.
+- **Cloud models are absent from `/api/tags`.** `gemma4:31b-cloud` (primary) and
+  `gpt-oss:20b-cloud` (demoted) both work, but must be added to the menu explicitly; discovery will
+  not find them.
+- **`gpt-oss:20b-cloud` tool selection is unreliable** — do not use it as the tool chooser. If it is
+  used at all, `think=False` keeps the turn cheap (68 vs 272 eval tokens).
+- `gemma4:31b-cloud` picks the right tool in 3/3 selection tests at 7–19 eval tokens; that is the
+  bar any replacement must clear before it becomes the primary.
+- Cloud models are not `local` under `AGENTS.md` §2 — fixtures only, and the UI must label them.

@@ -48,11 +48,14 @@ re-deriving the evidence. It contains:
 - **Local models** (in `/api/tags`): `gemma4:e2b-it-qat` (default for bill reasoning,
   3/3 correct on the settled-vs-unpaid questions), `llama3.2:3b` (1/3),
   `qwen3-vl:2b-instruct-q4_K_M` (1/3), `qwen3-vl:2b`. No `e4b` is pulled.
-- **Cloud model (verified 2026-11-02): `gpt-oss:20b-cloud`** — 20.9 B params, MXFP4,
-  capabilities `completion`, `tools`, `thinking`. It answers, and it emits `tool_calls`
-  correctly (`think=False` → 68 eval tokens, default thinking → 272 for the same turn).
-  Use it as the **primary reasoning model** for the agentic probes (A1–A7); keep gemma as the
-  local fallback and as the bill-semantics regression model.
+- **Cloud model, primary reasoner (verified 2026-11-02): `gemma4:31b-cloud`** — 32.7 B params,
+  BF16, capabilities `completion`, `thinking`, `tools`, `vision`. It chose the correct tool in
+  3/3 selection tests (`position` for "how much can I spend", `list_events` for "what did I spend
+  on groceries", `decide` for "decide request_07") at **7–19 eval tokens** per turn, with no prose
+  before the call. Use it for the agentic probes A1–A7.
+- **`gpt-oss:20b-cloud` is demoted.** It answers and does emit `tool_calls`, but its tool selection
+  proved unreliable in use, so it is not the primary. Keep it only as a prose/fallback model, never
+  as the tool chooser, and never as the authority on a number.
 - **Cloud models do not appear in `/api/tags`.** `code/models.py` discovery therefore misses
   `gpt-oss:20b-cloud`; a menu entry has to be added explicitly (build-mode step 7).
 - **`.env` is not loaded by any code.** It contains exactly one key, `OLLAMA_API_KEY` (57 chars),
@@ -448,10 +451,12 @@ that the kernel runs.
 
 Rules for all probes below:
 
-- **model tiering:** `gpt-oss:20b-cloud` is the primary reasoner for A1–A7 (it is the only model
-  here with a 20 B budget and verified tool-calling); `gemma4:e2b-it-qat` is the local fallback and
-  the bill-semantics regression model; `llama3.2:3b` and `qwen3-vl` are not to be trusted with
-  accounting questions (1/3 each). Kilo only if both fail;
+- **model tiering:** `gemma4:31b-cloud` is the primary reasoner for A1–A7 — it is the only model
+  here that both has a 30 B+ budget and selects tools correctly in testing;
+  `gemma4:e2b-it-qat` is the local fallback, the default for the product UI, and the
+  bill-semantics regression model; `gpt-oss:20b-cloud` is demoted because its tool selection was
+  unreliable; `llama3.2:3b` and `qwen3-vl` are not to be trusted with accounting questions (1/3
+  each). Kilo only if all of the above fail;
 - probes run sequentially, with a small `max_tool_calls` (2–3) and `think=False` where the model
   supports it, because a thinking turn costs 4× the tokens for the same tool call;
 - the model never computes a final money figure that ships; it proposes a *rule* or a *parameter*,
@@ -626,11 +631,13 @@ closed *loudly* (warning) and that the inverse direction is used when present.
 mark `llama3.2:3b` and `qwen3-vl` as unreliable for bill reasoning in the docstring; keep the three
 semantic questions as a regression pack (A8).
 
-The agentic probes use `gpt-oss:20b-cloud` as the primary reasoner. It is verified for tool calling
-but it is a **cloud** model: it must appear in the menu as non-local, it may only see fixtures, and
-`/api/tags` will not list it, so the entry has to be added explicitly. `.env` is not loaded by any
-code today (`OLLAMA_API_KEY` sits there unused); decide deliberately how it reaches the process
-without landing in a trace. See Appendix C.
+The agentic probes use `gemma4:31b-cloud` as the primary reasoner: 32.7 B, and the only model here
+that both has a 30 B+ budget and selects tools correctly in testing (3/3). `gpt-oss:20b-cloud` is
+demoted because its tool selection was unreliable in use. Both are **cloud** models: they must
+appear in the menu as non-local, they may only see fixtures, and `/api/tags` will not list them, so
+the entries have to be added explicitly. `.env` is not loaded by any code today (`OLLAMA_API_KEY`
+sits there unused); decide deliberately how it reaches the process without landing in a trace.
+See Appendix C.
 
 ### Step 8 — the rest of the goal (outside G2)
 
@@ -888,44 +895,46 @@ Everything below was measured, not assumed.
 
 ### What is installed
 
-| model | where | params | quant | capabilities | bill questions |
-|---|---|---|---|---|---|
-| `gemma4:e2b-it-qat` | local | 4.6 B | Q4_0 | completion | **3/3** |
-| `llama3.2:3b` | local | 3.2 B | Q4_K_M | completion | 1/3 |
-| `qwen3-vl:2b-instruct-q4_K_M` | local | 1.7 B | Q4_K_M | completion, vision | 1/3 |
-| `qwen3-vl:2b` | local | 2.1 B | Q4_K_M | completion, vision | not tested |
-| `gpt-oss:20b-cloud` | Ollama Cloud | 20.9 B | MXFP4 | completion, **tools**, thinking | not tested on the 3 questions |
+| model | where | params | quant | capabilities | tool selection | bill questions |
+|---|---|---|---|---|---|---|
+| `gemma4:31b-cloud` | Ollama Cloud | 32.7 B | BF16 | completion, **tools**, thinking, vision | **3/3 correct** | not tested on the 3 questions |
+| `gemma4:e2b-it-qat` | local | 4.6 B | Q4_0 | completion | not tested | **3/3** |
+| `gpt-oss:20b-cloud` | Ollama Cloud | 20.9 B | MXFP4 | completion, **tools**, thinking | unreliable in use — demoted | not tested |
+| `llama3.2:3b` | local | 3.2 B | Q4_K_M | completion | — | 1/3 |
+| `qwen3-vl:2b-instruct-q4_K_M` | local | 1.7 B | Q4_K_M | completion, vision | — | 1/3 |
+| `qwen3-vl:2b` | local | 2.1 B | Q4_K_M | completion, vision | — | not tested |
 
-`/api/show` for `gpt-oss:20b-cloud` returns `capabilities: ['completion', 'tools', 'thinking']`.
-It is **not** in `/api/tags`, so discovery misses it.
+`/api/show` for `gemma4:31b-cloud` returns
+`capabilities: ['completion', 'thinking', 'tools', 'vision']`. It is **not** in `/api/tags`, so
+discovery misses it; cloud entries must be added explicitly.
 
 ### Verified calls
 
-Plain completion:
+Tool selection test, three questions, three tools offered (`position`, `list_events`, `decide`):
 
-```python
-POST http://127.0.0.1:11434/api/generate
-{"model": "gpt-oss:20b-cloud", "prompt": "Reply with the single word: OK",
- "stream": false, "options": {"num_predict": 32}}
-# -> {"response": "OK", "done_reason": "stop", ...}
+```
+"How much can I safely spend today? Use a tool."        -> position      (7 eval tokens)
+"What did I spend on groceries last month? Use a tool." -> list_events   (9 eval tokens)  CORRECT
+"Decide request_07 for me. Use a tool."                 -> decide        (19 eval tokens) CORRECT
 ```
 
 Tool call (the shape `code/chat.py` consumes):
 
 ```python
 POST http://127.0.0.1:11434/api/chat
-{"model": "gpt-oss:20b-cloud",
+{"model": "gemma4:31b-cloud",
  "messages": [{"role": "user", "content": "Call the position tool."}],
  "tools": [{"type": "function",
             "function": {"name": "position", "description": "...",
                          "parameters": {"type": "object", "properties": {}}}}],
- "stream": false, "think": false, "options": {"num_predict": 512}}
+ "stream": false, "options": {"num_predict": 256}}
 # -> message.tool_calls = [{"id": "call_…",
 #                           "function": {"index": 0, "name": "position", "arguments": {}}}]
 ```
 
-Timing signal: the same turn cost **68 eval tokens with `think=False`** and **272 with thinking**
-(left on). For a probe loop, pass `think=False`.
+`gpt-oss:20b-cloud` also emits `tool_calls` (68 eval tokens with `think=False`, 272 with thinking),
+but its tool *selection* was unreliable, which is why it is demoted rather than primary. If it is
+used at all, disable thinking to keep the turn cheap.
 
 ### Authentication and discovery gaps to close in build mode
 
@@ -944,6 +953,6 @@ Timing signal: the same turn cost **68 eval tokens with `think=False`** and **27
 
 - A1 (parameter search) is the most expensive: keep each model turn to one proposal, ask for JSON
   only, and cap the loop at ~12 rounds.
-- A4 (row auditor) is one call per row: 21 calls. With `gpt-oss:20b-cloud` that is minutes, not
-  hours; with gemma it is slower.
+- A4 (row auditor) is one call per row: 21 calls. With `gemma4:31b-cloud` that is minutes, not
+  hours; with `gemma4:e2b-it-qat` it is slower and weaker.
 - A6 (three bill questions) is the cheap regression: 9 calls total.
