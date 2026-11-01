@@ -285,5 +285,58 @@ Nothing the zoo extracted points to a missing term; what remains unrecovered is
 the *magnitude* of the reference's expense and income series, which the sample
 does not determine.
 
+## Fifth pass: inside the 21/21 fit
+
+The overfitted ensemble is itself evidence, so its geometry was mined directly:
+split gain, chosen thresholds, the first trees in full, leaf co-occurrence
+proximity across all 300 trees, and a tree distilled from the ensemble's output.
+
+**Gain.** The ensemble spends its loss budget almost entirely on one split:
+`full_ratio < 0.2532` has gain 6.87 while the next best split has 0.45. Nine
+distinct `full_ratio` thresholds appear (0.242, 0.2532, 0.2806, 0.3098, 0.3105,
+0.4671, 0.49, 0.6218, 0.6386) and seven on `mtd_ratio`; every one is an adjacent
+pair of observed values, not a rounded rule. 1,243 splits across 300 trees is
+what separating 21 individual points costs.
+
+**Proximity.** Landing in the same leaf across all 300 trees, **all 21 rows are
+singletons at a 0.80 threshold**. No two requests are alike enough for the model
+to generalise between them — the 21/21 is per-row partitioning, and it is the
+cleanest possible demonstration that the sample cannot support a learned rule.
+
+**Distilled surrogate** (a depth-4 tree fitted to the ensemble's own output)
+recovers the coarse function the ensemble approximates:
+
+```
+full_ratio <= 0.248                  -> 2.9 / 3.1   (only request_05 and request_10)
+full_ratio >  0.248
+  mtd_ratio <= 0.325
+      mtd_ratio <= 0.110             -> 0.86 / 0.98  (split on balance)
+      mtd_ratio >  0.110             -> 0.72 / 0.75  (split on day of month)
+  mtd_ratio >  0.325
+      mtd <= 768                     -> 0.43 / 0.47  (split on income cover)
+      mtd >  768                     -> 0.52 / 0.70  (split on month-to-date spend)
+```
+
+**The formula behind it.** Sorting the 19 normal rows by `mtd_ratio` gives
+`D/full ≈ 1 − mtd_ratio` with r = +0.822 and a median absolute error of 0.068 —
+by far the closest closed form found anywhere in this investigation. The residual
+correlates most with `to_deadline` (+0.292), i.e. a second-order horizon term, and
+with nothing else above +0.20.
+
+**Why our figure is always the larger one.** Decomposing
+`D_ours − D_gold` over all 21 rows: our ledger drops further than the reference's
+on **every** row, by 1.02× to 1.63×. On the thirteen rows with no real in-window
+debit at all the excess is therefore purely forecast magnitude. The largest
+ratios (1.63 on `request_08`, 1.43 on `request_14`, 1.37 on `request_13`) are the
+rows whose ledger trough lands late — 89, 14 and 61 days out — which is the
+income side, not the expense side: `request_08`'s latest salary is a pay cut to
+782.57 against a 1,422.85 median, so projecting the latest amount drives its
+ledger into a slow decline.
+
+That identifies one concrete, defensible improvement — project salary from the
+median rather than the latest observation — but it does not change the match
+count, so it is recorded here rather than shipped on speculation.
+
+
 
 
