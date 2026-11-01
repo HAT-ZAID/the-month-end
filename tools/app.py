@@ -33,6 +33,7 @@ try:  # Textual is optional: the Rich TUI must keep working without it.
         Input,
         Label,
         RichLog,
+        Select,
         Static,
         TabbedContent,
         TabPane,
@@ -50,6 +51,7 @@ if __package__ in (None, ""):  # ``python tools/app.py``
 
 from rich.text import Text
 
+from code import models as model_registry
 from code import paths, service
 
 GREEN = "#34d399"
@@ -246,13 +248,14 @@ class BuyOrWait(App):
     .field-row Input {{ width: 24; }}
     .actions {{ height: 3; }}
     Button {{ min-width: 14; }}
+    Select {{ width: 46; }}
     .user-chip {{ width: 40; margin-bottom: 1; }}
     DataTable {{ height: auto; max-height: 18; background: #0f172a; }}
     #metrics {{ layout: grid; grid-size: 3 2; grid-gutter: 1 2; height: auto; }}
     .metric {{ border: round #1f2a37; background: #111c2b; padding: 0 1; height: 5; }}
-    .metric-label {{ color: {MUTED}; }}
-    .metric-value {{ text-style: bold; }}
-    .metric-note {{ color: {MUTED}; }}
+    .metric-label {{ color: {MUTED}; width: 1fr; }}
+    .metric-value {{ text-style: bold; width: 1fr; content-align: right middle; }}
+    .metric-note {{ color: {MUTED}; width: 1fr; }}
     #onboard {{ padding: 1 2; }}
     #picker {{ background: #111c2b; border: round {BLUE}; padding: 1 2; width: 60; height: auto; }}
     #pos-head {{ color: {BLUE}; text-style: bold; }}
@@ -369,6 +372,9 @@ class BuyOrWait(App):
                     )
                     yield RichLog(id="chat-log", wrap=True)
                     with Horizontal(classes="field-row"):
+                        yield Label("Model")
+                        yield Select([], id="model-select", allow_blank=True)
+                    with Horizontal(classes="field-row"):
                         yield Label("Say")
                         yield Input(placeholder="e.g. what can I spend this week?",
                                     id="chat-input")
@@ -377,16 +383,40 @@ class BuyOrWait(App):
     # ------------------------------------------------------------ lifecycle
 
     def on_mount(self) -> None:
-        for table_id, columns in (
-            ("buy-table", ("Field", "Value")),
-            ("ledger-table", ("ID", "Date", "Kind", "Description", "Amount", "Status")),
-            ("decisions-table", ("Request", "On", "Amount", "Status", "Method", "Plan")),
-            ("report-table", ("Fixture file", "Rows", "Path")),
-        ):
+        widths = {
+            "buy-table": (("Field", 24), ("Value", 44)),
+            "ledger-table": (("ID", 10), ("Date", 12), ("Kind", 16),
+                             ("Description", 38), ("Amount", 14), ("Status", 12)),
+            "decisions-table": (("Request", 12), ("On", 12), ("Amount", 14),
+                                ("Verdict", 22), ("Method", 22), ("Plan", 36)),
+            "report-table": (("Fixture file", 28), ("Rows", 10), ("Path", 42)),
+        }
+        for table_id, columns in widths.items():
             table = self.query_one(f"#{table_id}", DataTable)
-            table.add_columns(*columns)
+            for label, width in columns:
+                table.add_column(label, width=width)
         self.query_one("#pos-head", Static).update("Position")
         self.expand = True
+        self.model_choice = model_registry.NO_MODEL
+        try:
+            entries = model_registry.options()
+            select = self.query_one("#model-select", Select)
+            select.set_options([(entry["label"], entry["id"]) for entry in entries])
+            preferred = next(
+                (entry["id"] for entry in entries
+                 if entry["privacy"] == "local" and "gemma" in entry["id"].lower()),
+                model_registry.NO_MODEL,
+            )
+            if preferred == model_registry.NO_MODEL:
+                preferred = next(
+                    (entry["id"] for entry in entries if entry["privacy"] == "local"),
+                    model_registry.NO_MODEL,
+                )
+            select.value = preferred
+            self.model_choice = preferred
+        except Exception:
+            # A model menu must never stop the app from opening.
+            self.model_choice = model_registry.NO_MODEL
         names = service.list_users()
         if not names:
             self.push_screen(Onboarding())
@@ -549,40 +579,26 @@ class BuyOrWait(App):
     def chat_hello(self) -> None:
         log = self.query_one("#chat-log", RichLog)
         log.clear()
-        model_line = self._model_status()
         log.write(Text("Buy or Wait?", style=f"bold {BLUE}"))
-        if model_line is None:
+        if self.model_choice == model_registry.NO_MODEL:
             log.write(Text(
-                "No model is configured on this machine, so there is nothing that can "
-                "reason about your ledger yet. I will not pretend a rule table is a "
-                "conversation: use the tabs, they run the kernel directly.",
+                "No model is selected, so nothing here can reason about your ledger. "
+                "I will not pretend a rule table is a conversation: use the tabs, they "
+                "run the kernel directly.",
                 style=MUTED,
             ))
             log.write(Text(
-                "To talk to it, configure a provider (for example OLLAMA_URL for a local "
-                "model) and reopen this tab.",
+                "Pick a local model above to talk to it. Nothing is sent off this "
+                "machine when the choice says Local.",
                 style=MUTED,
             ))
         else:
-            log.write(Text(f"Model: {model_line}", style=GREEN))
+            log.write(Text(f"Model: {self.model_choice}", style=GREEN))
             log.write(Text(
                 "Ask about your position, a purchase, or a recorded fact. Every figure "
-                "in the answer comes from the kernel.",
+                "in the answer comes from the kernel, through a tool this screen shows.",
                 style=MUTED,
             ))
-
-    def _model_status(self):
-        try:
-            from code.providers import NullProvider, build_provider
-        except Exception:
-            return None
-        try:
-            provider = build_provider()
-        except Exception:
-            return None
-        if provider is None or isinstance(provider, NullProvider):
-            return None
-        return f"{type(provider).__name__}"
 
     # -------------------------------------------------------------- actions
 
@@ -661,6 +677,16 @@ class BuyOrWait(App):
         self.refresh_ledger()
         self.notify("Recorded", severity="information")
 
+    @on(Select.Changed, "#model-select")
+    def _model_changed(self, event: Select.Changed) -> None:
+        self.model_choice = str(event.value or model_registry.NO_MODEL)
+        log = self.query_one("#chat-log", RichLog)
+        if self.model_choice == model_registry.NO_MODEL:
+            log.write(Text(
+                "No model selected. The tabs still run the kernel directly.", style=MUTED))
+        else:
+            log.write(Text(f"Model: {self.model_choice}", style=GREEN))
+
     @on(Input.Submitted, "#chat-input")
     def _chat(self, event: Input.Submitted) -> None:
         log = self.query_one("#chat-log", RichLog)
@@ -672,10 +698,22 @@ class BuyOrWait(App):
             log.write(Text("Load a person first.", style=RED))
             return
         log.write(Text(f"you: {text}", style=BLUE))
+        if self.model_choice == model_registry.NO_MODEL:
+            log.write(Text(
+                "No model is selected, so I will not guess. The tabs run the kernel "
+                "directly: Position for what is safe today, Purchase for a decision.",
+                style=MUTED,
+            ))
+            return
         from code import chat
 
         try:
-            result = chat.ask(self.account, text)
+            provider = model_registry.provider_for(self.model_choice)
+        except Exception as exc:
+            log.write(Text(f"{type(exc).__name__}: {exc}", style=RED))
+            return
+        try:
+            result = chat.ask(self.account, text, provider=provider)
         except chat.NoModel as exc:
             log.write(Text(str(exc), style=MUTED))
             return

@@ -315,3 +315,38 @@ def test_without_a_model_the_conversation_says_so(db):
     account = store.create("ana")
     with pytest.raises(chat.NoModel):
         chat.ask(account, "what can I spend this week?")
+
+
+# ------------------------------------------------------------- model choice
+
+
+def test_the_model_menu_always_offers_an_honest_no_model_entry():
+    from code import models
+
+    items = models.options(env={})
+    assert items[0]["id"] == "none"
+    assert "kernel" in items[0]["label"].lower()
+
+
+def test_selecting_a_local_model_targets_that_model_not_the_default():
+    from code import models
+
+    provider = models.provider_for("ollama:gemma4:e2b-it-qat", env={})
+    assert provider is not None
+    assert provider.model == "gemma4:e2b-it-qat"
+    assert provider.kind == "ollama"
+
+
+def test_the_no_model_choice_builds_no_provider():
+    from code import models
+
+    assert models.provider_for(models.NO_MODEL, env={}) is None
+
+
+def test_a_free_tier_is_labelled_as_training_on_your_text():
+    from code import models
+
+    items = models.options(env={"OPENROUTER_KEY": "x"})
+    labels = " ".join(item["label"] for item in items).lower()
+    assert "trains on your text" in labels
+    assert any(item["privacy"] == "free" for item in items)
