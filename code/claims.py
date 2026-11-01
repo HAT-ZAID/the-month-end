@@ -402,7 +402,11 @@ _NO_CHANGES = re.compile(
 #: scope word has to attach to the change itself, not to some other noun in the
 #: same clause: "but other options include…" narrows nothing.
 _SCOPE = re.compile(
-    r"\b(?:no|nothing|none|not|without)\s+(?:other|further|additional|more|else)\b"
+    # The qualifier has to attach to a change, not to any noun after it: "no
+    # other options include stopping ..." narrows nothing.
+    r"\b(?:no|nothing|none|not|without)\s+(?:other|further|additional|more|else)\s+"
+    r"(?:spending\s+)?(?:changes?|cuts?|reductions?|trims?|stops?|required|needed|necessary"
+    rf"|{_CHANGE_VERB})"
     rf"|\b(?:apart from|except(?: for)?|besides|aside from|other than)\s+"
     rf"(?:the\s+)?{_CHANGE_VERB}",
     re.IGNORECASE,

@@ -441,6 +441,11 @@ def test_a_scope_word_must_qualify_the_denied_change():
         "No spending changes are needed, but other options include stopping event_9",
         row,
     )["ok"] is False
+    # "no other" has to attach to a change, not to any noun that follows it.
+    assert verify_claims(
+        "No spending changes are needed, but no other options include stopping event_9.",
+        row,
+    )["ok"] is False
     for sentence in (
         "No other changes are needed once you stop event_9.",
         "Stop event_9 and nothing else changes.",
