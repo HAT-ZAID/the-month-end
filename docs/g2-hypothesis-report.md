@@ -214,4 +214,76 @@ structure that a single alternative term could explain. The information content
 is "the reference is the same kind of ledger as ours, differing in magnitude of
 expense and income", not "a term is missing".
 
+## Fourth pass: the full model zoo and why the models decide
+
+Fifteen learners were scored leave-one-out on three targets, with categorical
+columns (currency, request type, partial-payment permission, payment methods,
+which protected categories exist) handled natively by CatBoost and
+HistGradientBoosting and one-hot encoded for the rest. Tool:
+`tools/g2_model_mining.py`.
+
+### Leave-one-out, target `D/full` (n = 21 informative rows)
+
+| Model | LOO R² | median abs err | median rel err | exact |
+|---|---:|---:|---:|---:|
+| XGBoost (depth 3) | **+0.609** | 0.112 | 0.129 | 0/21 |
+| Tree (depth 2) | +0.466 | 0.127 | 0.192 | 2/21 |
+| Tree (depth 3) | +0.456 | 0.127 | 0.170 | 3/21 |
+| Tree (depth 4) | +0.399 | 0.125 | 0.201 | 2/21 |
+| CatBoost (depth 3) | +0.308 | 0.117 | 0.227 | 2/21 |
+| RF (400) | +0.278 | 0.138 | 0.203 | 0/21 |
+| GBM | +0.122 | 0.148 | 0.221 | 3/21 |
+| SVR rbf | −0.095 | 0.209 | 0.322 | 2/21 |
+| HistGBM | −0.102 | 0.278 | 0.447 | 0/21 |
+| KNN (k=3) | −0.294 | 0.304 | 0.421 | 0/21 |
+| ExtraTrees (400) | −0.915 | 0.201 | 0.334 | 0/21 |
+| Lasso (α=0.01) | −573 | 0.893 | 1.210 | 0/21 |
+| OLS | −5813 | 0.336 | 0.705 | 0/21 |
+| MLP | diverges | — | — | 0/21 |
+
+On `D` the R² looks better (ExtraTrees 0.934, ElasticNet 0.945, KNN 0.911) but
+that is scale: median absolute errors run to hundreds of thousands and median
+relative errors to 3–80. On `gold`, XGBoost shows R² 0.853 with a median relative
+error of 7.5 — again scale, not fit.
+
+### Why the models decide what they decide
+
+SHAP attributions (XGBoost, native `pred_contribs`) rank the drivers as
+`full_ratio` 0.405, `mtd_ratio` 0.101, `full` 0.037, `mtd` 0.021, `has_rent`
+0.017, `income_cover` 0.013. Partial dependence of `full_ratio` is a step, not a
+slope:
+
+```
+full_ratio  0.22 -> 2.953      (monthly budget under a quarter of the balance)
+            0.31 -> 0.655
+            0.40 -> 0.655
+            0.50 -> 0.654
+            0.68 -> 0.623
+```
+
+Two regimes, split near 0.25–0.31. Inside the second regime the tree splits again
+on `mtd_ratio` at 0.325 (0.78/0.93 when little of the month is spent, 0.44/0.59
+when most of it is). Depth-3 leaves land on 0.439, 0.588, 0.779, 0.929 and 2.338,
+which is why 19 of 21 rows sit within 0.09 of a leaf value while never equalling
+gold.
+
+The rows the model gets *over* versus *under* differ most in `mtd_ratio` (0.427
+versus 0.323) and `to_deadline` (40 versus 56 days) — the model is guessing at how
+much of the current month is committed, exactly the quantity that decides the
+first trough.
+
+XGBoost reproduces all 21 rows to three decimals **in sample**, which is
+memorisation and confirms the earlier point: with 21 rows and 26 encoded
+features, any flexible learner can fit the sample and none can generalise.
+
+### Conclusion of the mining
+
+The reference behaves like a ledger with two regimes keyed on capacity
+(monthly budget relative to balance) and one on progress through the month
+(month-to-date spend). Both are quantities the shipped kernel already models.
+Nothing the zoo extracted points to a missing term; what remains unrecovered is
+the *magnitude* of the reference's expense and income series, which the sample
+does not determine.
+
+
 
