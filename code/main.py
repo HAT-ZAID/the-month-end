@@ -94,6 +94,23 @@ def _money_action(text: str) -> str:
     return "|".join(parts)
 
 
+def _checked_explanation(text, row, extra_numbers=()) -> str:
+    """The generated prose, or the row's own text when it cannot be supported.
+
+    ``enforce_decision`` gates the candidate path; this is the other writer into
+    ``decision_explanation``, and it had no claim check at all, so a configured
+    provider could put an unsupported figure in the required column.
+    """
+    from code.claims import verify_claims
+
+    prose = str(text or "").strip()
+    fallback = str(row.get("decision_explanation") or "").strip()
+    if not prose:
+        return fallback
+    report = verify_claims(prose, row, extra_numbers=extra_numbers)
+    return prose if report.get("ok") else fallback
+
+
 def _money_plan(plan: str, safe_amount: str, requested_amount: str, partial: bool = False) -> str:
     """Serialize payment_plan at cent precision.
 
@@ -494,6 +511,26 @@ def run_pipeline(
             "_usage": usage,
         })
         explanation = _preferred_explanation(explanation, res, agent_outcome)
+        explanation = _checked_explanation(
+            explanation,
+            {
+                "amount_safe_to_pay": safe_amount,
+                "affordability_status": res["affordability_status"],
+                "recommended_payment_method": res["recommended_payment_method"],
+                "payment_plan": payment_plan,
+                "earliest_date_for_full_payment": (
+                    res["earliest_date_for_full_payment"] or ""
+                ),
+                "spending_changes_needed": _money_action(
+                    res["spending_changes_needed"]
+                ),
+                "decision_explanation": res.get("decision_explanation"),
+            },
+            extra_numbers=(
+                req["requested_amount"],
+                profile.get("minimum_balance_to_keep"),
+            ),
+        )
         output_row = {
             "request_id": res["request_id"],
             "amount_safe_to_pay": safe_amount,

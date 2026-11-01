@@ -516,11 +516,28 @@ def test_the_scrubber_stays_linear_on_a_long_alphanumeric_body():
 
     from code.trace import sanitize
 
-    for body in ("a1b2c3d4e5f6" * 5461, "a-b-" * 16384):
+    # Each body carries the separator that makes the assignment pattern run.
+    # Without one the scrubber takes the fast path and the assertion cannot
+    # fail, which is how a quadratic branch survived eleven review rounds.
+    bodies = (
+        "a1b2c3d4e5f6" * 5461 + ":",
+        "a-b-" * 16384 + "=",
+        "Error: " + "-" * 65000 + ":",
+        "x+" * 30000 + "@",
+        "http://gw.example/" + "a-a-" * 6000 + "=",
+    )
+    for body in bodies:
         started = time.monotonic()
         sanitize({"e": body})
         elapsed = time.monotonic() - started
         assert elapsed < 1.0, (len(body), elapsed)
+
+    # And the branch is still doing its job on the same shape: the credential
+    # is gone and the host survives, whichever spelling of the separator it was.
+    for text in ("https://user:hunter2value@gw.example", "user:hunter2value@gw.example"):
+        scrubbed = sanitize({"e": text})["e"]
+        assert "hunter2value" not in scrubbed, text
+        assert scrubbed.endswith("gw.example"), scrubbed
 
 
 def test_the_earliest_date_statement_is_checked_in_every_spelling():
@@ -558,3 +575,134 @@ def test_a_repeated_phrase_is_judged_where_it_appears():
     )
     assert report["ok"] is False
     assert [item["kind"] for item in report["unsupported"]] == ["date", "method"]
+
+
+def test_the_first_date_a_sentence_cites_is_the_one_checked():
+    """A written date before a numeric one is the claim, not the numeric one."""
+    from code.claims import _cited_date
+
+    assert _cited_date("The earliest full payment is 11 June 2026, not 2026-07-14") == (
+        "2026-06-11"
+    )
+    assert _cited_date("2026-07-14 is the date, not 11 June 2026") == "2026-07-14"
+
+    row = _row(
+        affordability_status="affordable_with_plan",
+        recommended_payment_method="installments",
+        payment_plan="2026-06-11:32036.45|2026-07-11:17413.55",
+        earliest_date_for_full_payment="2026-07-14",
+    )
+    report = verify_claims("The earliest full payment is 11 June 2026, not 2026-07-14", row)
+    assert [item["kind"] for item in report["unsupported"]] == ["date"]
+
+
+def test_naming_the_earliest_date_is_not_naming_the_recommendation():
+    from code.claims import states_the_decision
+
+    row = _row(
+        affordability_status="affordable_with_plan",
+        recommended_payment_method="installments",
+        payment_plan="2026-06-11:32036.45|2026-07-11:17413.55",
+        earliest_date_for_full_payment="2026-07-14",
+    )
+    states = "This is affordable with a plan and installments are the recommendation."
+    assert states_the_decision(states, row) is True
+    # the status is named, the recommendation is not
+    assert states_the_decision(
+        "This is affordable with a plan; the earliest full payment is 2026-07-14.", row
+    ) is False
+
+
+# --- the final correctness pass -------------------------------------------
+
+
+def test_a_scope_word_attached_to_a_later_denial_does_not_excuse_this_one():
+    row = _row(spending_changes_needed="stop:event_9")
+    for text in (
+        "No spending changes are needed, and nothing else changes apart from stop event_9.",
+        "No spending changes are needed, though nothing else changes apart from stop event_9.",
+        "No spending changes are needed.",
+    ):
+        assert verify_claims(text, row)["ok"] is False, text
+    for text in (
+        "Stop event_9 and nothing else changes.",
+        "No other changes are needed once you stop event_9.",
+        "Apart from stopping event_9, nothing changes.",
+        "Besides stopping event_9, nothing else changes.",
+    ):
+        assert verify_claims(text, row)["ok"] is True, text
+
+
+def test_the_teens_are_figures_too():
+    for text in ("About fifteen thousand is safe.", "About twenty thousand is safe."):
+        assert verify_claims(text, _row())["ok"] is False, text
+
+
+def test_a_spelled_duration_and_a_bare_month_are_date_claims():
+    for text in ("Pay it in two weeks.", "Pay within a fortnight.", "Pay by August."):
+        assert verify_claims(text, _row())["ok"] is False, text
+    assert verify_claims("Pay on 2025-08-03.", _row())["ok"] is True
+
+
+def test_a_count_noun_excuses_a_count_not_a_fortune():
+    assert verify_claims("You would need 99999 payments to cover it.", _row())["ok"] is False
+
+
+def test_an_earliest_date_statement_survives_more_wordings():
+    row = _row(
+        affordability_status="affordable_later",
+        recommended_payment_method="wait",
+        earliest_date_for_full_payment="2026-07-14",
+    )
+    for text in (
+        "The earliest safe date for a full payment is 2026-07-14.",
+        "The first safe date for a full payment is 2026-07-14.",
+        "The first safe full payment is 2026-07-14.",
+    ):
+        assert verify_claims(text, row)["ok"] is True, text
+    wrong = verify_claims("The earliest safe date for a full payment is 2026-06-11.", row)
+    assert wrong["ok"] is False
+
+
+def test_citing_evidence_is_not_recommending_a_change():
+    row = _row(
+        affordability_status="not_affordable",
+        recommended_payment_method="not_recommended",
+    )
+    text = "Not recommended because financial evidence for event_9421 remains unresolved."
+    assert verify_claims(text, row)["ok"] is True
+    # A change verb pointing at a foreign event is still a claim.
+    action_row = _row(spending_changes_needed="stop:event_9")
+    assert verify_claims("Also stop event_9421 instead.", action_row)["ok"] is False
+
+
+def test_the_batch_writer_falls_back_when_its_prose_cannot_be_supported():
+    from code.main import _checked_explanation
+
+    row = dict(ROW)
+    row["decision_explanation"] = "The kernel's own sentence."
+    assert _checked_explanation("You can pay 99999999 today.", row) == (
+        "The kernel's own sentence."
+    )
+    assert _checked_explanation("Pay the full amount.", row) == "Pay the full amount."
+    assert _checked_explanation("", row) == "The kernel's own sentence."
+
+
+def test_every_private_key_is_cut_not_just_the_first_two_hundred():
+    from code.trace import sanitize
+
+    header = "-" * 5 + "BEGIN RSA PRIVATE KEY" + "-" * 5
+    footer = "-" * 5 + "END RSA PRIVATE KEY" + "-" * 5
+    body = header + "\nMIIE" + "A" * 40 + "\n" + footer + "\n"
+    cleaned = sanitize({"e": body * 300 + "tail"})["e"]
+    assert "MIIE" not in cleaned
+    assert "AAAA" not in cleaned
+
+
+def test_a_camel_case_cookie_assignment_keeps_no_value():
+    from code.trace import sanitize
+
+    for text in ("setCookie=abcdef123456", "idCookie=abcdef123456", "cookie=abcdef123456"):
+        cleaned = sanitize({"e": text})["e"]
+        assert "abcdef123456" not in cleaned, text
+    assert sanitize({"e": "total_tokens=42"})["e"] == "total_tokens=42"

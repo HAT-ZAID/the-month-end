@@ -36,7 +36,9 @@ from code.schema import TraceEvent, stable_json
 TRACE_SCHEMA_VERSION = 2
 REDACTED = "[REDACTED]"
 _SECRET_KEY = re.compile(
-    r"(?:^|[-_.])(?:api[-_.]?key|key|token|secret|password|authorization" r"|cookie|session[-_.]?id)(?:$|[-_.])",
+    r"(?:^|[-_.])(?:api[-_.]?key|key|token|secret|password|passwd|passphrase"
+    r"|pass|authorization|auth|bearer|credentials|creds|signature|sig"
+    r"|accountkey|cookie|session[-_.]?id)(?:$|[-_.])",
     re.IGNORECASE,
 )
 #: API-key-shaped substrings inside *values* (provider errors, prompts, args).
@@ -64,13 +66,18 @@ _PASSWORD_ASSIGNMENT = re.compile(
     # repeats and each run are capped, and a camelCase tail counts as a run,
     # so "sessionId=..." and "passwordHash=..." are caught too.
     r"(?:[a-z0-9]{1,12}[_-]){0,4}(?:password|passwd|pwd|pass|passphrase|secret|token|sig|signature|accountkey"
-    r"|api[\s_-]?key|session|access|key)"
+    r"|api[\s_-]?key|session|access|key|cookie)"
     r"(?:[_-][a-z0-9]{1,12}|[a-z][a-z0-9]{1,12}){0,4}\b"
     r"[\"']?\s*[=:]\s*[\"']?[^\"'\n]+"
     r"|(?:set-)?cookie\s*:\s*[^\n]+"
     r"|[?&]sig=\S+"
     r"|\bcookie\s*=\s*\S+"
-    r"|(?<![\w.])([A-Za-z0-9._~%+-]+):([^\s@/]+)@(?=[A-Za-z0-9\[])"
+    # Bounded run. The lookbehind excludes only word characters and a dot,
+    # so inside a run of "-+%~" every offset is a candidate start; an
+    # unbounded class then rescans the rest of the run at each one, which is
+    # quadratic. A username longer than 64 characters is not realistic, and
+    # the scheme form is already handled by _URL_USERINFO.
+    r"|(?<![\w.])([A-Za-z0-9._~%+-]{1,64}):([^\s@/]+)@(?=[A-Za-z0-9\[])"
     # A provider error can quote a JSON body, where the name sits inside quotes
     # and the separator is a colon inside them.
     r"|\"\w*(?:api|access|session|refresh|client|private|secret|id)?(?:key|token|secret)\"\s*:\s*\"[^\"]+",
@@ -141,8 +148,12 @@ def sanitize(value):
     return value
 
 
-_PEM_BEGIN = re.compile(r"-{4,5}\s?BEGIN [A-Z0-9 ]*PRIVATE KEY[A-Z ]*\s?-{4,5}")
-_PEM_END = re.compile(r"-{4,5}\s?END [A-Z0-9 ]*PRIVATE KEY[A-Z ]*\s?-{4,5}")
+_PEM_BEGIN = re.compile(
+    r"-{4,5}\s?BEGIN [A-Z0-9 ]*PRIVATE KEY[A-Z ]*\s?-{4,5}", re.IGNORECASE
+)
+_PEM_END = re.compile(
+    r"-{4,5}\s?END [A-Z0-9 ]*PRIVATE KEY[A-Z ]*\s?-{4,5}", re.IGNORECASE
+)
 
 
 def _redact_pem(text: str) -> str:
@@ -151,15 +162,20 @@ def _redact_pem(text: str) -> str:
     A regex with a bounded interior silently leaves a long key in place, and an
     unbounded one scans quadratically, so the block is found and cut directly.
     """
-    for _ in range(200):
-        begin = _PEM_BEGIN.search(text)
+    pieces = []
+    position = 0
+    while True:
+        begin = _PEM_BEGIN.search(text, position)
         if begin is None:
-            return text
+            pieces.append(text[position:])
+            return "".join(pieces)
+        pieces.append(text[position: begin.start()])
+        pieces.append(REDACTED)
         end = _PEM_END.search(text, begin.end())
         if end is None:
-            return text[: begin.start()] + REDACTED
-        text = text[: begin.start()] + REDACTED + text[end.end() :]
-    return text
+            # No terminator: drop the tail rather than ship it.
+            return "".join(pieces)
+        position = end.end()
 
 
 def _scrub_text(value: str) -> str:

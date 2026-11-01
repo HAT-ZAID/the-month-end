@@ -144,6 +144,7 @@ _NUMBER_WORD = re.compile(
     r"(?:twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)[-\s]"
     r"(?:one|two|three|four|five|six|seven|eight|nine)"
     r"|(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|"
+    r"thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|"
     r"twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)\s+"
     r"(?:hundred|thousand|million|lakh|crore)"
     r")\b",
@@ -153,7 +154,12 @@ _NUMBER_WORD = re.compile(
 #: month" names a date nothing can confirm.
 _RELATIVE_DATE = re.compile(
     r"\b(?:tomorrow|next\s+(?:week|month|year)"
-    r"|in\s+\d+\s+(?:days?|weeks?|months?|years?)"
+    r"|in\s+(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten|eleven"
+    r"|twelve)\s+(?:days?|weeks?|months?|years?)"
+    r"|\b(?:a|one)\s+fortnight\b"
+    r"|\b(?:by|in|until|before|from|during|after)\s+(?:the\s+)?"
+    r"(?:january|february|march|april|may|june|july|august|september|"
+    r"october|november|december)\b"
     r"|end\s+of\s+(?:the\s+)?(?:month|week|year|january|february|march|april|may|"
     r"june|july|august|september|october|november|december))\b",
     re.IGNORECASE,
@@ -317,8 +323,11 @@ def _money_claims(text: str) -> list[tuple[str, Decimal]]:
         # an amount with no money word anywhere near it, and 141 of the 250
         # requests have a safe amount under 1000.
         significant = token.replace(",", "").replace(".", "")
-        if _COUNT_UNIT.match(unspanned[match.end():]) or (
-            len(significant) <= 2 and _COUNT_PREFIX.search(unspanned[:match.start()])
+        # A count noun makes a *count* a quantity: "2 installments" is not
+        # money, but "99999 installments" is a fortune wearing a count noun.
+        if len(significant) <= 2 and (
+            _COUNT_UNIT.match(unspanned[match.end():])
+            or _COUNT_PREFIX.search(unspanned[match.start() - 6:match.start()])
         ):
             continue
         if _COUNT_FOLLOWS.match(unspanned[match.end():]) and len(significant) <= 2:
@@ -420,14 +429,76 @@ _SCOPE = re.compile(
 )
 #: The characters that end a clause for scoping purposes.
 _CLAUSE_END = ".!?;\n"
+#: A quantifier scopes only the denial in its own segment; a preposed
+#: qualifier ("apart from stopping X") scopes the whole clause, because that
+#: is where it sits.
+_SCOPE_QUANTIFIER = re.compile(
+    r"\b(?:no|nothing|none|not|without)\s+(?:other|further|additional|more|else)\s+"
+    r"(?:spending\s+)?(?:should\s+|would\s+|will\s+|can\s+|could\s+|may\s+"
+    r"|might\s+|must\s+)?"
+    r"(?:changes?|cuts?|reductions?|trims?|stops?|required|needed|necessary"
+    rf"|{_CHANGE_VERB})",
+    re.IGNORECASE,
+)
+_SCOPE_PREPOSED = re.compile(
+    rf"\b(?:apart from|except(?: for)?|besides|aside from|other than)\s+"
+    rf"(?:the\s+)?{_CHANGE_VERB}",
+    re.IGNORECASE,
+)
+#: Segment boundaries inside a clause: a quantifier on the far side of a
+#: conjunction qualifies its own denial, not the one before it.
+_SEGMENT_SPLIT = re.compile(r"[,;]|\b(?:and|but|though|although|while)\b", re.IGNORECASE)
+
+
+def _segment_at(text: str, start: int, end: int) -> str:
+    """The comma-and-conjunction segment around ``[start, end)``."""
+    left = 0
+    for char in _CLAUSE_END:
+        index = text.rfind(char, 0, start)
+        if index + 1 > left:
+            left = index + 1
+    for match in _SEGMENT_SPLIT.finditer(text, 0, start):
+        if match.end() > left:
+            left = match.end()
+    right = len(text)
+    for char in _CLAUSE_END:
+        index = text.find(char, end)
+        if 0 <= index < right:
+            right = index
+    for match in _SEGMENT_SPLIT.finditer(text, end):
+        if match.start() < right:
+            right = match.start()
+    return text[left:right]
+
+
+def _clause_start(text: str, start: int) -> int:
+    """The index just past the last clause end before ``start``."""
+    left = 0
+    for char in _CLAUSE_END:
+        index = text.rfind(char, 0, start)
+        if index + 1 > left:
+            left = index + 1
+    return left
+
+
+def _scope_excuse(prose: str, match) -> bool:
+    """True when the denial at ``match`` is qualified to mean "nothing beyond"."""
+    if _SCOPE_QUANTIFIER.search(_segment_at(prose, match.start(), match.end())):
+        return True
+    # A preposed qualifier scopes what follows it, so it has to come before this
+    # denial. One attached to a later denial ("… is needed, and nothing else
+    # changes apart from stopping it") qualifies that one, not this one.
+    # The match itself is included: "apart from stopping the event, nothing
+    # changes" matches as far as "nothing", so the qualifier sits inside it.
+    prefix = prose[_clause_start(prose, match.start()):match.end()]
+    return bool(_SCOPE_PREPOSED.search(prefix))
 
 
 def _clause_at(text: str, start: int, end: int) -> str:
     """The clause around ``[start, end)``: scoping does not cross a full stop."""
-    left = max((text.rfind(char, 0, start) for char in _CLAUSE_END), default=-1)
     rights = [index for index in (text.find(char, end) for char in _CLAUSE_END) if index >= 0]
     right = min(rights) if rights else len(text)
-    return text[left + 1 : right]
+    return text[_clause_start(text, start) : right]
 
 
 def _spelled_date(match) -> tuple[int, int, int | None] | None:
@@ -497,34 +568,36 @@ def states_the_decision(prose, row) -> bool:
             canonical for _, canonical, _span in _phrase_claims(text, METHOD_PHRASES)
         }
         if method not in named:
-            # "the first safe full payment is <date>" is a statement about the
-            # earliest-date column, not a recommendation of full payment.
-            lowered = text.lower()
-            if method == "full_payment" or not any(
-                marker in lowered for marker in ("first safe full payment",
-                                                 "earliest full payment",
-                                                 "first full payment")
-            ):
-                return False
+            # Naming the earliest date is not naming the recommendation: a
+            # sentence about the date column has to say what is recommended too,
+            # or the explanation ships without the decision it is explaining.
+            return False
 
     return True
 
 
 def _cited_date(text: str) -> str | None:
-    """The date this text cites as ISO, from either a numeric or written form."""
-    match = _ISO_DATE.search(text)
-    if match is not None:
-        return match.group(0)
-    match = _SPELLED_DATE.search(text)
-    if match is None:
+    """The FIRST date this text cites, as ISO, from either spelling.
+
+    Order matters: "the earliest full payment is 11 June 2026, not 2026-07-14"
+    cites the written date first, and reading the numeric one because the regex
+    is tried first would endorse a sentence that denies the column.
+    """
+    candidates: list[tuple[int, str]] = []
+    numeric = _ISO_DATE.search(text)
+    if numeric is not None:
+        candidates.append((numeric.start(), numeric.group(0)))
+    for match in _SPELLED_DATE.finditer(text):
+        parsed = _spelled_date(match)
+        if parsed is None:
+            continue
+        month, day, year = parsed
+        if year is None:
+            continue
+        candidates.append((match.start(), f"{year:04d}-{month:02d}-{day:02d}"))
+    if not candidates:
         return None
-    parsed = _spelled_date(match)
-    if parsed is None:
-        return None
-    month, day, year = parsed
-    if year is None:
-        return None
-    return f"{year:04d}-{month:02d}-{day:02d}"
+    return min(candidates, key=lambda item: item[0])[1]
 
 
 def verify_claims(
@@ -622,6 +695,16 @@ def verify_claims(
     for match in re.finditer(r"(?<!\w)event_\d+(?!\w)", prose, re.IGNORECASE):
         if match.group(0).lower() in wanted_ids:
             continue
+        # Naming an event is not recommending a change to it: an explanation
+        # may cite the evidence it weighed ("the charge on the event is
+        # unresolved"). Only a change verb, or the token form, makes it an
+        # action claim.
+        near = prose[max(0, match.start() - 40):match.start()]
+        if not (
+            re.search(rf"\b{_CHANGE_VERB}\b", near, re.IGNORECASE)
+            or re.search(r"(?:stop|reduce_to)\s*:\s*$", near, re.IGNORECASE)
+        ):
+            continue
         # A rationale may not name an event the row does not touch: that is an
         # instruction about somebody else's spending.
         checked += 1
@@ -648,7 +731,7 @@ def verify_claims(
             # match itself, so a repeated phrase is judged where it appears.
             before = prose[: span[0]].rstrip().lower()
             following = prose[span[1] :][:48]
-            if before.endswith(("first safe", "earliest", "first")) and re.match(
+            if re.search(r"(?:\bfirst|\bearliest)\b[^.]{0,40}$", before, re.IGNORECASE) and re.match(
                 r"\s+(?:is|falls on|lands on)\s+", following, re.IGNORECASE
             ):
                 # A statement about the earliest date column has to cite that
@@ -677,13 +760,7 @@ def verify_claims(
                 unsupported.append({"kind": "token", "text": token,
                                     "expected": expected})
     for match in _NO_CHANGES.finditer(prose):
-        if kernel_changes not in {"", "none"} and _SCOPE.search(
-            # The scoping word can sit just past the match ("nothing else
-            # changes" matches as far as "nothing"), but it has to be in the
-            # same clause: a scoping word in the *next* sentence does not
-            # qualify this denial.
-            _clause_at(prose, match.start(), match.end())
-        ):
+        if kernel_changes not in {"", "none"} and _scope_excuse(prose, match):
             # Only a denial that is explicitly scoped to *no other* changes is
             # excused: "stop the one event and nothing else changes" is true,
             # while "no need to stop the event" names the action and still
