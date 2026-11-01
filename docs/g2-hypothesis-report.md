@@ -337,6 +337,47 @@ That identifies one concrete, defensible improvement — project salary from the
 median rather than the latest observation — but it does not change the match
 count, so it is recorded here rather than shipped on speculation.
 
+## Sixth pass: the residual is statistically independent of everything we compute
+
+The kernel's own answer already tracks the reference closely:
+`corr(gold, ours) = +0.911`, and on the 12 rows where our safe amount is
+positive, `median log(gold/ours) = +0.272` with a standard deviation of 0.689.
+
+The gap between the two is not learnable:
+
+| Attempt | Leave-one-out result on the residual `gold − ours` |
+|---|---|
+| XGBoost (300 trees, depth 3) | R² **+0.031**, median absolute error 3,994 against a residual spread of 5,313 |
+| OLS | R² −0.177 |
+| Global expense scale (0.5 … 1.0 of every budget) | no exact match at any scale; MAPE is minimised at scale 1.0 |
+| Exhaustive 1–3 feature linear subsets (`D/full`) | best median error 0.120 with **negative** R² |
+
+A residual that no learner can beat by more than 3% of its own variance, on
+features that include balance, floor, budgets, month-to-date spend, horizon,
+salary, currency, request type and protected categories, means the reference's
+remaining variation is **not a function of the request-time data**. It is either
+information the fixtures do not contain, or a non-deterministic generator.
+
+The categorical splits that the subset search liked do not survive testing: a
+10,000-shuffle permutation test gives `currency=ZAR` p = 0.164,
+`request_type=purchase` p = 0.026 on two rows, `allows_partial=true` p = 0.968,
+`has_rent=yes` p = 0.926, `currency=IDR` p = 0.840, `currency=EUR` p = 0.188.
+None is credible at these sample sizes once multiple comparisons are counted.
+
+### Final position
+
+Everything reachable from this repository has been tried: every structural
+combination of partial-month handling, MTD scope, proration, estimator, history
+window, horizon, tail handling, income cadence/amount/cap, event-status filter
+and expense scale; an exhaustive category-subset search; a fifteen-model zoo
+with native categorical handling; SHAP, partial dependence, proximity and
+distillation on the overfitted ensemble; and a 31B model asked directly.
+
+The result is consistent and bounded: `.911` correlation, a residual with no
+learnable structure, and 0/21 informative exact matches. Closing the last gap
+requires the organiser's reference implementation or additional labelled rows.
+
+
 
 
 

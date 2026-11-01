@@ -121,6 +121,7 @@ DEFAULTS = {
     "horizon_days": 90,         # ledger length scored
     "tail_proration": "off",    # off | on: prorate a bucket that runs past the horizon
     "history_months": 0,        # 0 = all available, else keep the last N months
+    "expense_scale": "1",       # decimal multiplier on every forecast expense bucket
     "income_cadence": "interval",  # interval | calendar
     "income_amount": "latest",     # latest | median
     "income_cap": 2,               # MAX_INCOME_OCCURRENCES analogue
@@ -294,7 +295,7 @@ def _forecast_variant(
         if opts.get("tail_proration") == "on" and bucket_end > window_end:
             tail_days = (window_end - cursor).days + 1
         for category in sorted(budgets):
-            amount = budgets[category]
+            amount = budgets[category] * Decimal(str(opts.get("expense_scale", "1")))
             is_bill = category in recurring
             apply_proration = first and proration != "none" and (
                 has_projected_income or opts["proration_gate"] == "always"
