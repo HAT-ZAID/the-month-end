@@ -34,7 +34,10 @@ def _get_json(url: str, timeout: float = 1.5) -> dict | None:
 
 def ollama_models(env=None) -> list[str]:
     """Model names served by a local Ollama, newest first, or an empty list."""
-    base = str((env or os.environ).get("OLLAMA_URL") or "http://127.0.0.1:11434")
+    env = env or os.environ
+    if str(env.get("BUY_WAIT_MODEL_DISCOVERY") or "1").strip() in ("0", "false", "no"):
+        return []
+    base = str(env.get("OLLAMA_URL") or "http://127.0.0.1:11434")
     base = base.rstrip("/")
     if "127.0.0.1" not in base and "localhost" not in base:
         return []  # never probe a remote host for a menu

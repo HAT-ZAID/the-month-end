@@ -102,6 +102,12 @@ def db(tmp_path, monkeypatch):
     return path
 
 
+@pytest.fixture(autouse=True)
+def _no_model_probe(monkeypatch):
+    """Tests never reach a model server: the menu is exercised with discovery off."""
+    monkeypatch.setenv("BUY_WAIT_MODEL_DISCOVERY", "0")
+
+
 def test_store_round_trips_one_person(db):
     created = store.create("ana", home_currency="ZAR")
     assert store.has_user("ana")
@@ -323,9 +329,15 @@ def test_without_a_model_the_conversation_says_so(db):
 def test_the_model_menu_always_offers_an_honest_no_model_entry():
     from code import models
 
-    items = models.options(env={})
+    items = models.options(env={"BUY_WAIT_MODEL_DISCOVERY": "0"})
     assert items[0]["id"] == "none"
     assert "kernel" in items[0]["label"].lower()
+
+
+def test_model_discovery_can_be_switched_off_so_no_probe_is_made():
+    from code import models
+
+    assert models.ollama_models(env={"BUY_WAIT_MODEL_DISCOVERY": "0"}) == []
 
 
 def test_selecting_a_local_model_targets_that_model_not_the_default():
@@ -346,7 +358,7 @@ def test_the_no_model_choice_builds_no_provider():
 def test_a_free_tier_is_labelled_as_training_on_your_text():
     from code import models
 
-    items = models.options(env={"OPENROUTER_KEY": "x"})
+    items = models.options(env={"BUY_WAIT_MODEL_DISCOVERY": "0", "OPENROUTER_KEY": "x"})
     labels = " ".join(item["label"] for item in items).lower()
     assert "trains on your text" in labels
     assert any(item["privacy"] == "free" for item in items)
