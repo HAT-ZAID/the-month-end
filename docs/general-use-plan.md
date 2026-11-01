@@ -4,6 +4,11 @@
 contract, the API surfaces, the phases and the acceptance criteria are all here, so no prior
 conversation is needed.
 
+> **Newer documents, read them too.**
+> `docs/handover-state.md` — the branch, the 12 commits, what is verified, what is unreviewed.
+> `docs/g2-root-cause-plan.md` — the deep G2 investigation: established defects, the ruled-out
+> register, open hypotheses H1–H20, the agentic probe programme, and the build sequence.
+
 ---
 
 ## 0. The instruction this plan serves
