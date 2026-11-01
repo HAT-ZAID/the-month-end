@@ -65,6 +65,11 @@ Focused tests only, per the user's instruction: `pytest -q tests/review/test_gen
 tests/test_hardening.py tests/test_evaluation.py` -> 50 passed. No full-suite run yet, and no
 review rounds yet: both are gated on all phases being complete.
 
+Release gates, now that the phases are complete: `python -m evaluation.run --mode pr` reports
+PASS on G0 (15/15 structural checks), G1 (0 status upgrades, 0 safe overclaims), G3
+(determinism over 25 rows) and G4 (provenance), and FAIL on G2 (sample quality, 3/25 full
+rows) - the same G2 failure the accepted baseline has carried since `db364ba`.
+
 One pre-existing fact worth recording: at `3370f07` the pipeline re-run produces
 `BFF8447F...`, not the committed `1F35043F...`. The drift is in the batch explanation text and
 exists without this branch's changes; the committed `output.csv` is restored and untouched.
