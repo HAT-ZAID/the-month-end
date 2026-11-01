@@ -75,9 +75,9 @@ _PASSWORD_ASSIGNMENT = re.compile(
     # Bounded run. The lookbehind excludes only word characters and a dot,
     # so inside a run of "-+%~" every offset is a candidate start; an
     # unbounded class then rescans the rest of the run at each one, which is
-    # quadratic. A username longer than 64 characters is not realistic, and
-    # the scheme form is already handled by _URL_USERINFO.
-    r"|(?<![\w.])([A-Za-z0-9._~%+-]{1,64}):([^\s@/]+)@(?=[A-Za-z0-9\[])"
+    # quadratic. The bound is generous enough for any real username, and the
+    # scheme form is already handled by _URL_USERINFO.
+    r"|(?<![\w.])([A-Za-z0-9._~%+-]{1,128}):([^\s@/]+)@(?=[A-Za-z0-9\[])"
     # A provider error can quote a JSON body, where the name sits inside quotes
     # and the separator is a colon inside them.
     r"|\"\w*(?:api|access|session|refresh|client|private|secret|id)?(?:key|token|secret)\"\s*:\s*\"[^\"]+",

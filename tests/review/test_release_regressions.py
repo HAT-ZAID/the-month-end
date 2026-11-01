@@ -706,3 +706,40 @@ def test_a_camel_case_cookie_assignment_keeps_no_value():
         cleaned = sanitize({"e": text})["e"]
         assert "abcdef123456" not in cleaned, text
     assert sanitize({"e": "total_tokens=42"})["e"] == "total_tokens=42"
+
+
+def test_a_qualifier_binds_to_the_denial_it_excuses():
+    row = _row(spending_changes_needed="stop:event_9")
+    for text in (
+        "No spending changes are needed because no other changes are needed.",
+        "Apart from stopping event_9, you don't need to stop event_9.",
+    ):
+        assert verify_claims(text, row)["ok"] is False, text
+    for text in (
+        "Stop event_9 and nothing else changes.",
+        "Apart from stopping event_9, nothing changes.",
+        "No other changes are needed once you stop event_9.",
+    ):
+        assert verify_claims(text, row)["ok"] is True, text
+
+
+def test_a_small_leading_count_is_read_whole():
+    report = verify_claims("We checked 3 of 5 samples.", _row())
+    assert [item for item in report["unsupported"] if item["kind"] == "amount"] == []
+
+
+def test_a_long_username_still_keeps_its_password_out_of_a_trace():
+    from code.trace import sanitize
+
+    cleaned = sanitize({"e": "a" * 100 + ":hunter2value@gateway.example"})["e"]
+    assert "hunter2value" not in cleaned
+
+
+def test_a_rejected_explanation_falls_back_to_the_kernel_text():
+    from code.main import _checked_explanation
+
+    row = dict(ROW)
+    row["decision_explanation"] = "The kernel's own sentence."
+    assert _checked_explanation(
+        "You can safely pay 110423.7425 today.", row
+    ) == "The kernel's own sentence."

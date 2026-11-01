@@ -327,7 +327,7 @@ def _money_claims(text: str) -> list[tuple[str, Decimal]]:
         # money, but "99999 installments" is a fortune wearing a count noun.
         if len(significant) <= 2 and (
             _COUNT_UNIT.match(unspanned[match.end():])
-            or _COUNT_PREFIX.search(unspanned[match.start() - 6:match.start()])
+            or _COUNT_PREFIX.search(unspanned[max(0, match.start() - 6):match.start()])
         ):
             continue
         if _COUNT_FOLLOWS.match(unspanned[match.end():]) and len(significant) <= 2:
@@ -447,7 +447,7 @@ _SCOPE_PREPOSED = re.compile(
 )
 #: Segment boundaries inside a clause: a quantifier on the far side of a
 #: conjunction qualifies its own denial, not the one before it.
-_SEGMENT_SPLIT = re.compile(r"[,;]|\b(?:and|but|though|although|while)\b", re.IGNORECASE)
+_SEGMENT_SPLIT = re.compile(r"[,;]|\b(?:and|but|though|although|while|because|since)\b", re.IGNORECASE)
 
 
 def _segment_at(text: str, start: int, end: int) -> str:
@@ -481,17 +481,30 @@ def _clause_start(text: str, start: int) -> int:
     return left
 
 
-def _scope_excuse(prose: str, match) -> bool:
+def _scope_excuse(prose: str, match, changes) -> bool:
     """True when the denial at ``match`` is qualified to mean "nothing beyond"."""
-    if _SCOPE_QUANTIFIER.search(_segment_at(prose, match.start(), match.end())):
+    segment = _segment_at(prose, match.start(), match.end())
+    if _SCOPE_QUANTIFIER.search(segment):
+        # The quantifier sits beside the denial it qualifies.
         return True
     # A preposed qualifier scopes what follows it, so it has to come before this
-    # denial. One attached to a later denial ("… is needed, and nothing else
-    # changes apart from stopping it") qualifies that one, not this one.
-    # The match itself is included: "apart from stopping the event, nothing
-    # changes" matches as far as "nothing", so the qualifier sits inside it.
-    prefix = prose[_clause_start(prose, match.start()):match.end()]
-    return bool(_SCOPE_PREPOSED.search(prefix))
+    # denial. The match itself is included: "apart from stopping the event,
+    # nothing changes" matches as far as "nothing", so the qualifier sits inside
+    # it.
+    clause_start = _clause_start(prose, match.start())
+    prefix = prose[clause_start:match.end()]
+    preposed = _SCOPE_PREPOSED.search(prefix)
+    if preposed is None:
+        return False
+    if preposed.end() > match.start() - clause_start:
+        # The qualifier sits inside the match itself ("apart from stopping it,
+        # nothing changes"), so the denial is scoped by its own words.
+        return True
+    if changes not in {"", "none"} and cites_every_action(segment, changes):
+        # "Apart from stopping it, you don't need to stop it" denies the very
+        # action the row requires, whatever qualifier stands beside it.
+        return False
+    return True
 
 
 def _clause_at(text: str, start: int, end: int) -> str:
@@ -760,7 +773,7 @@ def verify_claims(
                 unsupported.append({"kind": "token", "text": token,
                                     "expected": expected})
     for match in _NO_CHANGES.finditer(prose):
-        if kernel_changes not in {"", "none"} and _scope_excuse(prose, match):
+        if kernel_changes not in {"", "none"} and _scope_excuse(prose, match, kernel_changes):
             # Only a denial that is explicitly scoped to *no other* changes is
             # excused: "stop the one event and nothing else changes" is true,
             # while "no need to stop the event" names the action and still
