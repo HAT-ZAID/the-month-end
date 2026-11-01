@@ -744,6 +744,38 @@ of money words:
   `BUY_WAIT_ACCEPT_FREE_TIER`. A copied `.env` could quiet them; both now always
   warn.
 
+A seventh and eighth pass followed, and they were the most useful of the lot
+because each one found the previous pass's fix to be one wording wide:
+
+* the claim check enumerated denials of a spending change. Every round closed the
+  sentences it was shown and missed the ones beside them, until the rule stopped
+  enumerating: an auxiliary negation within forty characters of a change verb, or an
+  absence-of-change statement about spending, is the claim now. "won't need to cut",
+  "will not have to reduce", "spending is unchanged" and "nothing changes" all fail
+  the check on a row that carries an action.
+* removing the bare adjective "affordable" fixed the with-plan false rejections and
+  broke "This is affordable." on an unaffordable row. It is back as a weaker claim —
+  affordable in some form — which every `affordable_*` status satisfies and
+  `not_affordable` does not.
+* the claim check compared solver precision while `output.csv` ships cents, so a
+  model that quoted the figure the tool printed was accused of inventing it. Plan
+  legs and `reduce_to` amounts are now quantised to the cents the CSV writes, and the
+  kernel row keeps its own value and type so nothing shipped moves.
+* a written date without a year was blanked before the money scan and then never
+  checked, so "the payment is due March 14" could ship against a row that says
+  otherwise; a bare ordinal ("on the 14th") escaped both checks. Both are date claims
+  now, and only a date the checker can parse is blanked.
+* the request-ID agent path passed the caller's provider instead of the one
+  `build_provider()` resolved, so it ran on `NullProvider` after announcing a model.
+* on the privacy side the scrubber learned the shapes a gateway echoes (a PEM block
+  of any kind, `Cookie:`/`Set-Cookie:`, Azure `sig=`, "invalid API key for …") and,
+  more usefully, stopped guessing: `build_provider()` registers the literal secrets
+  the process holds, so a key of any shape is replaced before the patterns run.
+
+None of it is an argument against the earlier passes. Each one closed a real path,
+and the pattern they trace is the one worth recording: a check written as a list of
+words will always be one sentence short.
+
 ### 10.3 The disagreement note, and why it is agent-only
 
 The model's explanation used to be discarded whenever it disagreed with the computed
