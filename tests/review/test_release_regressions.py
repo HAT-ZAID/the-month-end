@@ -525,6 +525,9 @@ def test_the_scrubber_stays_linear_on_a_long_alphanumeric_body():
         "Error: " + "-" * 65000 + ":",
         "x+" * 30000 + "@",
         "http://gw.example/" + "a-a-" * 6000 + "=",
+        # Colon-dense: the value run must not be able to swallow the rest of
+        # the string from every offset, which is what made this quadratic.
+        "a:1," * 20000,
     )
     for body in bodies:
         started = time.monotonic()
@@ -743,3 +746,51 @@ def test_a_rejected_explanation_falls_back_to_the_kernel_text():
     assert _checked_explanation(
         "You can safely pay 110423.7425 today.", row
     ) == "The kernel's own sentence."
+
+
+def test_a_long_scheme_less_username_still_redacts_its_password():
+    from code.trace import sanitize
+
+    for size in (63, 64, 65, 200):
+        user = "u" * size
+        scrubbed = sanitize({"e": f"{user}:TOPSECRETVALUE@gateway.example"})["e"]
+        assert "TOPSECRETVALUE" not in scrubbed, size
+        assert scrubbed.endswith("gateway.example"), scrubbed
+
+
+def test_a_token_heuristic_consumes_the_whole_token():
+    from code.trace import sanitize
+
+    for text in (
+        "Authorization: Bearer abc+def/ghi+jkl",
+        "Bearer abcdefgh==ijklmnop",
+        "Basic dXNlcjpwYXNz-d29yZA",
+    ):
+        scrubbed = sanitize({"e": text})["e"]
+        assert "abc+" not in scrubbed and "ijklmnop" not in scrubbed, text
+        assert "d29yZA" not in scrubbed, text
+
+
+def test_tab_armour_and_a_putty_key_are_redacted():
+    from code.trace import sanitize
+
+    tabbed = (("-" * 5) + "BEGIN\tRSA PRIVATE KEY" + ("-" * 5)
+              + "\nMIIEexamplebody\n"
+              + ("-" * 5) + "END\tRSA PRIVATE KEY" + ("-" * 5))
+    assert "MIIEexamplebody" not in sanitize({"e": tabbed})["e"]
+
+    ppk = ("PuTTY-User-Key-File-2: ssh-rsa\nPrivate-Lines: 2\n"
+           "AAAAB3NzaC1yc2EAAAADAQAB\nAQDexamplebody12345678\n")
+    assert "AQDexamplebody12345678" not in sanitize({"e": ppk})["e"]
+
+
+def test_the_environment_key_is_registered_as_a_secret(monkeypatch):
+    from code import jev
+    from code.trace import REDACTED, _KNOWN_SECRETS, sanitize
+
+    monkeypatch.setenv("OPENCODE_API_KEY", "envkeyvalue12345")
+    jev.load_api_key()
+    assert "envkeyvalue12345" in _KNOWN_SECRETS
+    assert sanitize({"e": "403 key envkeyvalue12345 rejected"})["e"] == (
+        f"403 key {REDACTED} rejected"
+    )

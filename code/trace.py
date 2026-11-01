@@ -51,8 +51,8 @@ _SECRET_VALUE = re.compile(
     r"|\bgh[pousr]_[A-Za-z0-9]{20,}"
     r"|\bxox[abprs]-[A-Za-z0-9-]{10,}"
     r"|\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}"
-    r"|(?i:Bearer\s+)[A-Za-z0-9._-]{8,}"
-    r"|(?i:Basic\s+)[A-Za-z0-9+/=]{8,}"
+    r"|(?:Bearer|BEARER|bearer)\s+[A-Za-z0-9._\-+/=]{8,}"
+    r"|(?:Basic|BASIC|basic)\s+[A-Za-z0-9+/=\-]{8,}"
     r"|\bAIza[A-Za-z0-9_-]{30,}"
     r"|\b(?:hf|npm|whsec)_[A-Za-z0-9]{16,})"
 )
@@ -72,12 +72,12 @@ _PASSWORD_ASSIGNMENT = re.compile(
     r"|(?:set-)?cookie\s*:\s*[^\n]+"
     r"|[?&]sig=\S+"
     r"|\bcookie\s*=\s*\S+"
-    # Bounded run. The lookbehind excludes only word characters and a dot,
-    # so inside a run of "-+%~" every offset is a candidate start; an
-    # unbounded class then rescans the rest of the run at each one, which is
-    # quadratic. The bound is generous enough for any real username, and the
-    # scheme form is already handled by _URL_USERINFO.
-    r"|(?<![\w.])([A-Za-z0-9._~%+-]{1,128}):([^\s@/]+)@(?=[A-Za-z0-9\[])"
+    # Both runs are bounded, and the value cannot contain ":" — without that
+    # exclusion a colon-dense body ("a:1,a:1,…") restarts a user run at every
+    # offset and then swallows the rest of the string as the value, which is
+    # quadratic. With it, a scheme-less DSN still redacts, and the scheme form
+    # is handled by _URL_USERINFO before this pattern runs.
+    r"|(?<![\w.])([A-Za-z0-9._~%+-]{1,256}):([^\s@/:]{1,64})@(?=[A-Za-z0-9\[])"
     # A provider error can quote a JSON body, where the name sits inside quotes
     # and the separator is a colon inside them.
     r"|\"\w*(?:api|access|session|refresh|client|private|secret|id)?(?:key|token|secret)\"\s*:\s*\"[^\"]+",
@@ -149,10 +149,14 @@ def sanitize(value):
 
 
 _PEM_BEGIN = re.compile(
-    r"-{4,5}\s?BEGIN [A-Z0-9 ]*PRIVATE KEY[A-Z ]*\s?-{4,5}", re.IGNORECASE
+    r"-{4,5}\s?BEGIN\s+[A-Z0-9\s]*PRIVATE KEY[A-Z\s]*\s?-{4,5}", re.IGNORECASE
 )
 _PEM_END = re.compile(
-    r"-{4,5}\s?END [A-Z0-9 ]*PRIVATE KEY[A-Z ]*\s?-{4,5}", re.IGNORECASE
+    r"-{4,5}\s?END\s+[A-Z0-9\s]*PRIVATE KEY[A-Z\s]*\s?-{4,5}", re.IGNORECASE
+)
+#: A PuTTY key carries no armour: the body follows ``Private-Lines:``.
+_PUTTY_PRIVATE = re.compile(
+    r"private-lines\s*:\s*\d+\s*(?:\n\s*[A-Za-z0-9+/=]{16,})+", re.IGNORECASE
 )
 
 
@@ -183,6 +187,7 @@ def _scrub_text(value: str) -> str:
     cleaned = _URL_USERINFO.sub(f"{REDACTED}@", value)
     # Count-bounded: a hostile body can repeat a BEGIN marker thousands of
     # times, and each one costs a window scan.
+    cleaned = _PUTTY_PRIVATE.sub(REDACTED, cleaned)
     cleaned = _redact_pem(cleaned)
     cleaned = _SECRET_VALUE.sub(REDACTED, cleaned)
     for secret in _KNOWN_SECRETS:

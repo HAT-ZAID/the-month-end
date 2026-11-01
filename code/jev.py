@@ -159,6 +159,11 @@ def load_api_key(env=None) -> tuple[str | None, str]:
     env = os.environ if env is None else env
     from_env = _text(env.get(OPENCODE_API_KEY_ENV))
     if from_env:
+        # The same reason as the auth.json path below: a 403 body often
+        # quotes the key it rejected, and the report persists that text.
+        from code.trace import register_secret
+
+        register_secret(from_env)
         return from_env, "environment"
     path = Path(_text(env.get(AUTH_JSON_PATH_ENV)) or DEFAULT_AUTH_JSON)
     try:
