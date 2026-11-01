@@ -502,3 +502,32 @@ def test_a_trace_keeps_only_a_known_concern_code(tmp_path):
     assert "4111111111111111" not in text
     assert "dataset unavailable" in text
     assert "other" in text
+
+
+def test_the_task_trace_rebuilds_actions_applied_from_an_allowlist():
+    from code.task_agent import TaskResult, _write_trace
+
+    result = TaskResult(
+        task_id="task_actions",
+        instruction="stop the delivery membership",
+        actions_applied=[
+            {"request_id": "request_1", "action": "stop:event_9:25000",
+             "note": "user said eat less"},
+        ],
+    )
+    directory = __import__("pathlib").Path(__import__("tempfile").mkdtemp())
+    path = _write_trace(result, directory)
+    text = __import__("pathlib").Path(path).read_text(encoding="utf-8")
+    assert "request_1" in text
+    assert "stop:event_9" in text
+    assert "25000" not in text
+    assert "eat less" not in text
+
+
+def test_an_unknown_request_id_is_refused_not_made_manual():
+    workspace = StubWorkspace({"request_1": DECISION})
+    result = run_task("can I afford 40000 on request_9", workspace=workspace)
+    (step,) = result.steps
+    assert step.status == STATUS_REFUSED
+    assert "request_9" in step.detail
+    assert not any(str(key).startswith("manual_") for key in workspace._manual)

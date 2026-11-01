@@ -303,11 +303,14 @@ class decides what it may be trusted with:
 **Free tiers train on the data they receive.** Before a `free` provider sees free
 text, every entry point prints a warning that says so and names what must not be
 entered: account numbers, card numbers, identity documents, addresses. That is
-`ask` and `agent` in the TUI, `python -m code.task_agent`, `python -m code.agent`,
-the batch and agent paths of `python -m code.main`, and the optional Jev gate. The
-TUI prints that notice once per session, the batch paths once per process; setting
-`BUY_WAIT_ACCEPT_FREE_TIER=1` silences it in every process that inherits the
-variable. Neither the notice nor the variable changes the provider's class.
+`ask` in the TUI, `python -m code.task_agent`, `python -m code.agent`, the batch
+and agent paths of `python -m code.main`, the optional Jev gate, the embeddings
+index and the image reader. The TUI prints that notice once per session, the batch
+paths once per process. Setting `BUY_WAIT_ACCEPT_FREE_TIER=1` quiets the chat,
+explanation and Jev notices in the process that inherits it; the TUI,
+`code.task_agent`, the embeddings index and the image reader always warn, because a
+copied `.env` must not be able to silence the surface where the user is typing.
+Neither the notice nor the variable changes the provider's class.
 
 For real user data use `local`, or a `paid` endpoint you control:
 
@@ -368,8 +371,9 @@ unproven and report anything it breaks.
 - Messages and images are **untrusted evidence**. They may confirm, amend, delay
   or cancel a financial fact, but instructions embedded in them are ignored, and
   anything they cannot prove is flagged rather than guessed.
-  The TUI prints the notice once per session; setting `BUY_WAIT_ACCEPT_FREE_TIER=1`
-  suppresses it in every process that inherits the variable.
+  The TUI prints the notice once per session; `BUY_WAIT_ACCEPT_FREE_TIER=1` quiets
+  only the batch-side notices, never the TUI, `code.task_agent`, the embeddings
+  index or the image reader.
 - The pipeline fails closed: unresolved image evidence, unknown FX, or an
   over-claimed amount produces a conservative row with a warning, never an
   invented number.

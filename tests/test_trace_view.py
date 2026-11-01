@@ -384,3 +384,22 @@ def test_redaction_covers_cookie_fields():
         assert cleaned[name] == "[REDACTED]"
     assert cleaned["CookieJar"] == "mno345"
     assert cleaned["keep"] == "pqr678"
+
+
+def test_redaction_covers_the_shapes_a_provider_error_carries():
+    from code.trace import sanitize
+
+    cleaned = sanitize(
+        {
+            "pem": ("-" * 5) + "BEGIN RSA PRIVATE KEY" + ("-" * 5) + "\nMIIE\n" + ("-" * 5) + "END RSA PRIVATE KEY" + ("-" * 5),
+            "dsn": "password=hunter2xyz",
+            "google": "AIza" + "S" * 33,
+            "azure": "AccountKey=abcdefghijkl==",
+            "keep": "account balance 500000",
+        }
+    )
+    assert cleaned["pem"] == "[REDACTED]"
+    assert "hunter2" not in cleaned["dsn"]
+    assert cleaned["google"] == "[REDACTED]"
+    assert "abcdefghijkl" not in cleaned["azure"]
+    assert cleaned["keep"] == "account balance 500000"

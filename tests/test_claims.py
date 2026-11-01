@@ -481,20 +481,30 @@ def test_denying_a_required_change_is_a_claim():
 
 
 def test_a_stacked_marker_prefix_is_still_the_marker():
+    # The candidate agrees with the row and makes no numeric claim, so the only
+    # thing that can demote it is the marker behind the prefixes.
     candidate = {
-        "request_id": "request_demo",
-        "amount_safe_to_pay": "1",
-        "affordability_status": "affordable_now",
-        "recommended_payment_method": "full_payment",
-        "payment_plan": "2025-08-03:15656000",
-        "earliest_date_for_full_payment": "2025-08-03",
-        "spending_changes_needed": "none",
-        "evidence_sufficient": True,
-        "confidence": 0.4,
-        "rationale": "> 1. Disagreements: the plan holds against the ledger.",
+        key: ROW[key]
+        for key in (
+            "request_id",
+            "amount_safe_to_pay",
+            "affordability_status",
+            "recommended_payment_method",
+            "payment_plan",
+            "earliest_date_for_full_payment",
+            "spending_changes_needed",
+        )
     }
+    candidate.update(
+        {
+            "evidence_sufficient": True,
+            "confidence": 0.4,
+            "rationale": "> - Disagreements: the plan holds against the ledger.",
+        }
+    )
     result = enforce_decision(candidate, dict(ROW), disagreement_note=True)
-    assert result["verification"]["rationale_source"] != "candidate"
+    assert result["verification"]["agent_agreement"] is True
+    assert result["verification"]["rationale_source"] == "kernel"
 
 
 def test_denying_a_required_change_without_the_word_any_is_a_claim():
@@ -503,3 +513,53 @@ def test_denying_a_required_change_without_the_word_any_is_a_claim():
     report = verify_claims("This works without spending changes.", row)
     assert report["ok"] is False
     assert [item["kind"] for item in report["unsupported"]] == ["changes"]
+
+
+def _change_row():
+    row = dict(ROW)
+    row["spending_changes_needed"] = "stop:event_9"
+    return row
+
+
+def test_every_wording_that_denies_a_change_is_a_claim():
+    row = _change_row()
+    for sentence in (
+        "No spending cuts are needed.",
+        "You need not stop any spending.",
+        "You do not need to reduce anything.",
+        "spending_changes_needed: none.",
+        "Your spending stays as it is.",
+        "Nothing is cut from your plan.",
+    ):
+        report = verify_claims(sentence, row)
+        assert report["ok"] is False, sentence
+
+
+def test_a_decision_stated_in_ordinary_english_is_a_claim():
+    row = dict(ROW)
+    row["affordability_status"] = "not_affordable"
+    row["recommended_payment_method"] = "not_recommended"
+    assert verify_claims("You can afford this in full.", row)["ok"] is False
+    assert verify_claims("Pay the full amount now.", row)["ok"] is False
+    assert verify_claims("Pay in one installment.", row)["ok"] is False
+
+    now = dict(ROW)
+    now["affordability_status"] = "affordable_now"
+    now["recommended_payment_method"] = "full_payment"
+    assert verify_claims("You cannot afford this today.", now)["ok"] is False
+    assert verify_claims("This is unaffordable right now.", now)["ok"] is False
+
+
+def test_the_claim_check_accepts_the_cents_the_csv_prints():
+    row = dict(ROW)
+    row["amount_safe_to_pay"] = "110423.74250000000000000000"
+    assert verify_claims("You can safely pay 110423.74 today.", row)["ok"] is True
+    fine = verify_claims("You can safely pay 110423.7425 today.", row)
+    assert fine["ok"] is False
+
+
+def test_a_month_and_a_day_are_not_read_as_money():
+    row = dict(ROW)
+    assert [item for item in verify_claims(
+        "March 14 is the day.", row
+    )["unsupported"] if item["kind"] == "amount"] == []

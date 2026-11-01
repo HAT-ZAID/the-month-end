@@ -560,3 +560,29 @@ def test_a_list_item_marker_cannot_ship_as_candidate_prose():
         candidate["confidence"] = 0.5
         result = enforce_decision(candidate, dict(KERNEL), disagreement_note=True)
         assert result["verification"]["rationale_source"] in {"kernel", "disagreement"}
+
+
+def test_a_bulleted_marker_is_still_the_marker():
+    base = {
+        key: KERNEL[key]
+        for key in (
+            "request_id",
+            "amount_safe_to_pay",
+            "affordability_status",
+            "recommended_payment_method",
+            "payment_plan",
+            "earliest_date_for_full_payment",
+            "spending_changes_needed",
+        )
+    }
+    for prefix in ("\u2022 ", "\u25aa ", "\u00b7 "):
+        candidate = dict(base)
+        candidate.update(
+            {
+                "evidence_sufficient": True,
+                "confidence": 0.4,
+                "rationale": prefix + "Disagreements: the plan holds.",
+            }
+        )
+        result = enforce_decision(candidate, dict(KERNEL), disagreement_note=True)
+        assert result["verification"]["rationale_source"] == "kernel", prefix

@@ -25,35 +25,81 @@ plainer explanation, while a shipped fabrication costs them money.
 from __future__ import annotations
 
 import re
-from decimal import Decimal
+from decimal import ROUND_DOWN, Decimal
 
 from code.amounts import to_decimal
 
 # --- what the model may claim ---------------------------------------------
 
+#: A model writes the decision in ordinary English, not only in the contract's
+#: own words. Each variant maps to the value it asserts; ``verify_claims``
+#: compares that value with the kernel's, so a sentence that denies an affordable
+#: request is caught by the status it actually claims.
 STATUS_PHRASES = {
-    "affordable_now": ("affordable now",),
+    "affordable_now": (
+        "affordable now",
+        "affordable today",
+        "affordable",
+        "can afford",
+        "could afford",
+    ),
     "affordable_with_plan": (
         "affordable with plan",
         "affordable with a plan",
         "affordable with the plan",
+        "affordable with some changes",
     ),
-    "affordable_later": ("affordable later",),
-    "not_affordable": ("not affordable",),
+    "affordable_later": ("affordable later", "affordable next"),
+    "not_affordable": (
+        "not affordable",
+        "cannot afford",
+        "can't afford",
+        "could not afford",
+        "unaffordable",
+        "not be affordable",
+    ),
 }
 
 METHOD_PHRASES = {
-    "full_payment": ("full payment", "pay in full", "paying in full"),
-    "partial_payment": ("partial payment", "pay part", "paying part"),
+    "full_payment": (
+        "full payment",
+        "pay in full",
+        "paying in full",
+        "pay the full amount",
+        "full amount",
+        "whole amount",
+        "in full",
+        "all at once",
+        "one payment",
+        "single payment",
+    ),
+    "partial_payment": (
+        "partial payment",
+        "pay part",
+        "paying part",
+        "pay some now",
+        "part now",
+    ),
     "installments": (
         "installments",
         "instalments",
+        "installment",
+        "instalment",
         "installment plan",
         "instalment plan",
+        "in installments",
+        "in instalments",
+        "in one installment",
+        "in one instalment",
+        "single installment",
+        "single instalment",
     ),
-    "wait": ("wait", "waiting"),
-    "not_recommended": ("not recommended",),
+    "wait": ("wait", "waiting", "wait until"),
+    "not_recommended": ("not recommended", "do not proceed", "should not proceed"),
 }
+
+#: Money fields the CSV writes at cent precision.
+_CENT_FIELDS = ("amount_safe_to_pay",)
 
 #: A currency code glued to the digits ("ZAR50000", "Rp2.000.000") is a prefix,
 #: not a word boundary, so the code is blanked before the scan and the digits
@@ -83,6 +129,10 @@ _MONTHS = {
     "aug": 8, "sep": 9, "sept": 9, "oct": 10, "nov": 11, "dec": 12,
 }
 _MONTH_WORD = "|".join(sorted(_MONTHS, key=len, reverse=True))
+#: "<month> <day>" with no ordinal and no year: a date a reader sees, but not
+#: one the checker can verify, so it is neither claimed nor read as money.
+_MONTH_DAY_PAIR = re.compile(rf"\b(?:{_MONTH_WORD})\s+\d{{1,2}}(?!\d)\b", re.IGNORECASE)
+
 #: A written date in either order, with an optional day suffix and year.
 _SPELLED_DATE = re.compile(
     rf"\b(?:(?P<day1>\d{{1,2}})(?:st|nd|rd|th)?\s+(?:of\s+)?"
@@ -92,7 +142,7 @@ _SPELLED_DATE = re.compile(
     re.IGNORECASE,
 )
 _MONEY = re.compile(
-    r"(?<![\w.,])(\d{1,3}(?:\.\d{3})+|\d[\d,]*(?:\.\d+)?)(?![\w])"
+    r"(?<![\w.,])(\d{1,3}(?:\.\d{3})+|\d[\d,]*(?:\.\d+)?)(?!\d)"
 )
 #: The same figure with its thousands separators: "2.000.000" is two million.
 _DOT_GROUPED = re.compile(r"\d{1,3}(?:\.\d{3})+")
@@ -125,10 +175,15 @@ def _decimal(value) -> Decimal | None:
 
 def _supported_numbers(row: dict, extra_numbers=()) -> set[Decimal]:
     numbers: set[Decimal] = set()
-    for value in row.values():
+    for field, value in row.items():
         number = _decimal(value)
-        if number is not None:
-            numbers.add(number)
+        if number is None:
+            continue
+        if field in _CENT_FIELDS:
+            # ``output.csv`` ships cents, so that is the figure a correct
+            # explanation cites; the solver's full precision is not.
+            number = number.quantize(Decimal("0.01"), rounding=ROUND_DOWN)
+        numbers.add(number)
     # An installment or partial plan is a `date:amount|date:amount` string, so
     # each leg amount has to be added explicitly: the whole string is not a
     # number, and the legs are exactly what a plan explanation cites.
@@ -172,6 +227,9 @@ def _money_claims(text: str) -> list[tuple[str, Decimal]]:
     # The same for a written date: "12 September 2025" is a date, and its
     # day and year are not amounts.
     unspanned = _SPELLED_DATE.sub(lambda match: " " * len(match.group(0)), unspanned)
+    # "March 14" without an ordinal or a year is still a date to a reader:
+    # blank it so the day is neither an amount nor an unverified date claim.
+    unspanned = _MONTH_DAY_PAIR.sub(lambda match: " " * len(match.group(0)), unspanned)
     # "50k" is fifty thousand: read the multiplier, then blank the span so the
     # "50" is not claimed as a bare fifty.
     shorthand = []
@@ -195,8 +253,8 @@ def _money_claims(text: str) -> list[tuple[str, Decimal]]:
         # an amount with no money word anywhere near it, and 141 of the 250
         # requests have a safe amount under 1000.
         significant = token.replace(",", "").replace(".", "")
-        if _COUNT_UNIT.match(unspanned[match.end():]) or _COUNT_PREFIX.search(
-            unspanned[:match.start()]
+        if _COUNT_UNIT.match(unspanned[match.end():]) or (
+            len(significant) <= 2 and _COUNT_PREFIX.search(unspanned[:match.start()])
         ):
             continue
         if _COUNT_FOLLOWS.match(unspanned[match.end():]) and len(significant) <= 2:
@@ -238,9 +296,16 @@ def _normalise_action(token: str) -> str:
     return f"reduce_to:{event_id}:{_decimal(amount)}"
 
 
+#: Every way a model denies a spending change. The action column is the one
+#: machine field a sentence can contradict without naming a number, so the
+#: wordings are enumerated rather than guessed: "no cuts", "need not stop",
+#: "spending stays as it is", "spending_changes_needed: none".
 _NO_CHANGES = re.compile(
-    r"\b(?:no|without(?: any)?|needs? no)\s+(?:spending\s+)?changes?\b"
-    r"|\bnothing\b[^.]{0,20}\b(?:stop|cut|reduce)\b",
+    r"\b(?:no|without(?: any)?|needs? no|need not|do(?:es)? not need|don't need)\s+"
+    r"(?:to\s+)?(?:spending\s+)?(?:changes?|cuts?|reductions?|trims?|stops?|cancellations?|pauses?|stop|cut|reduce|trim|cancel|pause)\b"
+    r"|\bnothing\b[^.]{0,24}\b(?:stop|cut|reduce|change|cancel)\b"
+    r"|\bspending_changes_needed\s*[:=]\s*none\b"
+    r"|\bspending\s+(?:stays|remains)\b",
     re.IGNORECASE,
 )
 
@@ -254,6 +319,10 @@ def _spelled_date(match) -> tuple[int, int, int | None] | None:
         return None
     number = _MONTHS.get(str(month).lower())
     if number is None:
+        return None
+    if not year and str(month) != str(month).capitalize():
+        # "the 14 may be too early" is a modal, not May: a lower-case month word
+        # only counts as a date when a year pins it down.
         return None
     return number, int(day), (int(year) if year else None)
 

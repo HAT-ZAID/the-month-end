@@ -28,6 +28,8 @@ from __future__ import annotations
 import re
 from decimal import ROUND_DOWN, Decimal
 
+from code.amounts import to_decimal
+
 from code.claims import verify_claims
 from code.schema import (
     CENT,
@@ -97,11 +99,11 @@ def _kernel_row(kernel_result: dict) -> dict:
         if field not in kernel_result:
             raise KeyError(f"kernel_result is missing the {field!r} field")
         value = kernel_result[field]
-        if field in _CENT_FIELDS and isinstance(value, Decimal):
-            # The solver keeps full precision; ``output.csv`` ships cents. The
-            # claim check must see the figure that ships, or it rejects the
-            # sentence a model derived from the value it was shown.
-            value = value.quantize(_CENT, rounding=ROUND_DOWN)
+        # The row keeps the solver's own value and type: every comparison and
+        # every shipped string is built from it.  The claim check narrows the
+        # *figure* it compares against, in code.claims, so the sentence a model
+        # derived from the printed cents is accepted and the full-precision
+        # figure is not.  Rounding here would change the row the agent returns.
         row[field] = value
     row["decision_explanation"] = str(kernel_result.get("decision_explanation") or "")
     return row
@@ -181,12 +183,13 @@ _MARKER_INVISIBLE = re.compile(
     r"[\u00ad\u180e\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]"
 )
 #: Leading list or quote structure: "> Disagreements:", "1. Disagreements:".
-_MARKER_STRUCTURE = re.compile(r"^(?:(?:\d+[.)]|[>#+\-])\s*)+")
+_MARKER_STRUCTURE = re.compile(r"^(?:(?:\d+[.)]|[>#+\-\u2022\u2023\u25aa\u25cf\u25e6\u00b7\u2013\u2014])\s*)+")
 
 
 def _opens_with_marker(text) -> bool:
     """True when the prose opens with the disagreement marker, however styled."""
     cleaned = _MARKER_INVISIBLE.sub("", str(text or ""))
+    cleaned = cleaned.replace("\uff1a", ":").replace("\u2236", ":")
     cleaned = cleaned.translate(_MARKER_NOISE).strip()
     cleaned = _MARKER_STRUCTURE.sub("", cleaned).lstrip()
     return re.match(r"disagreements?\s*:", cleaned, re.IGNORECASE) is not None

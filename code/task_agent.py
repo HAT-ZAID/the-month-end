@@ -628,6 +628,13 @@ def _afford(workspace: Workspace, spec: StepSpec, result: TaskResult) -> StepRes
 
     request_id = spec.params.get("request_id")
     wanted_date = spec.params.get("date")
+    if request_id and not workspace.has_request(request_id):
+        # Answering about a different request would be a different question: say
+        # the id is unknown instead of quietly creating a manual one.
+        return StepResult(
+            "afford", spec.text, STATUS_REFUSED,
+            f"there is no request {request_id}; name an existing one or leave it out",
+        )
     if request_id and workspace.has_request(request_id):
         workspace.current_request_id = request_id
         reference = _safe_date(workspace.row(request_id).get("request_date"))
@@ -1207,8 +1214,15 @@ def _write_trace(result: TaskResult, directory: Path) -> str | None:
         actions = []
         for entry in record.get("actions_applied") or []:
             if isinstance(entry, dict):
-                safe = dict(entry)
-                safe["action"] = _trace_safe_action(safe.get("action"))
+                # Rebuilt, not copied: an entry that grows an extra key later
+                # must not carry it into the trace (the `concerns` lesson).
+                safe = {
+                    key: entry[key]
+                    for key in ("request_id",)
+                    if key in entry
+                }
+                if "action" in entry:
+                    safe["action"] = _trace_safe_action(entry["action"])
                 actions.append(safe)
             else:
                 actions.append(_trace_safe_action(entry))

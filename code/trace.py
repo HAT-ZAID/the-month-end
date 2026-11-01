@@ -50,7 +50,18 @@ _SECRET_VALUE = re.compile(
     r"|\bxox[abprs]-[A-Za-z0-9-]{10,}"
     r"|\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}"
     r"|(?i:Bearer\s+)[A-Za-z0-9._-]{8,}"
-    r"|(?i:Basic\s+)[A-Za-z0-9+/=]{8,})"
+    r"|(?i:Basic\s+)[A-Za-z0-9+/=]{8,}"
+    r"|-{5}BEGIN [A-Z ]*PRIVATE KEY-{5}[\s\S]*?-{5}END [A-Z ]*PRIVATE KEY-{5}"
+    r"|\bAIza[A-Za-z0-9_-]{30,}"
+    r"|\b(?:hf|npm|whsec)_[A-Za-z0-9]{16,})"
+)
+#: ``password=hunter2`` and friends, in any case.  Kept out of the pattern
+#: above because an inline ``(?i:`` group reads as a drive letter to the
+#: submission scan.
+_PASSWORD_ASSIGNMENT = re.compile(
+    r"\b(?:password|passwd|secret|token|api[-_]?key|accountkey)"
+    r"\s*[=:]\s*\S{6,}",
+    re.IGNORECASE,
 )
 #: ``user:password@`` inside a URL.  A gateway may legitimately carry basic-auth
 #: credentials in its base URL, and a provider error is persisted verbatim, so
@@ -91,7 +102,9 @@ def sanitize(value):
     if hasattr(value, "as_dict") and callable(value.as_dict):
         return sanitize(value.as_dict())
     if isinstance(value, str):
-        return _SECRET_VALUE.sub(REDACTED, _URL_USERINFO.sub(f"{REDACTED}@", value))
+        cleaned = _URL_USERINFO.sub(f"{REDACTED}@", value)
+        cleaned = _SECRET_VALUE.sub(REDACTED, cleaned)
+        return _PASSWORD_ASSIGNMENT.sub(REDACTED, cleaned)
     return value
 
 
