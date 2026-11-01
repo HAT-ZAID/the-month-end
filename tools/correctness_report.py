@@ -21,6 +21,10 @@ from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
+# `python tools/correctness_report.py` must work as well as `python -m tools...`
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from code.paths import fixture_dir
 
 FIXTURE = fixture_dir()
