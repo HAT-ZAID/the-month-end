@@ -227,6 +227,43 @@ def test_the_app_starts_on_onboarding_when_nobody_is_stored(db):
     assert asyncio.run(drive()) is True
 
 
+def test_every_tab_renders_and_a_purchase_goes_through_the_screen(db):
+    """The screens must survive a real interaction, not just a mount."""
+    from tools.app import BuyOrWait
+
+    account = store.create("ana", home_currency="ZAR")
+    service.update_profile(account, balance="12000", floor="2000")
+    service.add_fact(account, "bill", "8000", when=date.today().isoformat(),
+                     description="rent for November, a deliberately long label "
+                                 "that used to spill the panel")
+    store.save(account)
+
+    async def drive():
+        app = BuyOrWait()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            tabs = app.query_one("#tabs")
+            for tab in ("tab-buy", "tab-ledger", "tab-decisions", "tab-report", "tab-chat"):
+                tabs.active = tab
+                await pilot.pause()
+            # Buy through the screen, not through the service.
+            app.query_one("#buy-amount").value = "500"
+            app.query_one("#buy-go").press()
+            await pilot.pause()
+            explain = app.query_one("#buy-explain")
+            assert str(explain.render()).strip(), "the decision explanation rendered empty"
+            assert app.account["requests"], "the purchase was not recorded"
+            # Record a fact through the screen.
+            app.query_one("#fact-kind").value = "income"
+            app.query_one("#fact-amount").value = "1000"
+            app.query_one("#fact-add").press()
+            await pilot.pause()
+            assert len(app.account["events"]) == 2
+        return True
+
+    assert asyncio.run(drive()) is True
+
+
 def test_the_ui_module_holds_no_arithmetic_over_money():
     """A figure added up in the view layer is the defect this phase removed."""
     import io
