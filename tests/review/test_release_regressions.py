@@ -521,3 +521,40 @@ def test_the_scrubber_stays_linear_on_a_long_alphanumeric_body():
         sanitize({"e": body})
         elapsed = time.monotonic() - started
         assert elapsed < 1.0, (len(body), elapsed)
+
+
+def test_the_earliest_date_statement_is_checked_in_every_spelling():
+    """The statement names one column, so a written date is checked too."""
+    row = _row(
+        affordability_status="affordable_later",
+        recommended_payment_method="wait",
+        payment_plan="2026-07-14:15656000",
+        earliest_date_for_full_payment="2026-07-14",
+    )
+    assert verify_claims("The earliest full payment is 14 July 2026.", row)["ok"] is True
+    assert verify_claims("The first safe full payment is 2026-07-14.", row)["ok"] is True
+    assert verify_claims("The earliest full payment is 11 June 2026.", row)["ok"] is False
+    assert verify_claims("The first safe full payment is 2026-06-11.", row)["ok"] is False
+
+    blank = dict(row)
+    blank["earliest_date_for_full_payment"] = ""
+    assert verify_claims("The first safe full payment is 2026-07-14.", blank)["ok"] is False
+
+
+def test_a_repeated_phrase_is_judged_where_it_appears():
+    """One date statement must not exempt the other occurrence of the phrase."""
+    row = _row(
+        affordability_status="affordable_later",
+        recommended_payment_method="wait",
+        payment_plan="2026-07-14:15656000",
+        earliest_date_for_full_payment="2026-07-14",
+    )
+    assert verify_claims(
+        "The first safe full payment is 2026-07-14.", row
+    )["ok"] is True
+    report = verify_claims(
+        "The first safe full payment is 2026-07-14. A full payment on 2026-06-11 also works.",
+        row,
+    )
+    assert report["ok"] is False
+    assert [item["kind"] for item in report["unsupported"]] == ["date", "method"]

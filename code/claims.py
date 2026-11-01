@@ -332,15 +332,17 @@ def _money_claims(text: str) -> list[tuple[str, Decimal]]:
     return shorthand + claims
 
 
-def _phrase_claims(text: str, table: dict[str, tuple[str, ...]]) -> list[tuple[str, str]]:
-    """(matched phrase, canonical name) for every phrase found, longest first."""
+def _phrase_claims(
+    text: str, table: dict[str, tuple[str, ...]]
+) -> list[tuple[str, str, tuple[int, int]]]:
+    """(phrase, canonical name, span) for every match, longest phrase first."""
     lowered = text.lower()
     ordered = sorted(
         ((variant, canonical) for canonical, variants in table.items() for variant in variants),
         key=lambda item: len(item[0]),
         reverse=True,
     )
-    found: list[tuple[str, str]] = []
+    found: list[tuple[str, str, tuple[int, int]]] = []
     consumed: list[tuple[int, int]] = []
     for variant, canonical in ordered:
         for match in re.finditer(rf"\b{re.escape(variant)}\b", lowered):
@@ -351,7 +353,7 @@ def _phrase_claims(text: str, table: dict[str, tuple[str, ...]]) -> list[tuple[s
             if before.endswith("not") and canonical.startswith("affordable"):
                 continue  # "not affordable today" is the negative variant
             consumed.append(span)
-            found.append((variant, canonical))
+            found.append((variant, canonical, span))
     return found
 
 
@@ -482,14 +484,18 @@ def states_the_decision(prose, row) -> bool:
     method = str(row.get("recommended_payment_method") or "")
 
     if status:
-        named = {canonical for _, canonical in _phrase_claims(text, STATUS_PHRASES)}
+        named = {
+            canonical for _, canonical, _span in _phrase_claims(text, STATUS_PHRASES)
+        }
         if status not in named and not (
             status.startswith("affordable") and "affordable_any" in named
         ):
             return False
 
     if method:
-        named = {canonical for _, canonical in _phrase_claims(text, METHOD_PHRASES)}
+        named = {
+            canonical for _, canonical, _span in _phrase_claims(text, METHOD_PHRASES)
+        }
         if method not in named:
             # "the first safe full payment is <date>" is a statement about the
             # earliest-date column, not a recommendation of full payment.
@@ -502,6 +508,23 @@ def states_the_decision(prose, row) -> bool:
                 return False
 
     return True
+
+
+def _cited_date(text: str) -> str | None:
+    """The date this text cites as ISO, from either a numeric or written form."""
+    match = _ISO_DATE.search(text)
+    if match is not None:
+        return match.group(0)
+    match = _SPELLED_DATE.search(text)
+    if match is None:
+        return None
+    parsed = _spelled_date(match)
+    if parsed is None:
+        return None
+    month, day, year = parsed
+    if year is None:
+        return None
+    return f"{year:04d}-{month:02d}-{day:02d}"
 
 
 def verify_claims(
@@ -605,7 +628,7 @@ def verify_claims(
         unsupported.append({"kind": "action", "text": match.group(0),
                             "expected": kernel_changes})
 
-    for variant, canonical in _phrase_claims(prose, STATUS_PHRASES):
+    for variant, canonical, _span in _phrase_claims(prose, STATUS_PHRASES):
         checked += 1
         if canonical == "affordable_any":
             # The bare adjective says "this is affordable in some form", which
@@ -618,25 +641,26 @@ def verify_claims(
         if canonical != kernel_status:
             unsupported.append({"kind": "status", "text": variant,
                                 "expected": kernel_status})
-    for variant, canonical in _phrase_claims(prose, METHOD_PHRASES):
+    for variant, canonical, span in _phrase_claims(prose, METHOD_PHRASES):
         if canonical == "full_payment":
             # "the first safe full payment is <date>" speaks about the earliest
-            # date column, not about recommending full payment.
-            position = prose.lower().find(variant)
-            before = prose.lower()[:position].rstrip()
-            following = prose.lower()[position + len(variant) :][:40]
+            # date column, not about recommending full payment. The span is the
+            # match itself, so a repeated phrase is judged where it appears.
+            before = prose[: span[0]].rstrip().lower()
+            following = prose[span[1] :][:48]
             if before.endswith(("first safe", "earliest", "first")) and re.match(
-                r"\s+(?:is|falls on|lands on)\s+\d{4}-\d{2}-\d{2}", following
+                r"\s+(?:is|falls on|lands on)\s+", following, re.IGNORECASE
             ):
                 # A statement about the earliest date column has to cite that
                 # column: a date the row holds elsewhere (a plan leg, the
-                # request date) is a different claim.
-                cited = _ISO_DATE.search(following)
+                # request date) is a different claim. A written date counts,
+                # because that is how a model usually writes it.
+                cited = _cited_date(following)
                 expected = str(row.get("earliest_date_for_full_payment") or "").strip()
                 checked += 1
-                if cited is None or not expected or cited.group(0) != expected:
+                if cited is None or not expected or cited != expected:
                     unsupported.append({"kind": "date",
-                                        "text": cited.group(0) if cited else variant,
+                                        "text": cited or variant,
                                         "expected": expected})
                 continue
         checked += 1
