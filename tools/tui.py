@@ -78,7 +78,7 @@ HELP_TEXT = """\
 Commands:
   list [status]         table of requests; a status filter solves all first
   show <id>             decision panel + ledger + floor breaches + options
-  dashboard             output.csv snapshot: counts, methods, needs attention
+  dashboard             calibration report: the mock fixture, not your money
   new                   ask a new question for an existing user (session only)
   trace <id>            summarize that request's agent trace (read-only)
   whatif <id> k=v ...   set overrides, re-solve, print the before/after diff
@@ -374,7 +374,7 @@ def render_dashboard(summary, source_label=None, manual_note=None) -> str:
         footer.append(manual_note, style="yellow")
     panel = Panel(
         Group(counts, attention, footer),
-        title="Buy or Wait? dashboard",
+        title="Calibration report - the mock fixture, not your money",
         title_align="left",
         border_style="blue",
     )
@@ -662,7 +662,7 @@ class TUI:
     def _ensure_data(self):
         if self.data is None:
             self.console.print("loading the calibration fixture (read-only, mock data) ...", style="dim")
-    self.console.print("modern interface: python -m tools.app", style="dim")
+            self.console.print("modern interface: python -m tools.app", style="dim")
             try:
                 self.data = load_dataset()
             except Exception as exc:
