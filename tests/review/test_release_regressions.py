@@ -401,6 +401,8 @@ def test_a_required_action_is_satisfied_only_by_its_own_event_id():
 
     assert cites_every_action("we should stop event_9", "stop:event_9") is True
     assert cites_every_action("we should stop event_90", "stop:event_9") is False
+    # a word-character suffix is a different identifier too
+    assert cites_every_action("we should stop event_9_backup", "stop:event_9") is False
     assert cites_every_action("nothing here", "stop:event_9") is False
     assert cites_every_action("anything", "none") is True
 
@@ -414,6 +416,9 @@ def test_a_required_action_is_satisfied_only_by_its_own_event_id():
         # a denial scoped to *no other* changes is true on this row
         ("Stop event_9 and nothing else changes.", True),
         ("No other changes are needed once you stop event_9.", True),
+        ("Apart from stopping event_9, nothing changes.", True),
+        # the scoping word has to qualify *this* denial, not the next sentence
+        ("No spending changes are needed. Other expenses stay the same. Stop event_9.", False),
     ],
 )
 def test_a_denial_is_excused_only_when_it_is_scoped_to_no_other_changes(sentence, expected):

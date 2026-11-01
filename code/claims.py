@@ -228,7 +228,7 @@ def cites_every_action(prose, changes) -> bool:
     # longer one, or a sentence about a different event would excuse the event
     # the row actually requires.
     return all(
-        re.search(rf"(?<!\w){re.escape(event_id)}(?!\d)", text, re.IGNORECASE)
+        re.search(rf"(?<!\w){re.escape(event_id)}(?!\w)", text, re.IGNORECASE)
         for event_id in wanted
     )
 
@@ -395,6 +395,24 @@ _NO_CHANGES = re.compile(
     r"|\bspending_changes_needed\s*[:=]\s*none\b",
     re.IGNORECASE,
 )
+
+
+#: A word that narrows a denial to "nothing beyond the required change".
+_SCOPE = re.compile(
+    r"\b(?:other|else|further|additional|more|apart from|except|"
+    r"besides|aside from)\b",
+    re.IGNORECASE,
+)
+#: The characters that end a clause for scoping purposes.
+_CLAUSE_END = ".!?;\n"
+
+
+def _clause_at(text: str, start: int, end: int) -> str:
+    """The clause around ``[start, end)``: scoping does not cross a full stop."""
+    left = max((text.rfind(char, 0, start) for char in _CLAUSE_END), default=-1)
+    rights = [index for index in (text.find(char, end) for char in _CLAUSE_END) if index >= 0]
+    right = min(rights) if rights else len(text)
+    return text[left + 1 : right]
 
 
 def _spelled_date(match) -> tuple[int, int, int | None] | None:
@@ -571,13 +589,10 @@ def verify_claims(
             naming_the_action
             and kernel_changes not in {"", "none"}
             # The scoping word can sit just past the match ("nothing else
-            # changes" matches as far as "nothing").
-            and re.search(
-                r"\b(?:other|else|further|additional|more|apart from|except|"
-                r"besides|aside from)\b",
-                prose[max(0, match.start() - 40) : match.end() + 20],
-                re.IGNORECASE,
-            )
+            # changes" matches as far as "nothing"), but it has to be in the
+            # same clause: a scoping word in the *next* sentence does not
+            # qualify this denial.
+            and _SCOPE.search(_clause_at(prose, match.start(), match.end()))
         ):
             # Only a denial that is explicitly scoped to *no other* changes is
             # excused: "stop the one event and nothing else changes" is true,
