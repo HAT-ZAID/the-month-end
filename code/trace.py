@@ -51,7 +51,8 @@ _SECRET_VALUE = re.compile(
     r"|\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}"
     r"|(?i:Bearer\s+)[A-Za-z0-9._-]{8,}"
     r"|(?i:Basic\s+)[A-Za-z0-9+/=]{8,}"
-    r"|-{5}BEGIN [A-Z0-9 ]*PRIVATE KEY[A-Z ]*-{5}[\s\S]*?-{5}END [A-Z0-9 ]*PRIVATE KEY[A-Z ]*-{5}"
+    r"|-{4,5}\s?BEGIN [A-Z0-9 ]*PRIVATE KEY[A-Z ]*\s?-{4,5}"
+    r"[\s\S]{0,4000}?-{4,5}\s?END [A-Z0-9 ]*PRIVATE KEY[A-Z ]*\s?-{4,5}"
     r"|\bAIza[A-Za-z0-9_-]{30,}"
     r"|\b(?:hf|npm|whsec)_[A-Za-z0-9]{16,})"
 )
@@ -61,10 +62,12 @@ _SECRET_VALUE = re.compile(
 _PASSWORD_ASSIGNMENT = re.compile(
     r"(?:\b(?:received|invalid|rejected|missing|wrong|bad)\s+)?"
     r"\b(?:password|passwd|pwd|pass|passphrase|secret|token|sig|signature|accountkey"
-    r"|api[\s_-]?key)\b\s*[=:]\s*\S+"
-    r"|(?i:(?:set-)?cookie)\s*:\s*[^\n]+"
+    r"|api[\s_-]?key)\b\s*[=:]\s*[\"']?[^\"'\n]+"
+    r"|(?:set-)?cookie\s*:\s*[^\n]+"
     r"|[?&]sig=\S+"
-    r"|\b(?i:api[\s_-]?key|token|secret|password)\b\s+(?:for|is|was)\s+\S+",
+    r"|\bcookie\s*=\s*\S+"
+    r"|(?<![\w.])([A-Za-z0-9._~%+-]+):([^\s@/]+)@(?=[A-Za-z0-9\[])"
+    r"|\b(?:api[\s_-]?key|token|secret|password)\b\s+(?:for|is|was)\s+[^.;\n]+",
     re.IGNORECASE,
 )
 #: ``user:password@`` inside a URL.  A gateway may legitimately carry basic-auth
@@ -106,11 +109,11 @@ def sanitize(value):
     if isinstance(value, dict):
         cleaned = {}
         for key, item in value.items():
-            key_text = str(key)
+            key_text = _scrub_text(str(key))
             cleaned[key_text] = (
                         REDACTED
-                        if _SECRET_KEY.search(key_text)
-                        or _CAMEL_SECRET_KEY.search(key_text)
+                        if _SECRET_KEY.search(str(key))
+                        or _CAMEL_SECRET_KEY.search(str(key))
                         else sanitize(item)
                     )
         return cleaned
@@ -121,13 +124,20 @@ def sanitize(value):
     if isinstance(value, (set, frozenset)):
         return [sanitize(item) for item in sorted(value, key=str)]
     if isinstance(value, str):
-        cleaned = _URL_USERINFO.sub(f"{REDACTED}@", value)
-        cleaned = _SECRET_VALUE.sub(REDACTED, cleaned)
-        for secret in _KNOWN_SECRETS:
-            if secret in cleaned:
-                cleaned = cleaned.replace(secret, REDACTED)
-        return _PASSWORD_ASSIGNMENT.sub(REDACTED, cleaned)
+        return _scrub_text(value)
     return value
+
+
+def _scrub_text(value: str) -> str:
+    """One string, with every known shape and registered literal replaced."""
+    cleaned = _URL_USERINFO.sub(f"{REDACTED}@", value)
+    # Count-bounded: a hostile body can repeat a BEGIN marker thousands of
+    # times, and each one costs a window scan.
+    cleaned = _SECRET_VALUE.sub(REDACTED, cleaned, count=50)
+    for secret in _KNOWN_SECRETS:
+        if secret in cleaned:
+            cleaned = cleaned.replace(secret, REDACTED)
+    return _PASSWORD_ASSIGNMENT.sub(REDACTED, cleaned)
 
 
 def _summary_text(value) -> str:

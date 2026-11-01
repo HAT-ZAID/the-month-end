@@ -591,9 +591,21 @@ def _register_secrets(env) -> None:
     """
     from code.trace import register_secret
 
-    for name in (KILO_API_KEY_ENV, PAID_API_KEY_ENV, "OPENROUTER_KEY", "OPENCODE_API_KEY"):
+    for name in (
+        KILO_API_KEY_ENV,
+        PAID_API_KEY_ENV,
+        "BUY_WAIT_LLM_API_KEY",
+        "OPENROUTER_KEY",
+        "OPENCODE_API_KEY",
+    ):
         register_secret(env.get(name))
-    for name in (KILO_BASE_URL_ENV, PAID_BASE_URL_ENV, OLLAMA_BASE_URL_ENV):
+    for name in (
+        KILO_BASE_URL_ENV,
+        PAID_BASE_URL_ENV,
+        OLLAMA_BASE_URL_ENV,
+        "BUY_WAIT_VLM_BASE_URL",
+        "BUY_WAIT_JEV_BASE_URL",
+    ):
         try:
             register_secret(urlsplit(str(env.get(name) or "")).password)
         except ValueError:

@@ -664,3 +664,49 @@ def test_a_cookie_header_is_redacted_whole():
 
     cleaned = sanitize({"e": "Cookie: theme=light; sessionid=opaque12345"})
     assert "opaque12345" not in cleaned["e"]
+
+
+def test_the_shapes_of_denial_the_reviewer_measured_are_claims():
+    row = dict(ROW)
+    row["spending_changes_needed"] = "stop:event_9"
+    for sentence in (
+        "Neither stop nor reduce is needed.",
+        "Cancel nothing; the plan already fits.",
+        "There is nothing to trim.",
+        "Keep your budget as is.",
+        "You can leave your spending alone.",
+        "Your subscriptions can stay.",
+        "Spending remains untouched.",
+        "Cutting back is unnecessary.",
+        "No action on spending is required.",
+    ):
+        assert verify_claims(sentence, row)["ok"] is False, sentence
+
+
+def test_a_recurring_figure_is_not_a_count():
+    for sentence in ("You can pay 5000 monthly.", "Save 3000 yearly.", "Pay 5000 weekly."):
+        assert verify_claims(sentence, dict(ROW))["ok"] is False, sentence
+    assert verify_claims("You can pay 5000 per month.", dict(ROW))["ok"] is False
+
+
+def test_a_figure_written_in_words_is_a_claim():
+    assert verify_claims("You can pay twenty thousand today.", dict(ROW))["ok"] is False
+    assert (
+        verify_claims("You can pay twenty-two thousand five hundred today.", dict(ROW))[
+            "ok"
+        ]
+        is False
+    )
+
+
+def test_a_relative_date_is_not_a_verifiable_date():
+    assert verify_claims("Pay tomorrow instead.", dict(ROW))["ok"] is False
+    assert verify_claims("Pay in 3 weeks.", dict(ROW))["ok"] is False
+    assert verify_claims("Pay by the end of May.", dict(ROW))["ok"] is False
+
+
+def test_a_full_payment_phrase_beside_a_date_is_a_date_statement():
+    row = dict(ROW)
+    row["recommended_payment_method"] = "wait"
+    row["earliest_date_for_full_payment"] = "2025-09-12"
+    assert verify_claims("The first safe full payment is 2025-09-12.", row)["ok"] is True

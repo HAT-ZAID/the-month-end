@@ -430,3 +430,44 @@ def test_a_set_value_is_serialisable():
     from code.trace import sanitize
 
     assert sanitize({"e": {"b", "a"}}) == {"e": ["a", "b"]}
+
+
+def test_redaction_covers_the_round_nine_shapes():
+    from code.trace import register_secret, sanitize
+
+    assert "gwpass" not in sanitize(
+        {"e": "connect failed for gwuser:gwpass@gateway.example.test:443"}
+    )["e"]
+    assert "abcdef" not in sanitize({"e": "sent cookie=session%3Dabcdef upstream"})["e"]
+    assert "horse battery" not in sanitize(
+        {"e": "the password is correct horse battery staple"}
+    )["e"]
+    assert "horse battery" not in sanitize(
+        {"e": 'password="correct horse battery staple"'}
+    )["e"]
+
+    register_secret("keyaskey-123456")
+    cleaned = sanitize({"keyaskey-123456": 1, "e": "x keyaskey-123456 y"})
+    assert "[REDACTED]" in cleaned
+    assert cleaned["e"] == "x [REDACTED] y"
+
+
+def test_an_ssh2_armoured_key_is_redacted():
+    from code.trace import sanitize
+
+    header = ("-" * 4) + " BEGIN SSH2 ENCRYPTED PRIVATE KEY " + ("-" * 4)
+    footer = ("-" * 4) + " END SSH2 ENCRYPTED PRIVATE KEY " + ("-" * 4)
+    cleaned = sanitize({"e": header + "\nMIIE\n" + footer})
+    assert "MIIE" not in cleaned["e"]
+
+
+def test_a_huge_hostile_body_does_not_stall_the_scrubber():
+    import time
+
+    from code.trace import sanitize
+
+    header = ("-" * 5) + " BEGIN RSA PRIVATE KEY " + ("-" * 5)
+    body = header * 2000
+    started = time.monotonic()
+    sanitize({"e": body})
+    assert time.monotonic() - started < 2.0

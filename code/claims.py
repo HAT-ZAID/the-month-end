@@ -141,6 +141,28 @@ _MONTH_DAY_PAIR = re.compile(rf"\b(?:{_MONTH_WORD})\s+\d{{1,2}}(?!\d)\b", re.IGN
 #: against the day-of-month of the row's own dates.
 _DAY_ORDINAL = re.compile(r"\b(\d{1,2})(?:st|nd|rd|th)\b", re.IGNORECASE)
 
+#: A figure written in words. The row prints digits, so prose that spells an
+#: amount is a claim it cannot support.
+_NUMBER_WORD = re.compile(
+    r"\b(?:"
+    r"(?:twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)[-\s]"
+    r"(?:one|two|three|four|five|six|seven|eight|nine)"
+    r"|(?:one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|"
+    r"twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)\s+"
+    r"(?:hundred|thousand|million|lakh|crore)"
+    r")\b",
+    re.IGNORECASE,
+)
+#: A relative date. The row holds fixed dates, so prose that only says "next
+#: month" names a date nothing can confirm.
+_RELATIVE_DATE = re.compile(
+    r"\b(?:tomorrow|next\s+(?:week|month|year)"
+    r"|in\s+\d+\s+(?:days?|weeks?|months?|years?)"
+    r"|end\s+of\s+(?:the\s+)?(?:month|week|year|january|february|march|april|may|"
+    r"june|july|august|september|october|november|december))\b",
+    re.IGNORECASE,
+)
+
 #: A written date in either order, with an optional day suffix and year.
 _SPELLED_DATE = re.compile(
     rf"\b(?:(?P<day1>\d{{1,2}})(?:st|nd|rd|th)?\s+(?:of\s+)?"
@@ -163,7 +185,7 @@ _ISO_DATE = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
 # small leading count qualifies, so "paid 500 of 2000" still checks 2000.
 _COUNT_PREFIX = re.compile(r"(?<![\d.])\d{1,2}\s+of\s*$", re.IGNORECASE)
 _COUNT_UNIT = re.compile(
-    r"\s*(?:install?ments?|payments?|months?|weeks?|days?|years?|times|percent|%)",
+    r"\s*(?:install?ments?|payments?|months?|weeks?|days?|years?|times|percent|%)\b",
     re.IGNORECASE,
 )
 #: The leading figure of a fraction is a count only when another count follows
@@ -327,20 +349,23 @@ def _normalise_action(token: str) -> str:
 #: statement about spending, or the field itself set to none.
 _NEG_AUX = (
     r"(?:won't|will not|wouldn't|would not|cannot|can't|needn't|need not|no need"
-    r"|don't|do not|doesn't|does not|didn't|did not|not)"
+    r"|don't|do not|doesn't|does not|didn't|did not|neither|nor|zero|not)"
 )
-_CHANGE_VERB = r"(?:cut|reduc|stop|cancel|trim|chang|drop|paus|adjust)\w*"
+_CHANGE_VERB = r"(?:cut|reduc|stop|cancel|trim|chang|drop|paus|adjust|modif|touch|alter|mov)\w*"
 _NO_CHANGES = re.compile(
     rf"\b{_NEG_AUX}\b[^.]{{0,40}}\b{_CHANGE_VERB}\b"
     rf"|\bwithout(?: any)?\b[^.]{{0,24}}\b{_CHANGE_VERB}\b"
     rf"|\b(?:nothing|no)\b[^.]{{0,24}}\b{_CHANGE_VERB}\b"
+    rf"|\b{_CHANGE_VERB}\b[^.]{{0,24}}\b(?:nothing|none|unnecessary)\b"
     r"|\b(?:spending|budget|plan)\b[^.]{0,24}\b(?:can\s+|could\s+|will\s+)?"
     r"\b(?:stay|stays|stayed|remain|remains|remained)\b[^.]{0,24}"
     r"\b(?:as it is|the same|unchanged|intact)\b"
-    r"|\b(?:spending|budget|plan)\b[^.]{0,40}\b(?:unchanged|the same|as it is|intact)\b"
+    r"|\b(?:spending|budget|plan|subscriptions?|payments?)\b[^.]{0,40}"
+    r"\b(?:unchanged|untouched|the same|as it is|as is|alone|intact|stay|stays|remain|remains)\b"
     r"|\b(?:your\s+)?(?:spending|budget|plan)\s+(?:is|are|was|were)\s+"
     r"(?:unchanged|the same|intact)\b"
     r"|\bnothing (?:changes|else changes)\b"
+    r"|\bno action\b[^.]{0,24}\bspending\b"
     r"|\bspending_changes_needed\s*[:=]\s*none\b",
     re.IGNORECASE,
 )
@@ -458,6 +483,17 @@ def verify_claims(
             unsupported.append({"kind": "date", "text": match.group(0),
                                 "expected": sorted(dates)})
 
+    if _NUMBER_WORD.search(prose):
+        checked += 1
+        # The row prints digits only, so a spelled figure is unsupported.
+        unsupported.append({"kind": "amount", "text": _NUMBER_WORD.search(prose).group(0),
+                            "expected": sorted(_fmt(item) for item in numbers)})
+    relative = _RELATIVE_DATE.search(prose)
+    if relative and not _ISO_DATE.search(prose):
+        checked += 1
+        unsupported.append({"kind": "date", "text": relative.group(0),
+                            "expected": sorted(dates)})
+
     for variant, canonical in _phrase_claims(prose, STATUS_PHRASES):
         checked += 1
         if canonical == "affordable_any":
@@ -472,6 +508,15 @@ def verify_claims(
             unsupported.append({"kind": "status", "text": variant,
                                 "expected": kernel_status})
     for variant, canonical in _phrase_claims(prose, METHOD_PHRASES):
+        if canonical == "full_payment":
+            # "the first safe full payment is <date>" speaks about the earliest
+            # date column, not about recommending full payment.
+            position = prose.lower().find(variant)
+            following = prose.lower()[position + len(variant) :][:24]
+            if _ISO_DATE.search(following):
+                # "pay in full on 2026-04-05" names a date; the date check
+                # below is the claim that matters.
+                continue
         checked += 1
         if canonical != kernel_method:
             unsupported.append({"kind": "method", "text": variant,
