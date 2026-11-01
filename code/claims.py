@@ -405,7 +405,9 @@ _SCOPE = re.compile(
     # The qualifier has to attach to a change, not to any noun after it: "no
     # other options include stopping ..." narrows nothing.
     r"\b(?:no|nothing|none|not|without)\s+(?:other|further|additional|more|else)\s+"
-    r"(?:spending\s+)?(?:changes?|cuts?|reductions?|trims?|stops?|required|needed|necessary"
+    r"(?:spending\s+)?(?:should\s+|would\s+|will\s+|can\s+|could\s+|may\s+|might\s+"
+    r"|must\s+)?"
+    r"(?:changes?|cuts?|reductions?|trims?|stops?|required|needed|necessary"
     rf"|{_CHANGE_VERB})"
     rf"|\b(?:apart from|except(?: for)?|besides|aside from|other than)\s+"
     rf"(?:the\s+)?{_CHANGE_VERB}",

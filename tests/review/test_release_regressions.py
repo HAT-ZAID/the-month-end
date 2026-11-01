@@ -449,6 +449,8 @@ def test_a_scope_word_must_qualify_the_denied_change():
     for sentence in (
         "No other changes are needed once you stop event_9.",
         "Stop event_9 and nothing else changes.",
+        # a modal between the qualifier and the change still scopes it
+        "Stop event_9 and nothing else should change.",
         "Apart from stopping event_9, nothing changes.",
         "Besides stopping event_9, nothing else changes.",
         "Nothing further is required beyond the stop on event_9.",
