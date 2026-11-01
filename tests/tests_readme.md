@@ -47,7 +47,7 @@ evidence handling, gold-sample regression, and submission packaging — before A
 | `tests/review/` | The wider net: evidence, agent loop, vision/OCR, TUI panels, cache, oracle comparisons, review-derived regression tables. Not part of the default run |
 | `pytest.ini` | Tiering: `testpaths = tests`, `norecursedirs = review` |
 
-Current state: **365 passed** in the release suite, **406 passed, 1 skipped** in `tests/review`.
+Current state: **365 passed** in the release suite, **436 passed, 1 skipped** in `tests/review`.
 ## Open issues (tracked, not hidden)
 1. **U1–U6 organizer unknowns** (earliest-after-deadline semantics, FX missing-pair/month
    fallback, `reducible_or_stoppable` operator, 16 PNG contents, hidden scoring weights,

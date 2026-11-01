@@ -84,6 +84,11 @@ def _configured_call(packet: dict) -> dict:
         model = "inclusionai/ling-3.0-flash-fin"
     if not endpoint or not api_key or not model:
         return None
+    # This path holds a key without ever building a provider, so nothing else
+    # would teach the trace scrubber what to redact.
+    from code.trace import register_secret
+
+    register_secret(api_key)
     # Same rule as the chat providers: a remote plaintext endpoint would put the
     # key and the packet on the wire in the clear, so it is refused before it is
     # called.  The transport below also refuses to follow a redirect.

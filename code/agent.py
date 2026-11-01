@@ -871,7 +871,7 @@ def run_agent_loop(
         if enabled:
             try:
                 if state.get("concerns"):
-                    trace.record("concerns", list(state["concerns"]))
+                    trace.record("concerns", {"concerns": list(state["concerns"])})
                 trace.record("verification", verification)
                 trace.record("final_row", row)
                 trace.record(

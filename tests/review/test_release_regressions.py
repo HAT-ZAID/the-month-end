@@ -251,3 +251,145 @@ def test_long_and_repeated_private_keys_are_redacted():
 
     tokens = " ".join("sk-" + ("x%02d" % index) * 6 for index in range(60))
     assert "sk-" not in sanitize({"e": tokens})["e"]
+
+
+# --- credentials the project itself calls secrets ---------------------------
+
+CREDENTIAL_ASSIGNMENTS = [
+    "AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMIK7MDENGbPxRfiCYEXAMPLEKEY",
+    "secret_access_key=abc123def456",
+    "session_token=zzz111yyy222",
+    "access_key=AKIAIOSFODNN7EXAMPLE",
+    "x-amz-security-token: FwoGZXIvYXdzE",
+    "conn Password=hunter2xyz",
+]
+
+
+@pytest.mark.parametrize("text", CREDENTIAL_ASSIGNMENTS)
+def test_a_credential_assignment_named_by_the_project_is_redacted(text):
+    cleaned = sanitize({"e": text})["e"]
+    assert "[REDACTED]" in cleaned, text
+
+
+@pytest.mark.parametrize("text", ["total_tokens=12", "input_tokens=99", "max_tokens=8"])
+def test_a_token_counter_is_not_a_credential(text):
+    assert sanitize({"e": text})["e"] == text
+
+
+def test_a_recorded_sequence_does_not_void_the_trace(tmp_path):
+    from code.trace import TraceRecorder
+
+    recorder = TraceRecorder("probe", tmp_path)
+    recorder.begin("request_probe")
+    event = recorder.record("concerns", [{"kind": "budget", "detail": "x", "count": 2}])
+    assert event is not None
+    assert event.payload == {"items": [{"kind": "budget", "detail": "x", "count": 2}]}
+    assert recorder.record("verification", {"ok": True}).payload == {"ok": True}
+
+
+def test_a_key_loaded_from_auth_json_is_registered(tmp_path):
+    import json
+
+    from code.jev import load_api_key
+    from code.trace import sanitize
+
+    secret = "zen-live-0f9a8b7c6d5e4f3a"
+    auth = tmp_path / "auth.json"
+    auth.write_text(json.dumps({"opencode": {"key": secret}}), encoding="utf-8")
+    key, source = load_api_key({"OPENCODE_AUTH_JSON": str(auth), "OPENCODE_API_KEY": ""})
+    assert key == secret, source
+    assert sanitize({"e": f"403 rejected {secret}"})["e"] == "403 rejected [REDACTED]"
+
+
+# --- naming the action, rather than denying it ------------------------------
+
+ACTION_ROW = _row(
+    request_id="request_34",
+    amount_safe_to_pay="0",
+    affordability_status="affordable_with_plan",
+    recommended_payment_method="partial_payment",
+    payment_plan="2025-08-03:0|2026-07-14:50000",
+    earliest_date_for_full_payment="2026-07-14",
+    spending_changes_needed="stop:event_3085",
+    decision_explanation="Keep the plan and stop event_3085.",
+)
+
+UNNAMED_DENIALS = [
+    "You can keep every subscription.",
+    "Spending continues as before.",
+    "Everything stays the same.",
+    "Nothing needs rearranging.",
+    "There is no need for any savings.",
+    "Your outgoings are fine as they are.",
+    "You can carry on spending as usual.",
+    "No belt-tightening is required.",
+    "Nothing has to give.",
+    "Your recurring costs are unaffected.",
+    "You will not need to skip any payment.",
+    "Your commitments are safe as they are.",
+    "You can keep spending exactly as you do now.",
+]
+
+
+def _candidate_for(row, rationale):
+    candidate = {
+        key: row[key]
+        for key in (
+            "request_id",
+            "amount_safe_to_pay",
+            "affordability_status",
+            "recommended_payment_method",
+            "payment_plan",
+            "earliest_date_for_full_payment",
+            "spending_changes_needed",
+        )
+    }
+    candidate.update(
+        {"evidence_sufficient": True, "confidence": 0.4, "rationale": rationale}
+    )
+    return candidate
+
+
+@pytest.mark.parametrize("rationale", UNNAMED_DENIALS)
+def test_an_explanation_that_never_names_the_action_cannot_ship(rationale):
+    result = enforce_decision(
+        _candidate_for(ACTION_ROW, rationale), dict(ACTION_ROW), disagreement_note=True
+    )
+    assert result["verification"]["rationale_source"] != "candidate", rationale
+
+
+@pytest.mark.parametrize(
+    "rationale",
+    [
+        "Stop event_3085 and nothing else changes.",
+        "Apart from stopping event_3085, nothing changes.",
+        "The budget remains above the minimum after event_3085 is stopped.",
+        "Your plan stays within the minimum balance once event_3085 is stopped.",
+    ],
+)
+def test_an_explanation_that_names_the_action_ships(rationale):
+    result = enforce_decision(
+        _candidate_for(ACTION_ROW, rationale), dict(ACTION_ROW), disagreement_note=True
+    )
+    assert result["verification"]["rationale_source"] == "candidate", rationale
+
+
+def test_a_full_payment_recommendation_is_not_a_column_reference():
+    row = _row(
+        recommended_payment_method="installments",
+        spending_changes_needed="none",
+        earliest_date_for_full_payment="2026-07-14",
+    )
+    assert verify_claims("You can pay in full on 2026-06-11.", row)["ok"] is False
+    assert (
+        verify_claims("The first safe full payment is 2026-07-14.", row)["ok"] is True
+    )
+
+
+def test_a_compatibility_form_of_the_marker_is_caught():
+    from code.verifier import _opens_with_marker
+
+    full_width = "\uff24\uff49\uff53\uff41\uff47\uff52\uff45\uff45\uff4d\uff45\uff4e\uff54\uff53\uff1a the plan is wrong."
+    assert _opens_with_marker(full_width) is True
+    assert _opens_with_marker("Disagreements: the plan is wrong.") is True
+    assert _opens_with_marker("The plan holds.") is False

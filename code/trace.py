@@ -59,8 +59,9 @@ _SECRET_VALUE = re.compile(
 #: submission scan.
 _PASSWORD_ASSIGNMENT = re.compile(
     r"(?:\b(?:received|invalid|rejected|missing|wrong|bad)\s+)?"
-    r"\b(?:password|passwd|pwd|pass|passphrase|secret|token|sig|signature|accountkey"
-    r"|api[\s_-]?key)\b\s*[=:]\s*[\"']?[^\"'\n]+"
+    r"(?:[a-z0-9]+[_-])*(?:password|passwd|pwd|pass|passphrase|secret|token|sig|signature|accountkey"
+    r"|api[\s_-]?key|session|access|key)(?:[_-][a-z0-9]+)*\b"
+    r"\s*[=:]\s*[\"']?[^\"'\n]+"
     r"|(?:set-)?cookie\s*:\s*[^\n]+"
     r"|[?&]sig=\S+"
     r"|\bcookie\s*=\s*\S+"
@@ -181,6 +182,22 @@ def deterministic_view(payload):
     return payload
 
 
+def _as_payload(payload) -> dict:
+    """Coerce a recorded payload to a mapping.
+
+    ``record`` is called with dicts almost everywhere, but a sequence is the
+    natural shape for a list of concerns, and ``dict([...])`` raises on it - a
+    failure the observability guard swallows, taking the whole trace with it.
+    """
+    if payload is None:
+        return {}
+    if isinstance(payload, dict):
+        return dict(payload)
+    if isinstance(payload, (list, tuple, set, frozenset)):
+        return {"items": list(payload)}
+    return {"value": payload}
+
+
 class TraceRecorder:
     """Collect events for one request and, when enabled, write one JSON file."""
 
@@ -210,7 +227,7 @@ class TraceRecorder:
     def record(self, kind, payload=None):
         if not self.enabled:
             return None
-        event = TraceEvent(kind=str(kind), payload=sanitize(dict(payload or {})))
+        event = TraceEvent(kind=str(kind), payload=sanitize(_as_payload(payload)))
         self._events.append(event)
         return event
 

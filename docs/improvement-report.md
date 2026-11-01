@@ -827,7 +827,7 @@ gains a third value, `disagreement`, and `code/main.py` still only prefers
 
 ### 10.5 The numbers this release was verified at
 
-- `pytest -q`: **365 passed** (release gate); `pytest tests/review`: **406 passed, 1 skipped**.
+- `pytest -q`: **365 passed** (release gate); `pytest tests/review`: **436 passed, 1 skipped**.
 - `output.csv`: 250 rows, sha256 `1f35043f…376486`, byte-identical to the committed
   file before and after every change in this release.
 - `python -m code.main` on the offline path: no network call, no stderr noise.

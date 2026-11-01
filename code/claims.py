@@ -207,6 +207,26 @@ def _to_cents(number: Decimal) -> Decimal:
     return number.quantize(Decimal("0.01"), rounding=ROUND_DOWN)
 
 
+def cites_every_action(prose, changes) -> bool:
+    """True when the prose names every action the row requires.
+
+    A sentence that denies a required change and a sentence that describes one
+    are both ordinary English, so no deny-list converges.  What is decidable is
+    whether the explanation names what the row actually does; on a row with an
+    action, that is the rule.
+    """
+    wanted = []
+    for action in str(changes or "").split("|"):
+        kind, _, rest = action.partition(":")
+        event_id = rest.partition(":")[0].strip()
+        if kind.strip() in {"stop", "reduce_to"} and event_id:
+            wanted.append(event_id)
+    if not wanted:
+        return True
+    text = str(prose or "").lower()
+    return all(event_id.lower() in text for event_id in wanted)
+
+
 def _supported_numbers(row: dict, extra_numbers=()) -> set[Decimal]:
     numbers: set[Decimal] = set()
     for field, value in row.items():
@@ -359,7 +379,7 @@ _NO_CHANGES = re.compile(
     r"\b(?:as it is|the same|unchanged|intact)\b"
     r"|\b(?:spending|budget|plan|subscriptions?|payments?)\b[^.]{0,40}"
     r"\b(?:unchanged|untouched|the same|as it is|as is|alone|intact|"
-    r"stay|stays|remains? (?:as it is|the same|unchanged|untouched))\b"
+    r"(?:can|could|will|would)\s+(?:stay|remain))\b"
     r"|\b(?:your\s+)?(?:spending|budget|plan)\s+(?:is|are|was|were)\s+"
     r"(?:unchanged|the same|intact)\b"
     r"|\bnothing (?:changes|else changes)\b"
@@ -516,12 +536,13 @@ def verify_claims(
             position = prose.lower().find(variant)
             before = prose.lower()[:position].rstrip()
             following = prose.lower()[position + len(variant) :][:24]
-            date_statement = before.endswith(("first safe", "earliest")) or re.match(
-                r"\s*(?:is|on|by)\s+\d{4}-\d{2}-\d{2}", following
+            date_statement = before.endswith(("first safe", "earliest")) and re.match(
+                r"\s+(?:is|falls on|lands on)\s+\d{4}-\d{2}-\d{2}", following
             )
-            if date_statement and _ISO_DATE.search(following):
-                # "pay in full on 2026-04-05" names a date; the date check
-                # below is the claim that matters.
+            if date_statement:
+                # Only a sentence that names the earliest-date column is a date
+                # statement.  "Pay in full on <date>" is a recommendation, and a
+                # row whose method is installments must not ship it.
                 continue
         checked += 1
         if canonical != kernel_method:
@@ -536,7 +557,13 @@ def verify_claims(
             if canonical != expected:
                 unsupported.append({"kind": "token", "text": token,
                                     "expected": expected})
+    naming_the_action = cites_every_action(prose, kernel_changes)
     for match in _NO_CHANGES.finditer(prose):
+        if naming_the_action and kernel_changes not in {"", "none"}:
+            # The sentence names the action the row takes, so it is describing
+            # the change rather than denying it: "stop the one event and
+            # nothing else changes" is true.
+            break
         # "No spending changes are needed" contradicts a row that stops an
         # event, so the explanation would disagree with its own column.
         checked += 1

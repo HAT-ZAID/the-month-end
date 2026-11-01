@@ -26,11 +26,12 @@ This module performs no LLM reasoning.
 from __future__ import annotations
 
 import re
+import unicodedata
 from decimal import ROUND_DOWN, Decimal
 
 from code.amounts import to_decimal
 
-from code.claims import verify_claims
+from code.claims import cites_every_action, verify_claims
 from code.schema import (
     CENT,
     FINAL_FIELDS,
@@ -183,7 +184,10 @@ _MARKER_STRUCTURE = re.compile(r"^(?:(?:\d+[.)]|[>#+\-\u2022\u2023\u25aa\u25cf\u
 
 def _opens_with_marker(text) -> bool:
     """True when the prose opens with the disagreement marker, however styled."""
-    cleaned = _MARKER_INVISIBLE.sub("", str(text or ""))
+    # Compatibility forms ("Ｄｉｓａｇｒｅｅｍｅｎｔｓ") read as the marker to a
+    # person, so they have to read as it here too.
+    cleaned = unicodedata.normalize("NFKC", str(text or ""))
+    cleaned = _MARKER_INVISIBLE.sub("", cleaned)
     cleaned = cleaned.replace("\uff1a", ":").replace("\u2236", ":")
     cleaned = cleaned.translate(_MARKER_NOISE).strip()
     cleaned = _MARKER_STRUCTURE.sub("", cleaned)
@@ -326,7 +330,12 @@ def enforce_decision(
             extra_numbers=extra_numbers or (),
             extra_dates=extra_dates or (),
         )
-    rationale_ok = bool(agreement and claim_report and claim_report.get("ok"))
+    rationale_ok = bool(
+        agreement
+        and claim_report
+        and claim_report.get("ok")
+        and cites_every_action(rationale, row.get("spending_changes_needed"))
+    )
     rationale_source = "candidate" if rationale_ok else "kernel"
     disagreement = ""
     if (

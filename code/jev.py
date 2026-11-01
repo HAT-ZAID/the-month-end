@@ -171,6 +171,11 @@ def load_api_key(env=None) -> tuple[str | None, str]:
     key = _text(entry.get("key") or entry.get("api_key") or entry.get("token"))
     if not key:
         return None, "auth.json opencode entry has no key"
+    # A 403 body often quotes the key it rejected, and the report persists the
+    # error text, so the trace scrubber has to know this literal.
+    from code.trace import register_secret
+
+    register_secret(key)
     return key, f"auth.json ({path.name})"
 
 
