@@ -35,6 +35,8 @@ from pathlib import Path
 
 from evaluation import semantics
 
+from code.paths import fixture_dir
+
 SCHEMA_VERSION = 1
 PASS = "PASS"
 FAIL = "FAIL"
@@ -463,7 +465,7 @@ def agent_robustness_gate(root: Path) -> dict:
     """
     from code.main import run_pipeline
 
-    sample = root / "dataset" / "sample_requests.csv"
+    sample = fixture_dir(root) / "sample_requests.csv"
     checks: list[dict] = []
 
     baseline, _ = run_pipeline(
@@ -735,7 +737,7 @@ def run_pr(root: Path, provider: str = "replay") -> dict:
 
     from code.main import run_pipeline
 
-    sample_path = root / "dataset" / "sample_requests.csv"
+    sample_path = fixture_dir(root) / "sample_requests.csv"
     production_error = None
     sample_error = None
     production_usage: dict = {}

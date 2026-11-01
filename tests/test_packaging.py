@@ -168,7 +168,7 @@ def test_dockerfile_is_a_runnable_non_root_image():
     assert re.search(r"^WORKDIR\s+/app", text, re.MULTILINE), "image must run from /app"
     assert "requirements.txt" in text, "base deps must be installed"
     assert "requirements-agent.txt" in text, "the deployment target is the agentic app"
-    assert re.search(r"^COPY\s+.*dataset", text, re.MULTILINE), "dataset/ must be in the image"
+    assert re.search(r"^COPY\s+.*dataset", text, re.MULTILINE), "the calibration fixture must be in the image"
 
     users = re.findall(r"^USER\s+(\S+)", text, re.MULTILINE)
     assert users, "the container must drop root"

@@ -21,6 +21,7 @@ if __package__ in (None, ""):
     from code.usage import new_usage, write_usage_report
     from code.vision import TesseractBackend, build_backend, read_evidence
     from code.cache import default_cache
+    from code.paths import fixture_dir
 else:
     from code.solver import solve_request
     from code.ocr import configure_tesseract
@@ -29,6 +30,7 @@ else:
     from code.usage import new_usage, write_usage_report
     from code.vision import TesseractBackend, build_backend, read_evidence
     from code.cache import default_cache
+    from code.paths import fixture_dir
 
 import pandas as pd
 
@@ -272,17 +274,17 @@ def run_pipeline(
 
     # Load data (repo-root anchored so any CWD works; no CLI change)
     if requests_path is None:
-        requests = pd.read_csv(root / "dataset/requests.csv", dtype=str)
+        requests = pd.read_csv(fixture_dir(root) / "requests.csv", dtype=str)
     else:
         # Reference/sample request files carry blank expected fields; keep them
         # as empty strings so the harness compares the text the pipeline saw.
         requests = pd.read_csv(Path(requests_path), dtype=str, keep_default_na=False)
-    profiles = pd.read_csv(root / "dataset/financial_profiles.csv", dtype=str)
-    events = pd.read_csv(root / "dataset/financial_events.csv", dtype=str, keep_default_na=False).to_dict("records")
-    images = pd.read_csv(root / "dataset/images.csv", dtype=str, keep_default_na=False)
-    fx = pd.read_csv(root / "dataset/exchange_rates.csv", dtype=str).to_dict("records")
-    options = pd.read_csv(root / "dataset/request_payment_options.csv", dtype=str)
-    messages = pd.read_csv(root / "dataset/messages.csv", dtype=str)
+    profiles = pd.read_csv(fixture_dir(root) / "financial_profiles.csv", dtype=str)
+    events = pd.read_csv(fixture_dir(root) / "financial_events.csv", dtype=str, keep_default_na=False).to_dict("records")
+    images = pd.read_csv(fixture_dir(root) / "images.csv", dtype=str, keep_default_na=False)
+    fx = pd.read_csv(fixture_dir(root) / "exchange_rates.csv", dtype=str).to_dict("records")
+    options = pd.read_csv(fixture_dir(root) / "request_payment_options.csv", dtype=str)
+    messages = pd.read_csv(fixture_dir(root) / "messages.csv", dtype=str)
     # Image evidence goes through the configured local backend chain
     # (Qwen3-VL -> Docling -> Tesseract by default).  Failures stay fail-closed in
     # resolve_event_amounts, and a missing engine is still reported honestly.
@@ -291,7 +293,7 @@ def run_pipeline(
         events, evidence_warnings = resolve_event_amounts(
             images,
             events,
-            root / "dataset/media/images",
+            fixture_dir(root) / "media" / "images",
             ocr_available=ocr_path is not None,
         )
     else:
@@ -302,7 +304,7 @@ def run_pipeline(
         events, evidence_warnings = resolve_event_amounts(
             images,
             events,
-            root / "dataset/media/images",
+            fixture_dir(root) / "media" / "images",
             reader=lambda image_path: read_evidence(image_path, vision_backend),
             corroborator=lambda image_path: read_evidence(image_path, TesseractBackend()),
         )

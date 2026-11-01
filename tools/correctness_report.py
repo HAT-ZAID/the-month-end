@@ -21,12 +21,15 @@ from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
+from code.paths import fixture_dir
+
+FIXTURE = fixture_dir()
 REPO_ROOT = Path(__file__).resolve().parents[1]
 OUTPUT_PATH = REPO_ROOT / "output.csv"
-REQUESTS_PATH = REPO_ROOT / "dataset" / "requests.csv"
-PROFILES_PATH = REPO_ROOT / "dataset" / "financial_profiles.csv"
-EVENTS_PATH = REPO_ROOT / "dataset" / "financial_events.csv"
-OPTIONS_PATH = REPO_ROOT / "dataset" / "request_payment_options.csv"
+REQUESTS_PATH = FIXTURE / "requests.csv"
+PROFILES_PATH = FIXTURE / "financial_profiles.csv"
+EVENTS_PATH = FIXTURE / "financial_events.csv"
+OPTIONS_PATH = FIXTURE / "request_payment_options.csv"
 
 EXPECTED_ROWS = 250
 COLUMNS = [

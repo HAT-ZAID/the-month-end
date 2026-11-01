@@ -9,7 +9,9 @@ import pandas as pd
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DATASET = REPO_ROOT / "dataset"
+DATASET = REPO_ROOT / "mock_dataset"
+if not DATASET.is_dir():  # older checkouts, and tmp fixtures
+    DATASET = REPO_ROOT / "dataset"
 MEDIA = DATASET / "media" / "images"
 
 OUTPUT_COLS = [

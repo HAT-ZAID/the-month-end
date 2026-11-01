@@ -559,20 +559,22 @@ def load_dataset(repo_root=None) -> dict:
     import pandas as pd
     from code.evidence import resolve_event_amounts
     from code.main import configure_runtime
+    from code.paths import fixture_dir
 
     root = Path(repo_root) if repo_root is not None else REPO_ROOT
-    requests = pd.read_csv(root / "dataset" / "requests.csv", dtype=str)
-    profiles = pd.read_csv(root / "dataset" / "financial_profiles.csv", dtype=str)
+    folder = fixture_dir(root)
+    requests = pd.read_csv(folder / "requests.csv", dtype=str)
+    profiles = pd.read_csv(folder / "financial_profiles.csv", dtype=str)
     events = pd.read_csv(
-        root / "dataset" / "financial_events.csv", dtype=str, keep_default_na=False
+        folder / "financial_events.csv", dtype=str, keep_default_na=False
     ).to_dict("records")
-    images = pd.read_csv(root / "dataset" / "images.csv", dtype=str, keep_default_na=False)
-    fx = pd.read_csv(root / "dataset" / "exchange_rates.csv", dtype=str).to_dict("records")
-    options = pd.read_csv(root / "dataset" / "request_payment_options.csv", dtype=str)
-    messages = pd.read_csv(root / "dataset" / "messages.csv", dtype=str)
+    images = pd.read_csv(folder / "images.csv", dtype=str, keep_default_na=False)
+    fx = pd.read_csv(folder / "exchange_rates.csv", dtype=str).to_dict("records")
+    options = pd.read_csv(folder / "request_payment_options.csv", dtype=str)
+    messages = pd.read_csv(folder / "messages.csv", dtype=str)
     ocr_path = configure_runtime()
     events, warnings = resolve_event_amounts(
-        images, events, root / "dataset" / "media" / "images", ocr_available=ocr_path is not None
+        images, events, folder / "media" / "images", ocr_available=ocr_path is not None
     )
     events_by_user: dict[str, list] = {}
     for event in events:
@@ -659,7 +661,8 @@ class TUI:
 
     def _ensure_data(self):
         if self.data is None:
-            self.console.print("loading dataset (read-only) ...", style="dim")
+            self.console.print("loading the calibration fixture (read-only, mock data) ...", style="dim")
+    self.console.print("modern interface: python -m tools.app", style="dim")
             try:
                 self.data = load_dataset()
             except Exception as exc:

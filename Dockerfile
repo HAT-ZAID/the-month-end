@@ -34,7 +34,7 @@ RUN python -m pip install --no-cache-dir \
 # Application code, the dataset it reads, and the entry points documented in the
 # README.  Nothing here is generated at build time.
 COPY code ./code
-COPY dataset ./dataset
+COPY mock_dataset ./mock_dataset
 COPY evaluation ./evaluation
 COPY tools ./tools
 COPY tests ./tests

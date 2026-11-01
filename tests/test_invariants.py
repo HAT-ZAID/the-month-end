@@ -13,7 +13,7 @@ def _row(df, rid):
 
 def test_output_columns_exact_order(root_output_df, requests_df):
     if root_output_df is None:  # template scaffold check instead
-        tpl = pd.read_csv("dataset/output.csv", dtype=str, keep_default_na=False)
+        tpl = pd.read_csv("mock_dataset/output.csv", dtype=str, keep_default_na=False)
         assert list(tpl.columns) == OUTPUT_COLS
         pytest.skip("no predictions yet")
     assert list(root_output_df.columns) == OUTPUT_COLS

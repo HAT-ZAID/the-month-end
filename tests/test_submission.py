@@ -52,7 +52,9 @@ def test_root_output_shape_when_built(root_output_df, requests_df):
 
 def test_template_is_not_mistaken_for_deliverable():
     """dataset/output.csv is the BLANK template; gates must target repo-root output.csv."""
-    tpl = pd.read_csv(REPO_ROOT / "dataset" / "output.csv", dtype=str, keep_default_na=False)
+    from tests.conftest import DATASET
+
+    tpl = pd.read_csv(DATASET / "output.csv", dtype=str, keep_default_na=False)
     assert list(tpl.columns) == OUTPUT_COLS  # schema reference only
 
 

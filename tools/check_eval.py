@@ -2,9 +2,9 @@
 import pandas as pd
 from decimal import Decimal, InvalidOperation
 
-samples = pd.read_csv('dataset/sample_requests.csv', dtype=str)
+samples = pd.read_csv('mock_dataset/sample_requests.csv', dtype=str)
 output = pd.read_csv('output.csv', dtype=str)
-requests = pd.read_csv('dataset/requests.csv', dtype=str)
+requests = pd.read_csv('mock_dataset/requests.csv', dtype=str)
 
 # 1. Completeness
 print("=== 1. COMPLETENESS ===")
