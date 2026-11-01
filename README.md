@@ -409,7 +409,7 @@ unproven and report anything it breaks.
 
 ```bash
 python -m pytest -q                            # release suite (365)
-python -m pytest tests/review -q               # wider review net (406)
+python -m pytest tests/review -q               # wider review net (442)
 python -m pytest tests/test_providers.py tests/test_packaging.py -q
 python -m evaluation.run --mode pr             # required gates
 ```

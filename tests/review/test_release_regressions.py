@@ -393,3 +393,35 @@ def test_a_compatibility_form_of_the_marker_is_caught():
     assert _opens_with_marker(full_width) is True
     assert _opens_with_marker("Disagreements: the plan is wrong.") is True
     assert _opens_with_marker("The plan holds.") is False
+
+# --- the citation rule needs a complete identifier -------------------------
+
+def test_a_required_action_is_satisfied_only_by_its_own_event_id():
+    from code.claims import cites_every_action
+
+    assert cites_every_action("we should stop event_9", "stop:event_9") is True
+    assert cites_every_action("we should stop event_90", "stop:event_9") is False
+    assert cites_every_action("nothing here", "stop:event_9") is False
+    assert cites_every_action("anything", "none") is True
+
+
+@pytest.mark.parametrize(
+    "sentence,expected",
+    [
+        # naming the action does not excuse an explicit denial beside it
+        ("No spending changes are needed. Stop event_9.", False),
+        ("You need not stop any spending.", False),
+        # a denial scoped to *no other* changes is true on this row
+        ("Stop event_9 and nothing else changes.", True),
+        ("No other changes are needed once you stop event_9.", True),
+    ],
+)
+def test_a_denial_is_excused_only_when_it_is_scoped_to_no_other_changes(sentence, expected):
+    row = _row(spending_changes_needed="stop:event_9")
+    assert verify_claims(sentence, row)["ok"] is expected
+
+
+def test_an_action_amount_is_compared_at_the_cents_the_csv_prints():
+    row = _row(spending_changes_needed="reduce_to:event_5:250.999")
+    assert verify_claims("Reduce event_5 to 250.99 so the request fits.", row)["ok"] is True
+    assert verify_claims("Reduce event_5 to 250.999 so the request fits.", row)["ok"] is False

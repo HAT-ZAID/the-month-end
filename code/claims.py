@@ -223,8 +223,14 @@ def cites_every_action(prose, changes) -> bool:
             wanted.append(event_id)
     if not wanted:
         return True
-    text = str(prose or "").lower()
-    return all(event_id.lower() in text for event_id in wanted)
+    text = str(prose or "")
+    # Complete identifiers only: one event id must not be satisfied by a
+    # longer one, or a sentence about a different event would excuse the event
+    # the row actually requires.
+    return all(
+        re.search(rf"(?<!\w){re.escape(event_id)}(?!\d)", text, re.IGNORECASE)
+        for event_id in wanted
+    )
 
 
 def _supported_numbers(row: dict, extra_numbers=()) -> set[Decimal]:
@@ -354,7 +360,9 @@ def _normalise_action(token: str) -> str:
     kind = kind.lower()
     if kind == "stop":
         return f"stop:{event_id}"
-    return f"reduce_to:{event_id}:{_decimal(amount)}"
+    # ``output.csv`` prints the action at cents, so that is the token a correct
+    # explanation can cite. The amount scan still rejects an unrounded figure.
+    return f"reduce_to:{event_id}:{_to_cents(_decimal(amount))}"
 
 
 #: Every way a model denies a spending change. The action column is the one
@@ -559,11 +567,23 @@ def verify_claims(
                                     "expected": expected})
     naming_the_action = cites_every_action(prose, kernel_changes)
     for match in _NO_CHANGES.finditer(prose):
-        if naming_the_action and kernel_changes not in {"", "none"}:
-            # The sentence names the action the row takes, so it is describing
-            # the change rather than denying it: "stop the one event and
-            # nothing else changes" is true.
-            break
+        if (
+            naming_the_action
+            and kernel_changes not in {"", "none"}
+            # The scoping word can sit just past the match ("nothing else
+            # changes" matches as far as "nothing").
+            and re.search(
+                r"\b(?:other|else|further|additional|more|apart from|except|"
+                r"besides|aside from)\b",
+                prose[max(0, match.start() - 40) : match.end() + 20],
+                re.IGNORECASE,
+            )
+        ):
+            # Only a denial that is explicitly scoped to *no other* changes is
+            # excused: "stop the one event and nothing else changes" is true,
+            # while "no spending changes are needed. Stop the one event." still
+            # contradicts the column it sits beside.
+            continue
         # "No spending changes are needed" contradicts a row that stops an
         # event, so the explanation would disagree with its own column.
         checked += 1
