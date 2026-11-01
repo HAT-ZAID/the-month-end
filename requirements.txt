@@ -15,6 +15,10 @@ pandas>=2.2
 rich>=13.0
 pytest>=8.0
 
+# The modern interface (tools/app.py). Optional: without it, tools/tui.py still
+# runs the Rich screens, and every kernel path is unaffected.
+textual>=0.86
+
 # Optional OCR stack: install these two plus a Tesseract binary to read images.
 pytesseract>=0.3.10
 Pillow>=10.0

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import pandas as pd
 from datetime import date, timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from code.oracle import solve_safe_amount
 from code.options import get_valid_options
 from code.changes import apply_changes, build_change_sets, describe_action
@@ -429,6 +429,126 @@ def _build_candidates(state: dict, base: dict, ctx: dict) -> list[dict]:
         })
 
     return candidates
+
+
+#: A deliberately absurd probe amount.  The oracle caps ``safe_amount`` at the
+#: requested amount, so asking for more than anyone could afford returns the
+#: largest single payment that is safe on the date: the number a person means by
+#: "how much can I spend right now without dropping below my floor".
+_POSITION_PROBE = "1000000000000"
+
+
+def position(user_id, as_of, profile, events, fx_rows, messages_df=None):
+    """The kernel's view of a person's money on ``as_of``.
+
+    This is the only place a position figure is computed.  A view layer renders
+    what this returns and sums nothing: ``committed`` and ``max_safe_payment``
+    both come out of :func:`code.oracle.solve_safe_amount`, which is the same
+    function the decision path calls, so the home screen cannot disagree with a
+    purchase decision made on the same account.
+
+    ``committed`` is the scheduled outflow between ``as_of`` and the next
+    confirmed income (or the whole 91-day window when no income is scheduled),
+    taken from the oracle's own ``processed_events``.  ``max_safe_payment`` is
+    the oracle's capped safe amount for a probe request, i.e. the largest
+    one-off payment that keeps the balance at or above the floor after every
+    projected commitment.
+
+    Evidence messages are not applied here: a position is a statement about
+    recorded facts.  ``messages_df`` is accepted so a caller that has already
+    reconciled evidence can pass the amended rows in ``events``.
+    """
+    import copy as _copy
+
+    as_of_str = as_of.isoformat() if isinstance(as_of, date) else str(as_of)
+    if not _is_iso_date(as_of_str):
+        raise ValueError(f"position() needs an ISO date, got {as_of!r}")
+    req_date = date.fromisoformat(as_of_str)
+
+    events_for_oracle = _copy.deepcopy(events or [])
+    try:
+        recurrence_flags = detect_recurrence(events_for_oracle)
+    except Exception:
+        recurrence_flags = set()
+
+    result = solve_safe_amount(
+        user_id, as_of_str, _POSITION_PROBE, profile, events_for_oracle, fx_rows or [],
+        recurrence_flags,
+    )
+
+    def _decimal(value, default="0"):
+        try:
+            return Decimal(str(value))
+        except (InvalidOperation, TypeError):
+            return Decimal(default)
+
+    available = _decimal(profile.get("current_available_balance", "0"))
+    floor = _decimal(profile.get("minimum_balance_to_keep", "0"))
+    headroom = available - floor
+
+    fail_closed = bool(result.get("fail_closed"))
+    processed = list(result.get("processed_events") or [])
+
+    outflows = []
+    for item in processed:
+        delta = item.get("delta")
+        try:
+            amount = Decimal(str(delta))
+        except (InvalidOperation, TypeError):
+            continue
+        outflows.append({
+            "date": str(item.get("date") or ""),
+            "amount": str(amount),
+            "category": str(item.get("category") or ""),
+        })
+
+    incomes = [
+        str(item.get("date")) for item in processed
+        if _decimal(item.get("delta", "0")) > 0
+    ]
+    next_income = sorted(incomes)[0] if incomes else None
+
+    committed = Decimal("0")
+    for item in processed:
+        try:
+            amount = Decimal(str(item.get("delta")))
+        except (InvalidOperation, TypeError):
+            continue
+        if amount >= 0:
+            continue
+        when = str(item.get("date") or "")
+        if when and next_income is not None and when > next_income:
+            continue
+        committed += -amount
+
+    if fail_closed:
+        max_safe = Decimal("0")
+    else:
+        max_safe = _decimal(result.get("safe_amount", "0"))
+
+    assumptions = [
+        "conservative: scheduled and pending outflows are reserved, pending income is not counted",
+        "before optional spending changes: no category is stopped or reduced",
+        f"over the {91}-day projection window from {as_of_str}",
+        "the floor is the minimum balance you asked to keep",
+    ]
+
+    return {
+        "user_id": user_id,
+        "as_of": as_of_str,
+        "currency": str(profile.get("home_currency", "") or ""),
+        "available_balance": str(available),
+        "minimum_balance": str(floor),
+        "headroom": str(headroom),
+        "committed": str(committed),
+        "committed_until": next_income,
+        "max_safe_payment": str(max_safe),
+        "window_days": 91,
+        "fail_closed": fail_closed,
+        "fail_closed_reason": result.get("fail_closed_reason"),
+        "outflows": outflows,
+        "assumptions": assumptions,
+    }
 
 
 def solve_request(rid, user_id, req_date, req_amt, profile, events, fx_rows, options_df, messages_df=None, desired_completion_date=None, allows_partial_payment=None, installment_safety="strict"):
