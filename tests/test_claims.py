@@ -710,3 +710,55 @@ def test_a_full_payment_phrase_beside_a_date_is_a_date_statement():
     row["recommended_payment_method"] = "wait"
     row["earliest_date_for_full_payment"] = "2025-09-12"
     assert verify_claims("The first safe full payment is 2025-09-12.", row)["ok"] is True
+
+
+def test_a_spelled_count_is_not_an_amount():
+    report = verify_claims("Pay in twenty-two installments.", dict(ROW))
+    assert [item for item in report["unsupported"] if item["kind"] == "amount"] == []
+
+
+def test_a_percentage_is_a_count_in_both_forms():
+    for sentence in ("About 25% of the balance is safe.", "About 25 percent is safe."):
+        assert [item for item in verify_claims(sentence, dict(ROW))["unsupported"]
+                if item["kind"] == "amount"] == []
+
+
+def test_a_relative_date_is_checked_even_beside_an_iso_date():
+    row = dict(ROW)
+    row["earliest_date_for_full_payment"] = "2025-08-03"
+    report = verify_claims("Pay tomorrow; the deadline is 2025-08-03", row)
+    assert [item["kind"] for item in report["unsupported"]] == ["date"]
+
+
+def test_a_nearby_date_does_not_excuse_paying_in_full_now():
+    row = dict(ROW)
+    row["recommended_payment_method"] = "wait"
+    row["earliest_date_for_full_payment"] = "2025-09-12"
+    report = verify_claims("Pay in full now; 2025-09-12 is the deadline", row)
+    assert report["ok"] is False
+
+
+def test_a_budget_statement_about_the_changed_plan_is_not_a_denial():
+    row = dict(ROW)
+    row["spending_changes_needed"] = "stop:event_9"
+    assert verify_claims(
+        "The budget remains above the minimum after the change.", row
+    )["ok"] is True
+
+
+def test_a_long_private_key_is_still_redacted():
+    from code.trace import sanitize
+
+    header = ("-" * 5) + "BEGIN RSA PRIVATE KEY" + ("-" * 5)
+    footer = ("-" * 5) + "END RSA PRIVATE KEY" + ("-" * 5)
+    body = "MIIE" + ("A" * 9000)
+    cleaned = sanitize({"e": header + "\n" + body + "\n" + footer})
+    assert "AAAAAAAA" not in cleaned["e"]
+
+
+def test_many_secrets_in_one_value_are_all_redacted():
+    from code.trace import sanitize
+
+    tokens = " ".join("sk-" + ("x%02d" % index) * 6 for index in range(60))
+    cleaned = sanitize({"e": tokens})
+    assert "sk-" not in cleaned["e"]

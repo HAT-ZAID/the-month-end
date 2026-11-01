@@ -51,8 +51,6 @@ _SECRET_VALUE = re.compile(
     r"|\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}"
     r"|(?i:Bearer\s+)[A-Za-z0-9._-]{8,}"
     r"|(?i:Basic\s+)[A-Za-z0-9+/=]{8,}"
-    r"|-{4,5}\s?BEGIN [A-Z0-9 ]*PRIVATE KEY[A-Z ]*\s?-{4,5}"
-    r"[\s\S]{0,4000}?-{4,5}\s?END [A-Z0-9 ]*PRIVATE KEY[A-Z ]*\s?-{4,5}"
     r"|\bAIza[A-Za-z0-9_-]{30,}"
     r"|\b(?:hf|npm|whsec)_[A-Za-z0-9]{16,})"
 )
@@ -128,12 +126,34 @@ def sanitize(value):
     return value
 
 
+_PEM_BEGIN = re.compile(r"-{4,5}\s?BEGIN [A-Z0-9 ]*PRIVATE KEY[A-Z ]*\s?-{4,5}")
+_PEM_END = re.compile(r"-{4,5}\s?END [A-Z0-9 ]*PRIVATE KEY[A-Z ]*\s?-{4,5}")
+
+
+def _redact_pem(text: str) -> str:
+    """Replace each armoured private key, whatever its length.
+
+    A regex with a bounded interior silently leaves a long key in place, and an
+    unbounded one scans quadratically, so the block is found and cut directly.
+    """
+    for _ in range(200):
+        begin = _PEM_BEGIN.search(text)
+        if begin is None:
+            return text
+        end = _PEM_END.search(text, begin.end())
+        if end is None:
+            return text[: begin.start()] + REDACTED
+        text = text[: begin.start()] + REDACTED + text[end.end() :]
+    return text
+
+
 def _scrub_text(value: str) -> str:
     """One string, with every known shape and registered literal replaced."""
     cleaned = _URL_USERINFO.sub(f"{REDACTED}@", value)
     # Count-bounded: a hostile body can repeat a BEGIN marker thousands of
     # times, and each one costs a window scan.
-    cleaned = _SECRET_VALUE.sub(REDACTED, cleaned, count=50)
+    cleaned = _redact_pem(cleaned)
+    cleaned = _SECRET_VALUE.sub(REDACTED, cleaned)
     for secret in _KNOWN_SECRETS:
         if secret in cleaned:
             cleaned = cleaned.replace(secret, REDACTED)

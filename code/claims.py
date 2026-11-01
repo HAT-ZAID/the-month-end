@@ -181,7 +181,8 @@ _ISO_DATE = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
 # small leading count qualifies, so "paid 500 of 2000" still checks 2000.
 _COUNT_PREFIX = re.compile(r"(?<![\d.])\d{1,2}\s+of\s*$", re.IGNORECASE)
 _COUNT_UNIT = re.compile(
-    r"\s*(?:install?ments?|payments?|months?|weeks?|days?|years?|times|percent|%)\b",
+    r"\s*(?:install?ments?|payments?|months?|weeks?|days?|years?|times|percent)\b"
+    r"|\s*%",
     re.IGNORECASE,
 )
 #: The leading figure of a fraction is a count only when another count follows
@@ -357,7 +358,8 @@ _NO_CHANGES = re.compile(
     r"\b(?:stay|stays|stayed|remain|remains|remained)\b[^.]{0,24}"
     r"\b(?:as it is|the same|unchanged|intact)\b"
     r"|\b(?:spending|budget|plan|subscriptions?|payments?)\b[^.]{0,40}"
-    r"\b(?:unchanged|untouched|the same|as it is|as is|alone|intact|stay|stays|remain|remains)\b"
+    r"\b(?:unchanged|untouched|the same|as it is|as is|alone|intact|"
+    r"stay|stays|remains? (?:as it is|the same|unchanged|untouched))\b"
     r"|\b(?:your\s+)?(?:spending|budget|plan)\s+(?:is|are|was|were)\s+"
     r"(?:unchanged|the same|intact)\b"
     r"|\bnothing (?:changes|else changes)\b"
@@ -479,13 +481,17 @@ def verify_claims(
             unsupported.append({"kind": "date", "text": match.group(0),
                                 "expected": sorted(dates)})
 
-    if _NUMBER_WORD.search(prose):
+    word_figures = [
+        match
+        for match in _NUMBER_WORD.finditer(prose)
+        if not _COUNT_UNIT.match(prose[match.end() :])
+    ]
+    if word_figures:
         checked += 1
         # The row prints digits only, so a spelled figure is unsupported.
-        unsupported.append({"kind": "amount", "text": _NUMBER_WORD.search(prose).group(0),
+        unsupported.append({"kind": "amount", "text": word_figures[0].group(0),
                             "expected": sorted(_fmt(item) for item in numbers)})
-    relative = _RELATIVE_DATE.search(prose)
-    if relative and not _ISO_DATE.search(prose):
+    for relative in _RELATIVE_DATE.finditer(prose):
         checked += 1
         unsupported.append({"kind": "date", "text": relative.group(0),
                             "expected": sorted(dates)})
@@ -508,8 +514,12 @@ def verify_claims(
             # "the first safe full payment is <date>" speaks about the earliest
             # date column, not about recommending full payment.
             position = prose.lower().find(variant)
+            before = prose.lower()[:position].rstrip()
             following = prose.lower()[position + len(variant) :][:24]
-            if _ISO_DATE.search(following):
+            date_statement = before.endswith(("first safe", "earliest")) or re.match(
+                r"\s*(?:is|on|by)\s+\d{4}-\d{2}-\d{2}", following
+            )
+            if date_statement and _ISO_DATE.search(following):
                 # "pay in full on 2026-04-05" names a date; the date check
                 # below is the claim that matters.
                 continue
