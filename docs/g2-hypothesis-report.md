@@ -377,6 +377,71 @@ The result is consistent and bounded: `.911` correlation, a residual with no
 learnable structure, and 0/21 informative exact matches. Closing the last gap
 requires the organiser's reference implementation or additional labelled rows.
 
+## Seventh pass: 25 versus 250 — does anything transfer?
+
+Tool: `tools/g2_transfer_study.py`. Every model is fitted on the 25 labelled rows
+and applied to all 250 real requests, then compared with the kernel's own answer
+(the only reference available for those rows, measured at corr +0.911 with gold).
+
+### 1. The sample is representative
+
+No feature shifts: the largest standardised mean difference over 18 numeric
+features is 0.37 (`ncat`) and 0.26 (`to_deadline`); `full_ratio` differs by 0.06,
+`mtd_ratio` by −0.06, `balance` by −0.07. Categorical shares track closely
+(`has_rent` 0.84/0.84, `has_housing` 0.16/0.16, request types within ±0.03). The
+one visible gap is `allows_partial` (48% true in the sample, 32% in the 250).
+
+### 2. Trained on 25 gold, applied to the 250
+
+Scored only on rows where both the prediction and the kernel are strictly
+interior — outside that, 34.4% of kernel answers are 0 and 20.0% are the full
+request, so any agreement there is boundary clamping, not a rule.
+
+| Model | interior rows | rank corr | median abs log | p90 abs log |
+|---|---:|---:|---:|---:|
+| **HistGBM** | 102 | **0.980** | **0.119** | 0.945 |
+| OLS | 80 | 0.946 | 0.358 | 1.489 |
+| SVR rbf | 85 | 0.950 | 0.475 | 1.625 |
+| RF 400 | 93 | 0.948 | 0.450 | 1.523 |
+| CatBoost | 92 | 0.954 | 0.446 | 1.496 |
+| XGBoost | 87 | 0.943 | 0.441 | 1.524 |
+| Tree d=4 | 85 | 0.944 | 0.437 | 1.395 |
+| KNN k=3 | 76 | 0.914 | 0.558 | 1.772 |
+| MLP | 0 | — | — | — |
+
+Every serious learner ranks the 250 in the same order as the kernel (0.90–0.98).
+Magnitude is where they part company, and only the smoothest model (HistGBM) stays
+within 12% — the flexible ones memorised the 25 and degrade to 44–56% median.
+
+### 3. Trained on the kernel's 250 answers, applied back to the 25
+
+This is the decisive direction: if gold and the kernel shared a rule, a model of
+the kernel would reproduce gold.
+
+| Model | rank corr with gold | median abs log | exact |
+|---|---:|---:|---:|
+| Ridge | 0.827 | 1.100 | 0/21 |
+| ElasticNet | 0.838 | 1.138 | 0/21 |
+| Tree d=4 | 0.586 | 0.545 | 0/21 |
+| XGBoost | 0.485 | 0.584 | 0/21 |
+| CatBoost | 0.529 | 0.604 | 0/21 |
+| GBM | 0.456 | 0.623 | 0/21 |
+
+**0/21 exact for every model.** A perfect surrogate for our kernel still misses
+gold by a median 54–110% in magnitude. Combined with the direct measurement
+(corr 0.911, median log(gold/ours) = +0.272, sd 0.689), the conclusion is that
+gold and the kernel agree on ordering and disagree on level, per row, with no
+feature recovering the difference.
+
+### What this rules out
+
+The gap is not a distribution shift, not a functional form the data can express,
+and not something a surrogate of our own kernel can correct. A single global
+calibration constant fitted to the 25 gold rows would improve agreement on those
+same 25 rows — which is training on the test set G2 measures, so it is recorded
+as rejected rather than shipped.
+
+
 
 
 

@@ -94,8 +94,18 @@ def budgets_for(user_events, req_date, home_currency, fx):
     return out
 
 
-def build_frame():
+def build_frame(source=None):
+    """Feature frame for a request file.
+
+    ``source`` is a path or an already-loaded DataFrame; the default is the 25
+    labelled sample.  A file without gold columns (the 250 real requests) gets
+    ``gold`` as NaN and ``informative`` False.
+    """
     events, profiles, fx, sample, flags = load()
+    if source is not None:
+        sample = source if isinstance(source, pd.DataFrame) else pd.read_csv(
+            source, dtype=str, keep_default_na=False
+        )
     records = []
     for _, req in sample.iterrows():
         user_id = req["user_id"]
@@ -119,7 +129,8 @@ def build_frame():
         balance = dec(profile["current_available_balance"])
         floor = dec(profile["minimum_balance_to_keep"])
         requested = dec(req["requested_amount"])
-        gold = dec(req["amount_safe_to_pay"])
+        gold_text = str(req.get("amount_safe_to_pay", "") or "").strip()
+        gold = dec(gold_text) if gold_text else Decimal("0")
         full = sum(budgets.values(), Decimal(0))
         mtd_total = sum(mtd.values(), Decimal(0))
         days_left = (date(req_date.year + (req_date.month == 12), req_date.month % 12 + 1, 1) - req_date).days
