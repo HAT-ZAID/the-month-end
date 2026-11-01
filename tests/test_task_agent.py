@@ -467,3 +467,17 @@ def test_a_stale_amount_does_not_leak_into_the_next_clause():
     (step,) = result.steps
     assert "40000" not in step.detail
     assert step.data.get("overrides", {}).get("requested_amount") != "40000"
+
+
+def test_a_whatif_on_the_same_request_borrows_its_amount():
+    workspace = StubWorkspace({"request_1": DECISION})
+    result = run_task(
+        "can I afford 1000 on the 12th then what if I wait until the 20th",
+        workspace=workspace,
+    )
+    assert [step.kind for step in result.steps][-1] == "whatif"
+    assert workspace.last_amount_for == workspace.current_request_id
+    overrides = result.steps[-1].data.get("overrides") or {}
+    # The follow-up is about the request the afford created, so it borrows that
+    # amount rather than asking for a new one.
+    assert str(overrides.get("requested_amount") or "") not in {"", "0"}

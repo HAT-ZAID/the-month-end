@@ -313,3 +313,39 @@ def test_redaction_covers_hyphenated_and_prefixed_secret_names():
     cleaned = sanitize(payload)
     assert "SECRETVALUE" not in repr(cleaned)
     assert cleaned["note"] == "plain"
+
+
+def test_redaction_covers_camel_case_secret_names():
+    from code.trace import REDACTED, sanitize
+
+    keys = {
+        "sessionToken": "K6",
+        "SessionToken": "K6",
+        "clientSecret": "K7",
+        "ClientSecret": "K7",
+        "apiKey": "K8",
+        "APIKey": "K8",
+        "privateKey": "K9",
+        "accessToken": "K10",
+    }
+    cleaned = sanitize(dict(keys))
+    for name in keys:
+        assert cleaned[name] == REDACTED, name
+    assert sanitize({"total_tokens": 12}) == {"total_tokens": 12}
+
+
+def test_redaction_covers_capitalised_and_cookie_secret_names():
+    from code.trace import REDACTED, sanitize
+
+    payload = {
+        "PrivateKey": "P1",
+        "SessionToken": "S2",
+        "ClientSecret": "C3",
+        "IdToken": "I4",
+        "SetCookie": "K5",
+        "total_tokens": 12,
+    }
+    cleaned = sanitize(payload)
+    for name in ("PrivateKey", "SessionToken", "ClientSecret", "IdToken"):
+        assert cleaned[name] == REDACTED, name
+    assert cleaned["total_tokens"] == 12

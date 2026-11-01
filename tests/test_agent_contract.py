@@ -527,6 +527,8 @@ def test_a_styled_marker_cannot_ship_as_candidate_prose():
         "Disagreements : I would have waited.",
         "_Disagreements:_ I would have waited.",
         "\u200bDisagreements: I would have waited.",
+        "Disagreements\u200b: I would have waited.",
+        "Disagree\u200bments: I would have waited.",
     ]
     for rationale in styled:
         candidate = dict(base)
@@ -536,3 +538,25 @@ def test_a_styled_marker_cannot_ship_as_candidate_prose():
         result = enforce_decision(candidate, dict(KERNEL), disagreement_note=True)
         assert result["verification"]["rationale_source"] in {"kernel", "disagreement"}
         assert not result["final_row"]["decision_explanation"].startswith("**")
+
+
+def test_a_list_item_marker_cannot_ship_as_candidate_prose():
+    base = {
+        key: value
+        for key, value in KERNEL.items()
+        if key != "decision_explanation"
+    }
+    styled = [
+        "> Disagreements: I would have waited.",
+        "1. Disagreements: I would have waited.",
+        "# Disagreements: I would have waited.",
+        "\u200eDisagreements: I would have waited.",
+        "Disagreements\u00ad: I would have waited.",
+    ]
+    for rationale in styled:
+        candidate = dict(base)
+        candidate["rationale"] = rationale
+        candidate["evidence_sufficient"] = True
+        candidate["confidence"] = 0.5
+        result = enforce_decision(candidate, dict(KERNEL), disagreement_note=True)
+        assert result["verification"]["rationale_source"] in {"kernel", "disagreement"}

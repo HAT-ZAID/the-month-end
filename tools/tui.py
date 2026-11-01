@@ -1538,7 +1538,7 @@ class TUI:
                 self.console.print(notice, style="yellow")
         # One workspace per session: `ask and if I wait until the 20th` is a
         # follow-up on the previous command, so current_request_id, last_amount
-        # and last_date have to survive between calls.
+        # have to survive between calls.
         workspace = getattr(self, "_workspace", None)
         if workspace is None:
             workspace = Workspace(data=data, session=self.session)

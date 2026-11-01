@@ -53,7 +53,8 @@ _URL_USERINFO = re.compile(r"(?<=://)[^/\s@]+@")
 #: CamelCase compounds (``apiKey``, ``sessionToken``, ``clientSecret``) have no
 #: separator for the pattern above to anchor on, so they are matched separately.
 _CAMEL_SECRET_KEY = re.compile(
-    r"(?:api|access|session|refresh|private|secret|client|auth)(?:Key|Token|Secret)"
+    r"(?:api|access|session|refresh|private|secret|client|auth|id|cookie)(?:key|token|secret|cookie)",
+    re.IGNORECASE,
 )
 _UNSTABLE_KEYS = frozenset({"duration_ms"})
 _UNSTABLE_BLOCKS = frozenset({"metadata"})

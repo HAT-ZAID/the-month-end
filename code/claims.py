@@ -9,7 +9,9 @@ What counts as a claim:
 * **money** — every figure, whatever its length and whether or not a currency
   code is glued to it ("ZAR50000"), except the two exempt shapes: a figure that
   is followed by a count unit ("2 payments", "3 days"), and a small count that
-  is one side of a fraction ("3 of 5 samples");
+  is one side of a fraction ("3 of 5 samples"). A percentage is exempt on
+  purpose: "15% of your balance" is a ratio, not an amount, and the kernel row
+  carries no ratio to check it against;
 * **dates** — an ISO date;
 * **status / method names** — the words that name a decision outcome, in prose
   ("affordable now", "pay in full") or as a literal contract token
@@ -56,9 +58,21 @@ METHOD_PHRASES = {
 #: A currency code glued to the digits ("ZAR50000", "Rp2.000.000") is a prefix,
 #: not a word boundary, so the code is blanked before the scan and the digits
 #: become visible. Lengths are preserved, so token offsets stay valid.
-_GLUED_CURRENCY = re.compile(
-    r"(?i)\b(?:zar|idr|usd|eur|gbp|sgd|myr|thb|php|inr|jpy|aud|cad|chf|rp)(?=\d)"
+_CURRENCY_CODES = (
+    "zar", "idr", "usd", "eur", "gbp", "sgd", "myr", "thb", "php", "inr",
+    "jpy", "aud", "cad", "chf", "rp",
 )
+#: A currency marker, before or after the digits, is a prefix rather than a word
+#: boundary. "R" is the repo's own ZAR symbol (see code/amounts.py), and
+#: "R88000" and "88000ZAR" are both ways a model writes an amount.
+_GLUED_CURRENCY = re.compile(
+    rf"(?i)(?:\b(?:{'|'.join(_CURRENCY_CODES)})(?=\d)"
+    rf"|(?<=\d)(?:{'|'.join(_CURRENCY_CODES)})\b)"
+    r"|[$\u20ac\u00a3\u00a5\u20b9]|(?<!\w)R(?=\d)"
+)
+#: A shorthand multiplier is still a figure: "50k" is fifty thousand.
+_SHORTHAND = re.compile(r"(?<![\w.])(\d+(?:\.\d+)?)\s?([kKmMbB])(?![\w])")
+_SHORTHAND_FACTOR = {"k": 1000, "m": 1000000, "b": 1000000000}
 #: Dot-grouped thousands ("2.000.000") are one figure, not a decimal.
 #: Month names a model may write, so "12 September" and "the 12th of September"
 #: are dates rather than a figure followed by a word.
@@ -73,12 +87,12 @@ _MONTH_WORD = "|".join(sorted(_MONTHS, key=len, reverse=True))
 _SPELLED_DATE = re.compile(
     rf"\b(?:(?P<day1>\d{{1,2}})(?:st|nd|rd|th)?\s+(?:of\s+)?"
     rf"(?P<month1>{_MONTH_WORD})(?:,?\s+(?P<year1>\d{{4}}))?"
-    rf"|(?P<month2>{_MONTH_WORD})\s+(?P<day2>\d{{1,2}})(?:st|nd|rd|th)?"
-    rf"(?:,?\s+(?P<year2>\d{{4}}))?)\b",
+    rf"|(?P<month2>{_MONTH_WORD})\s+(?P<day2>\d{{1,2}})(?:st|nd|rd|th)"
+    rf"(?:,?\s+(?P<year3>\d{{4}}))?|(?P<month3>{_MONTH_WORD})\s+(?P<day3>\d{{1,2}}),?\s+(?P<year3b>\d{{4}}))\b",
     re.IGNORECASE,
 )
 _MONEY = re.compile(
-    r"(?<![\w.])(\d{1,3}(?:\.\d{3})+|\d[\d,]*(?:\.\d+)?)(?![\w])"
+    r"(?<![\w.,])(\d{1,3}(?:\.\d{3})+|\d[\d,]*(?:\.\d+)?)(?![\w])"
 )
 #: The same figure with its thousands separators: "2.000.000" is two million.
 _DOT_GROUPED = re.compile(r"\d{1,3}(?:\.\d{3})+")
@@ -158,6 +172,20 @@ def _money_claims(text: str) -> list[tuple[str, Decimal]]:
     # The same for a written date: "12 September 2025" is a date, and its
     # day and year are not amounts.
     unspanned = _SPELLED_DATE.sub(lambda match: " " * len(match.group(0)), unspanned)
+    # "50k" is fifty thousand: read the multiplier, then blank the span so the
+    # "50" is not claimed as a bare fifty.
+    shorthand = []
+    for match in _SHORTHAND.finditer(unspanned):
+        number = _decimal(match.group(1))
+        if number is not None:
+            shorthand.append(
+                (match.group(0), number * _SHORTHAND_FACTOR[match.group(2).lower()])
+            )
+        unspanned = (
+            unspanned[: match.start()]
+            + " " * (match.end() - match.start())
+            + unspanned[match.end():]
+        )
     claims = []
     for match in _MONEY.finditer(unspanned):
         token = text[match.start():match.end()]
@@ -179,7 +207,7 @@ def _money_claims(text: str) -> list[tuple[str, Decimal]]:
             number = _decimal(token)
         if number is not None:
             claims.append((token, number))
-    return claims
+    return shorthand + claims
 
 
 def _phrase_claims(text: str, table: dict[str, tuple[str, ...]]) -> list[tuple[str, str]]:
@@ -210,11 +238,18 @@ def _normalise_action(token: str) -> str:
     return f"reduce_to:{event_id}:{_decimal(amount)}"
 
 
+_NO_CHANGES = re.compile(
+    r"\b(?:no|without any|needs? no)\s+(?:spending\s+)?changes?\b"
+    r"|\bnothing\b[^.]{0,20}\b(?:stop|cut|reduce)\b",
+    re.IGNORECASE,
+)
+
+
 def _spelled_date(match) -> tuple[int, int, int | None] | None:
     """(month, day, year-or-None) for a written date, or None if unreadable."""
-    day = match.group("day1") or match.group("day2")
-    month = match.group("month1") or match.group("month2")
-    year = match.group("year1") or match.group("year2")
+    day = match.group("day1") or match.group("day2") or match.group("day3")
+    month = match.group("month1") or match.group("month2") or match.group("month3")
+    year = match.group("year1") or match.group("year3") or match.group("year3b")
     if not day or not month:
         return None
     number = _MONTHS.get(str(month).lower())
@@ -311,6 +346,13 @@ def verify_claims(
             if canonical != expected:
                 unsupported.append({"kind": "token", "text": token,
                                     "expected": expected})
+    for match in _NO_CHANGES.finditer(prose):
+        # "No spending changes are needed" contradicts a row that stops an
+        # event, so the explanation would disagree with its own column.
+        checked += 1
+        if kernel_changes not in {"", "none"}:
+            unsupported.append({"kind": "changes", "text": match.group(0),
+                                "expected": kernel_changes})
     for match in _ACTION.finditer(prose):
         checked += 1
         if _normalise_action(match.group(0)) not in kernel_actions:

@@ -83,7 +83,7 @@ def _changes_equal(candidate_value, final_value) -> bool:
 
 #: Decimal money fields, and the precision the CSV writes them at.
 _CENT = Decimal("0.01")
-_CENT_FIELDS = ("amount_safe_to_pay")
+_CENT_FIELDS = ("amount_safe_to_pay",)
 
 
 def _kernel_row(kernel_result: dict) -> dict:
@@ -175,13 +175,20 @@ _CANDIDATE_FIELDS = (
 
 #: Emphasis and invisible characters a model may wrap around the marker.
 _MARKER_NOISE = str.maketrans({character: None for character in "*_`~"})
-_MARKER_LEAD = "\ufeff\u200b\u200c\u200d\u2060"
+#: Every invisible character a model may wrap around or inside the marker:
+#: zero-width joiners, bidi controls, the soft hyphen and the BOM.
+_MARKER_INVISIBLE = re.compile(
+    r"[\u00ad\u180e\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]"
+)
+#: Leading list or quote structure: "> Disagreements:", "1. Disagreements:".
+_MARKER_STRUCTURE = re.compile(r"^(?:\d+[.)]|[>#+\-])\s*")
 
 
 def _opens_with_marker(text) -> bool:
     """True when the prose opens with the disagreement marker, however styled."""
-    cleaned = str(text or "").strip().lstrip(_MARKER_LEAD)
-    cleaned = cleaned.translate(_MARKER_NOISE).lstrip().lstrip(_MARKER_LEAD)
+    cleaned = _MARKER_INVISIBLE.sub("", str(text or ""))
+    cleaned = cleaned.translate(_MARKER_NOISE).strip()
+    cleaned = _MARKER_STRUCTURE.sub("", cleaned).lstrip()
     return re.match(r"disagreements?\s*:", cleaned, re.IGNORECASE) is not None
 
 

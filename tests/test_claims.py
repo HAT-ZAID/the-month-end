@@ -443,3 +443,38 @@ def test_a_written_date_without_a_year_reads_against_the_row():
     row["earliest_date_for_full_payment"] = "2025-09-12"
     assert verify_claims("12 September is the safest day.", row)["ok"] is True
     assert verify_claims("13 September is the safest day.", row)["ok"] is False
+
+
+def test_a_figure_glued_to_a_letter_on_either_side_is_still_money():
+    from code.claims import _money_claims
+
+    assert [value for _, value in _money_claims("You can commit R88000 today.")] == [88000]
+    assert [value for _, value in _money_claims("You can commit 88000ZAR today.")] == [88000]
+    assert [value for _, value in _money_claims("You can commit R50,000 today.")] == [50000]
+    report = verify_claims("You can commit R88000 today.", dict(ROW))
+    assert report["checked"] == 1
+    assert report["ok"] is False
+
+
+def test_a_shorthand_multiplier_is_a_figure():
+    from code.claims import _money_claims
+
+    assert [value for _, value in _money_claims("You only need 50k.")] == [50000]
+    assert [value for _, value in _money_claims("about 1.5m is left over")] == [1500000]
+
+
+def test_a_modal_may_is_not_a_date():
+    report = verify_claims("You may 2 payments need to be made to fit this in.", dict(ROW))
+    assert [item for item in report["unsupported"] if item["kind"] == "date"] == []
+
+
+def test_denying_a_required_change_is_a_claim():
+    row = dict(ROW)
+    row["spending_changes_needed"] = "stop:event_9"
+    report = verify_claims("No spending changes are needed.", row)
+    assert report["checked"] == 1
+    assert [item["kind"] for item in report["unsupported"]] == ["changes"]
+
+    quiet = dict(ROW)
+    quiet["spending_changes_needed"] = "none"
+    assert verify_claims("No spending changes are needed.", quiet)["ok"] is True
