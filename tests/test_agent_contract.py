@@ -45,7 +45,9 @@ def _candidate(**overrides) -> dict:
         "spending_changes_needed": "none",
         "evidence_sufficient": True,
         "confidence": 0.9,
-        "rationale": "The full amount fits above the protected minimum balance.",
+        # The gate now requires the rationale to name the status the row
+        # holds, not only the method, so the fixture does.
+        "rationale": "This is affordable now; the full amount fits above the protected minimum balance.",
     }
     payload.update(overrides)
     return payload

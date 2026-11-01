@@ -1,3 +1,4 @@
+from collections import Counter
 from copy import deepcopy
 from pathlib import Path
 import re
@@ -85,8 +86,10 @@ def resolve_event_amounts(images_df, events, image_dir, reader=None, ocr_availab
     """
     resolved = deepcopy(events or [])
     event_ids = [str(e.get("event_id", "") or "").strip() for e in resolved]
-    duplicate_ids = {event_id for event_id in event_ids if event_id}
-    duplicate_ids = {event_id for event_id in duplicate_ids if event_ids.count(event_id) > 1}
+    # One pass, not one per candidate id: counting inside the comprehension is
+    # quadratic in the number of events and showed up as seconds in a profile.
+    counts = Counter(event_id for event_id in event_ids if event_id)
+    duplicate_ids = {event_id for event_id, count in counts.items() if count > 1}
     by_event = {
         str(e.get("event_id", "") or "").strip(): e
         for e in resolved

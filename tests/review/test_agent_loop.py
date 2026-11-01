@@ -110,6 +110,26 @@ def _candidate(**overrides) -> dict:
     return payload
 
 
+_METHOD_WORDS = {
+    "full_payment": "full payment",
+    "partial_payment": "partial payment",
+    "installments": "installments",
+    "wait": "wait",
+    "not_recommended": "not recommended",
+}
+
+
+def _statement(kernel: dict) -> str:
+    """A rationale that states the decision the row makes.
+
+    The claim gate asks for positive coverage: an explanation that discusses the
+    outcome has to name it, so a candidate that agrees still has to say so.
+    """
+    status = str(kernel["affordability_status"]).replace("_", " ")
+    method = _METHOD_WORDS[str(kernel["recommended_payment_method"])]
+    return f"This is {status} and {method} is the recommendation."
+
+
 def _agreeing(kernel: dict) -> dict:
     """A candidate that mirrors the real kernel row field for field."""
     return _candidate(
@@ -119,6 +139,7 @@ def _agreeing(kernel: dict) -> dict:
         payment_plan=str(kernel["payment_plan"]),
         earliest_date_for_full_payment=str(kernel["earliest_date_for_full_payment"] or ""),
         spending_changes_needed=str(kernel["spending_changes_needed"]),
+        rationale=_statement(kernel),
     )
 
 

@@ -393,6 +393,9 @@ _NO_CHANGES = re.compile(
     r"(?:unchanged|the same|intact)\b"
     r"|\bnothing (?:changes|else changes)\b"
     r"|\bno action\b[^.]{0,24}\bspending\b"
+    rf"|\b{_CHANGE_VERB}\b[^.]{{0,24}}\b(?:not\s+required|not\s+needed"
+    r"|unnecessary)\b"
+    r"|\bevent_\d+\b[^.]{0,24}\b(?:can|could|will|would|should)\s+stay\b"
     r"|\bspending_changes_needed\s*[:=]\s*none\b",
     re.IGNORECASE,
 )
@@ -462,6 +465,43 @@ def _date_parts(dates) -> list[tuple[int, int, int]]:
             continue
         parts.append((month, day, year))
     return parts
+
+
+def states_the_decision(prose, row) -> bool:
+    """True when the prose grounds the decision in the row's own words.
+
+    A table of phrases can only reject what it recognises, so the gate asks the
+    other question as well: the rationale has to name the status the row holds
+    and the method it recommends. A rationale that describes the decision in
+    words no table knows is not endorsed; the kernel's own sentence ships
+    instead. That is the conservative direction, and it is the only one that
+    stops converging on the next paraphrase.
+    """
+    text = str(prose or "")
+    status = str(row.get("affordability_status") or "")
+    method = str(row.get("recommended_payment_method") or "")
+
+    if status:
+        named = {canonical for _, canonical in _phrase_claims(text, STATUS_PHRASES)}
+        if status not in named and not (
+            status.startswith("affordable") and "affordable_any" in named
+        ):
+            return False
+
+    if method:
+        named = {canonical for _, canonical in _phrase_claims(text, METHOD_PHRASES)}
+        if method not in named:
+            # "the first safe full payment is <date>" is a statement about the
+            # earliest-date column, not a recommendation of full payment.
+            lowered = text.lower()
+            if method == "full_payment" or not any(
+                marker in lowered for marker in ("first safe full payment",
+                                                 "earliest full payment",
+                                                 "first full payment")
+            ):
+                return False
+
+    return True
 
 
 def verify_claims(
@@ -552,6 +592,19 @@ def verify_claims(
         unsupported.append({"kind": "date", "text": relative.group(0),
                             "expected": sorted(dates)})
 
+    wanted_ids = {
+        item.lower()
+        for item in re.findall(r"(?<!\w)event_\d+(?!\w)", kernel_changes, re.IGNORECASE)
+    }
+    for match in re.finditer(r"(?<!\w)event_\d+(?!\w)", prose, re.IGNORECASE):
+        if match.group(0).lower() in wanted_ids:
+            continue
+        # A rationale may not name an event the row does not touch: that is an
+        # instruction about somebody else's spending.
+        checked += 1
+        unsupported.append({"kind": "action", "text": match.group(0),
+                            "expected": kernel_changes})
+
     for variant, canonical in _phrase_claims(prose, STATUS_PHRASES):
         checked += 1
         if canonical == "affordable_any":
@@ -571,14 +624,20 @@ def verify_claims(
             # date column, not about recommending full payment.
             position = prose.lower().find(variant)
             before = prose.lower()[:position].rstrip()
-            following = prose.lower()[position + len(variant) :][:24]
-            date_statement = before.endswith(("first safe", "earliest")) and re.match(
+            following = prose.lower()[position + len(variant) :][:40]
+            if before.endswith(("first safe", "earliest", "first")) and re.match(
                 r"\s+(?:is|falls on|lands on)\s+\d{4}-\d{2}-\d{2}", following
-            )
-            if date_statement:
-                # Only a sentence that names the earliest-date column is a date
-                # statement.  "Pay in full on <date>" is a recommendation, and a
-                # row whose method is installments must not ship it.
+            ):
+                # A statement about the earliest date column has to cite that
+                # column: a date the row holds elsewhere (a plan leg, the
+                # request date) is a different claim.
+                cited = _ISO_DATE.search(following)
+                expected = str(row.get("earliest_date_for_full_payment") or "").strip()
+                checked += 1
+                if cited is None or not expected or cited.group(0) != expected:
+                    unsupported.append({"kind": "date",
+                                        "text": cited.group(0) if cited else variant,
+                                        "expected": expected})
                 continue
         checked += 1
         if canonical != kernel_method:
@@ -593,21 +652,18 @@ def verify_claims(
             if canonical != expected:
                 unsupported.append({"kind": "token", "text": token,
                                     "expected": expected})
-    naming_the_action = cites_every_action(prose, kernel_changes)
     for match in _NO_CHANGES.finditer(prose):
-        if (
-            naming_the_action
-            and kernel_changes not in {"", "none"}
+        if kernel_changes not in {"", "none"} and _SCOPE.search(
             # The scoping word can sit just past the match ("nothing else
             # changes" matches as far as "nothing"), but it has to be in the
             # same clause: a scoping word in the *next* sentence does not
             # qualify this denial.
-            and _SCOPE.search(_clause_at(prose, match.start(), match.end()))
+            _clause_at(prose, match.start(), match.end())
         ):
             # Only a denial that is explicitly scoped to *no other* changes is
             # excused: "stop the one event and nothing else changes" is true,
-            # while "no spending changes are needed. Stop the one event." still
-            # contradicts the column it sits beside.
+            # while "no need to stop the event" names the action and still
+            # asserts the opposite, so naming it no longer buys an exemption.
             continue
         # "No spending changes are needed" contradicts a row that stops an
         # event, so the explanation would disagree with its own column.

@@ -368,10 +368,28 @@ def test_an_explanation_that_never_names_the_action_cannot_ship(rationale):
     ],
 )
 def test_an_explanation_that_names_the_action_ships(rationale):
-    result = enforce_decision(
-        _candidate_for(ACTION_ROW, rationale), dict(ACTION_ROW), disagreement_note=True
+    # The gate now also asks the rationale to state the row's own status and
+    # method, so the sentence does; the action citation is what is under test.
+    stated = " ".join(
+        (
+            rationale,
+            "This is",
+            str(ACTION_ROW["affordability_status"]).replace("_", " "),
+            "and",
+            {
+                "full_payment": "full payment",
+                "partial_payment": "partial payment",
+                "installments": "installments",
+                "wait": "wait",
+                "not_recommended": "not recommended",
+            }[ACTION_ROW["recommended_payment_method"]],
+            "is the recommendation.",
+        )
     )
-    assert result["verification"]["rationale_source"] == "candidate", rationale
+    result = enforce_decision(
+        _candidate_for(ACTION_ROW, stated), dict(ACTION_ROW), disagreement_note=True
+    )
+    assert result["verification"]["rationale_source"] == "candidate", stated
 
 
 def test_a_full_payment_recommendation_is_not_a_column_reference():

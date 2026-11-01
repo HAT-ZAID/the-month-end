@@ -31,7 +31,7 @@ from decimal import ROUND_DOWN, Decimal
 
 from code.amounts import to_decimal
 
-from code.claims import cites_every_action, verify_claims
+from code.claims import cites_every_action, states_the_decision, verify_claims
 from code.schema import (
     CENT,
     FINAL_FIELDS,
@@ -65,9 +65,23 @@ def _money_equal(candidate_value, final_value) -> bool:
 
 def _plan_equal(candidate_value, final_value) -> bool:
     try:
-        return parse_payment_plan(candidate_value) == parse_payment_plan(final_value)
+        candidate_plan = parse_payment_plan(candidate_value)
+        final_plan = parse_payment_plan(final_value)
     except CandidateValidationError:
         return _as_text(candidate_value) == _as_text(final_value)
+    if len(candidate_plan) != len(final_plan):
+        return False
+    for (candidate_day, candidate_amount), (final_day, final_amount) in zip(
+        candidate_plan, final_plan
+    ):
+        if candidate_day != final_day:
+            return False
+        # A candidate is re-rendered at cents, so an exact Decimal comparison
+        # can never agree on a leg the solver kept in full precision. Compare
+        # with the same tolerance the money fields use.
+        if not _money_equal(candidate_amount, final_amount):
+            return False
+    return True
 
 
 def _date_equal(candidate_value, final_value) -> bool:
@@ -335,6 +349,7 @@ def enforce_decision(
         and claim_report
         and claim_report.get("ok")
         and cites_every_action(rationale, row.get("spending_changes_needed"))
+        and states_the_decision(rationale, row)
     )
     rationale_source = "candidate" if rationale_ok else "kernel"
     disagreement = ""
