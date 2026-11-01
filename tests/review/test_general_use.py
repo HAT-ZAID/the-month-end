@@ -237,3 +237,44 @@ def test_the_ui_module_holds_no_arithmetic_over_money():
     ).read()
     for banned in ("+ float(", "sum(", "Decimal("):
         assert banned not in source, f"{banned} in the view layer"
+
+
+# ------------------------------------------------------------- the conversation
+
+
+def test_the_conversation_tools_return_kernel_figures(db):
+    from code import chat
+
+    account = store.create("ana", home_currency="ZAR")
+    service.update_profile(account, balance="12000", floor="2000")
+    service.add_fact(account, "bill", "8000", when="2026-11-03", description="rent")
+
+    pos = chat.dispatch(account, "position")
+    assert pos["max_safe_payment"] == service.position(account)["max_safe_payment"]
+
+    trial = chat.dispatch(account, "what_if", {"amount": "500", "on": "2026-11-01"})
+    assert "affordability_status" in trial
+    # A hypothetical is never recorded on the person's account.
+    assert len(account["requests"]) == 0
+
+    missing = chat.dispatch(account, "facts")
+    assert isinstance(missing["problems"], list)
+    blank = acct.blank_account(user_id="nobody")
+    assert chat.dispatch(blank, "facts")["problems"] != []
+
+
+def test_an_unknown_tool_names_the_ones_that_exist(db):
+    from code import chat
+
+    account = store.create("ana")
+    with pytest.raises(KeyError) as caught:
+        chat.dispatch(account, "forecast_everything")
+    assert "position" in str(caught.value)
+
+
+def test_without_a_model_the_conversation_says_so(db):
+    from code import chat
+
+    account = store.create("ana")
+    with pytest.raises(chat.NoModel):
+        chat.ask(account, "what can I spend this week?")

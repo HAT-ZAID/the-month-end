@@ -668,17 +668,23 @@ class BuyOrWait(App):
         event.input.value = ""
         if not text:
             return
-        log.write(Text(f"you: {text}", style=BLUE))
-        model = self._model_status()
-        if model is None:
-            log.write(Text(
-                "No model is configured, so I will not guess. The tabs run the kernel "
-                "directly: Position for what is safe today, Purchase for a decision.",
-                style=MUTED,
-            ))
+        if self.account is None:
+            log.write(Text("Load a person first.", style=RED))
             return
-        log.write(Text(f"{model} is configured, but this screen is not connected to the "
-                       "tool loop yet.", style=AMBER))
+        log.write(Text(f"you: {text}", style=BLUE))
+        from code import chat
+
+        try:
+            result = chat.ask(self.account, text)
+        except chat.NoModel as exc:
+            log.write(Text(str(exc), style=MUTED))
+            return
+        except Exception as exc:  # never a guessed figure, always a stated failure
+            log.write(Text(f"{type(exc).__name__}: {exc}", style=RED))
+            return
+        for name in result.get("tool_calls") or []:
+            log.write(Text(f"  ran {name}()", style=MUTED))
+        log.write(Text(str(result.get("reply") or "(no answer)"), style=TEXT))
 
 
 def main(argv=None) -> int:
