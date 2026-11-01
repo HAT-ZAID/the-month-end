@@ -34,6 +34,7 @@ sorted by date, category, kind, source and reason.
 """
 from __future__ import annotations
 
+from calendar import monthrange
 from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
 from decimal import Decimal
@@ -43,7 +44,9 @@ from code.fx import resolve_rate
 
 HORIZON_DAYS = 90
 DEFAULT_INTERVAL_DAYS = 30
-MAX_INCOME_OCCURRENCES = 2
+# A 90-day horizon can contain three monthly paydays (e.g. 15 June, 15 July,
+# 15 August); capping at two silently drops the third salary from the ledger.
+MAX_INCOME_OCCURRENCES = 3
 # A monthly budget needs at least two observed months: one month is a one-off.
 MIN_BUDGET_MONTHS = 2
 # A calendar month is charged as 30 days when prorating the request month.
@@ -464,6 +467,37 @@ def _income_stream_is_eligible(description: str) -> bool:
     return not any(token in description for token in EXCLUDED_INCOME_DESCRIPTION_TOKENS)
 
 
+def _projected_income_dates(anchor, req_date, window_end, *, interval, pay_day):
+    """Salary dates strictly after ``anchor`` and inside the request window.
+
+    A monthly payday is a *day of the month*, not a day count: stepping a
+    15th payday by 30 days lands on the 14th, then the 13th, and the
+    projection slowly drifts away from the salary it is modelling. When the
+    stream pays on a stable day of month, project that calendar day.
+    """
+    if pay_day is None:
+        day = anchor + timedelta(days=interval)
+        while day < req_date:
+            day += timedelta(days=interval)
+        while day <= window_end:
+            yield day
+            day += timedelta(days=interval)
+        return
+    year, month = anchor.year, anchor.month
+    step = 0
+    while True:
+        step += 1
+        total = month - 1 + step
+        target_year = year + total // 12
+        target_month = total % 12 + 1
+        day = min(pay_day, monthrange(target_year, target_month)[1])
+        candidate = date(target_year, target_month, day)
+        if candidate > window_end:
+            return
+        if candidate >= req_date:
+            yield candidate
+
+
 def _income_forecast(
     events,
     req_date: date,
@@ -579,6 +613,15 @@ def _income_forecast(
     if interval <= 0:
         interval = DEFAULT_INTERVAL_DAYS
 
+    # A monthly salary pays on a stable day of month; only trust the calendar
+    # reading when the observations really do cluster on one day.
+    pay_day = None
+    if 28 <= interval <= 31:
+        doms = sorted(row["date"].day for row in rows)
+        candidate_day = doms[len(doms) // 2]
+        if sum(1 for day in doms if abs(day - candidate_day) <= 3) >= 0.7 * len(doms):
+            pay_day = candidate_day
+
     latest = sorted(
         (row for row in rows if row["amount"] is not None),
         key=lambda row: (row["date"], row["event_id"]),
@@ -610,24 +653,25 @@ def _income_forecast(
 
     entries: list[ForecastEntry] = []
     anchor = max(max(dates), max(real_dates)) if real_dates else max(dates)
-    next_date = anchor + timedelta(days=interval)
-    while next_date < req_date:
-        next_date += timedelta(days=interval)
     emitted = 0
-    while next_date <= window_end and emitted < remaining:
-        if next_date not in existing:
-            entries.append(
-                ForecastEntry(
-                    date=next_date,
-                    amount=amount,
-                    category="salary",
-                    kind="income",
-                    source="history",
-                    reason="primary_income_stream",
-                )
+    for next_date in _projected_income_dates(
+        anchor, req_date, window_end, interval=interval, pay_day=pay_day
+    ):
+        if emitted >= remaining:
+            break
+        if next_date in existing:
+            continue
+        entries.append(
+            ForecastEntry(
+                date=next_date,
+                amount=amount,
+                category="salary",
+                kind="income",
+                source="history",
+                reason="primary_income_stream",
             )
-            emitted += 1
-        next_date += timedelta(days=interval)
+        )
+        emitted += 1
     return entries, (description or None)
 
 

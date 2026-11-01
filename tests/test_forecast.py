@@ -197,11 +197,11 @@ def test_salary_projection_counts_real_in_window_rows_toward_cap():
         status="scheduled",
         description="Payroll credit",
     )
-    # One real row leaves room for exactly one projection, and that projection
-    # must be anchored after the real row, not on the cadence date from history.
+    # One real row leaves room for two projections, and both must be anchored
+    # after the real row, not on the cadence dates from history.
     result = build_forecast(history + [real_first], "2026-02-01")
     projected = _entries(result, "income")
-    assert len(projected) == 1
+    assert len(projected) == 2
     assert projected[0].date > date(2026, 2, 10)
     assert all(entry.date != date(2026, 2, 10) for entry in projected)
 
@@ -215,8 +215,18 @@ def test_salary_projection_counts_real_in_window_rows_toward_cap():
         status="scheduled",
         description="Payroll credit",
     )
-    # Two real rows already fill the cap: no synthetic salary may be added.
-    result = build_forecast(history + [real_first, real_second], "2026-02-01")
+    real_third = _event(
+        "salary_real_3",
+        "2026-03-05",
+        "salary",
+        "2000",
+        event_type="income",
+        direction="credit",
+        status="scheduled",
+        description="Payroll credit",
+    )
+    # Three real rows already fill the cap: no synthetic salary may be added.
+    result = build_forecast(history + [real_first, real_second, real_third], "2026-02-01")
     assert _entries(result, "income") == []
 
 
@@ -246,7 +256,31 @@ def test_ineligible_in_window_bonus_does_not_change_salary_projection():
     baseline_dates = [entry.date for entry in _entries(baseline, "income")]
     result_dates = [entry.date for entry in _entries(result, "income")]
     assert result_dates == baseline_dates
-    assert len(result_dates) == 2
+    assert len(result_dates) == 3
+
+
+def test_monthly_payday_projects_on_the_same_day_of_month():
+    """A 15th salary stays on the 15th.
+
+    30-day steps drift to the 14th and then the 13th, which both misdates the
+    salary and (with a two-occurrence cap) drops the third payday of a 90-day
+    window out of the ledger entirely.
+    """
+    history = [
+        _event(
+            f"salary_{month}",
+            f"{month}-15",
+            "salary",
+            "2000",
+            event_type="income",
+            direction="credit",
+            description="Payroll credit",
+        )
+        for month in ("2025-11", "2025-12", "2026-01")
+    ]
+    result = build_forecast(history, "2026-02-16")
+    dates = [entry.date for entry in _entries(result, "income")]
+    assert dates == [date(2026, 3, 15), date(2026, 4, 15), date(2026, 5, 15)]
 
 
 # 8. Suppressing an essential-variable category removes its direct forecast and reserve.
