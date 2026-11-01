@@ -584,3 +584,11 @@ def test_a_modal_month_leaves_its_number_to_the_amount_check():
     assert [item["text"] for item in report["unsupported"] if item["kind"] == "amount"] == [
         "14"
     ]
+
+
+def test_a_day_only_ordinal_is_checked_against_the_row_dates():
+    row = dict(ROW)
+    row["earliest_date_for_full_payment"] = "2025-08-03"
+    assert verify_claims("Make the payment on the 3rd.", row)["ok"] is True
+    wrong = verify_claims("Make the payment on the 14th.", row)
+    assert [item["kind"] for item in wrong["unsupported"]] == ["date"]

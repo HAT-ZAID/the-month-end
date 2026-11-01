@@ -133,6 +133,10 @@ _MONTH_WORD = "|".join(sorted(_MONTHS, key=len, reverse=True))
 #: one the checker can verify, so it is neither claimed nor read as money.
 _MONTH_DAY_PAIR = re.compile(rf"\b(?:{_MONTH_WORD})\s+\d{{1,2}}(?!\d)\b", re.IGNORECASE)
 
+#: A bare ordinal day ("on the 14th"): a date claim with no month, checked
+#: against the day-of-month of the row's own dates.
+_DAY_ORDINAL = re.compile(r"\b(\d{1,2})(?:st|nd|rd|th)\b", re.IGNORECASE)
+
 #: A written date in either order, with an optional day suffix and year.
 _SPELLED_DATE = re.compile(
     rf"\b(?:(?P<day1>\d{{1,2}})(?:st|nd|rd|th)?\s+(?:of\s+)?"
@@ -398,10 +402,12 @@ def verify_claims(
             unsupported.append({"kind": "date", "text": match.group(0),
                                 "expected": sorted(dates)})
     spelled = _date_parts(dates)
+    spelled_spans: list[tuple[int, int]] = []
     for match in _SPELLED_DATE.finditer(prose):
         parsed = _spelled_date(match)
         if parsed is None:
             continue
+        spelled_spans.append(match.span())
         month, day, year = parsed
         checked += 1
         if not any(
@@ -410,6 +416,16 @@ def verify_claims(
             and (year is None or year == item_year)
             for item_month, item_day, item_year in spelled
         ):
+            unsupported.append({"kind": "date", "text": match.group(0),
+                                "expected": sorted(dates)})
+    # "on the 14th" names a day with no month. It is a date claim, checked
+    # against the days the row actually holds, unless a spelled date already
+    # covered it.
+    for match in _DAY_ORDINAL.finditer(prose):
+        if any(start <= match.start() < end for start, end in spelled_spans):
+            continue
+        checked += 1
+        if int(match.group(1)) not in {item_day for _, item_day, _ in spelled}:
             unsupported.append({"kind": "date", "text": match.group(0),
                                 "expected": sorted(dates)})
 
