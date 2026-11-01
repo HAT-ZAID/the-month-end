@@ -59,14 +59,28 @@ _SECRET_VALUE = re.compile(
 #: submission scan.
 _PASSWORD_ASSIGNMENT = re.compile(
     r"(?:\b(?:received|invalid|rejected|missing|wrong|bad)\s+)?"
-    r"(?:[a-z0-9]+[_-])*(?:password|passwd|pwd|pass|passphrase|secret|token|sig|signature|accountkey"
-    r"|api[\s_-]?key|session|access|key)(?:[_-][a-z0-9]+)*\b"
-    r"\s*[=:]\s*[\"']?[^\"'\n]+"
+    # Bounded runs: an unbounded ``[a-z0-9]+`` group rescans the whole string at
+    # every offset, so a long alphanumeric body costs quadratic time. The
+    # repeats and each run are capped, and a camelCase tail counts as a run,
+    # so "sessionId=..." and "passwordHash=..." are caught too.
+    r"(?:[a-z0-9]{1,12}[_-]){0,4}(?:password|passwd|pwd|pass|passphrase|secret|token|sig|signature|accountkey"
+    r"|api[\s_-]?key|session|access|key)"
+    r"(?:[_-][a-z0-9]{1,12}|[a-z][a-z0-9]{1,12}){0,4}\b"
+    r"[\"']?\s*[=:]\s*[\"']?[^\"'\n]+"
     r"|(?:set-)?cookie\s*:\s*[^\n]+"
     r"|[?&]sig=\S+"
     r"|\bcookie\s*=\s*\S+"
     r"|(?<![\w.])([A-Za-z0-9._~%+-]+):([^\s@/]+)@(?=[A-Za-z0-9\[])"
-    r"|\b(?:api[\s_-]?key|token|secret|password)\b\s+(?:for|is|was)\s+[^.;\n]+",
+    # A provider error can quote a JSON body, where the name sits inside quotes
+    # and the separator is a colon inside them.
+    r"|\"\w*(?:api|access|session|refresh|client|private|secret|id)?(?:key|token|secret)\"\s*:\s*\"[^\"]+",
+    re.IGNORECASE,
+)
+#: The prose form: "the api key for abcdef is wrong". It needs no separator, so
+#: it runs on every string, while the assignment pattern runs only when the
+#: string actually carries one.
+_PASSWORD_PROSE = re.compile(
+    r"\b(?:api[\s_-]?key|token|secret|password)\b\s+(?:for|is|was)\s+[^.;\n]+",
     re.IGNORECASE,
 )
 #: ``user:password@`` inside a URL.  A gateway may legitimately carry basic-auth
@@ -158,7 +172,12 @@ def _scrub_text(value: str) -> str:
     for secret in _KNOWN_SECRETS:
         if secret in cleaned:
             cleaned = cleaned.replace(secret, REDACTED)
-    return _PASSWORD_ASSIGNMENT.sub(REDACTED, cleaned)
+    cleaned = _PASSWORD_PROSE.sub(REDACTED, cleaned)
+    # Every remaining branch needs an assignment or a userinfo marker, so a body
+    # carrying none of those characters is not rescanned at all.
+    if "=" in cleaned or ":" in cleaned or "@" in cleaned:
+        cleaned = _PASSWORD_ASSIGNMENT.sub(REDACTED, cleaned)
+    return cleaned
 
 
 def _summary_text(value) -> str:

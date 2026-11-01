@@ -460,3 +460,39 @@ def test_an_incomplete_action_is_a_claim_not_a_crash():
     report = verify_claims("Apply reduce_to:event_5 so the request fits.", row)
     assert report["ok"] is False
     assert [item["kind"] for item in report["unsupported"]] == ["action"]
+
+
+def test_redaction_covers_camel_assignments_and_json_bodies():
+    """A gateway echoes its rejection body, and that body is what gets persisted."""
+    from code.trace import sanitize
+
+    cases = [
+        "sessionId=abcdef123456789",
+        '{"sessionId": "abcdef1234567890abcdef"}',
+        "passwordHash=abcdef123456789",
+        "SessionId=abcdef123456",
+        '{"sessionToken": "abcdef123456"}',
+        '{"apiKey": "abcdef123456"}',
+    ]
+    for text in cases:
+        cleaned = sanitize({"e": text})["e"]
+        assert "abcdef" not in cleaned, text
+        assert "123456" not in cleaned, text
+
+    # A counter is not a credential, and prose is not an assignment.
+    for text in ("total_tokens=1234", "input_tokens=99", '{"total_tokens": 42}',
+                 "account balance 500000"):
+        assert sanitize({"e": text})["e"] == text
+
+
+def test_the_scrubber_stays_linear_on_a_long_alphanumeric_body():
+    """A bounded preview of a 65 KB body must not cost quadratic time."""
+    import time
+
+    from code.trace import sanitize
+
+    for body in ("a1b2c3d4e5f6" * 5461, "a-b-" * 16384):
+        started = time.monotonic()
+        sanitize({"e": body})
+        elapsed = time.monotonic() - started
+        assert elapsed < 1.0, (len(body), elapsed)
