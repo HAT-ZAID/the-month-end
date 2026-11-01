@@ -97,8 +97,11 @@ G2 is reachable at all.
 - `dataset/` is calibration material; it is now `mock_dataset/`.
 - Fitting the forecast to the 25 labels is allowed **as a diagnostic only**, not as the shipped
   result.
-- Models: local first (`gemma4:e2b-it-qat` is the default and the only local model that answered
-  bill-semantics questions correctly); Kilo only if local models fail; no parallel model jobs.
+- Models: `gpt-oss:20b-cloud` is the primary reasoner for agentic work (verified for tool calls);
+  `gemma4:e2b-it-qat` is the local default and the only local model that answered bill-semantics
+  questions correctly; `llama3.2:3b` and `qwen3-vl` are unreliable for accounting (1/3 each);
+  Kilo only if both fail; no parallel model jobs.
+- The cloud model is non-local: it may see fixtures only, never an account from `data/accounts.db`.
 - CodeRabbit passes, then two subagent reviews, then the gates — after the G2 work.
 
 ---
@@ -116,3 +119,11 @@ G2 is reachable at all.
 - `python -m tools.app` is the product interface; `python -m tools.tui` is the fallback.
 - The evaluation PR run does not rewrite `output.csv`; a direct `python -m code.main` does (restore
   it afterwards with `git checkout -- output.csv`).
+- **`.env` is not loaded by any code.** It contains `OLLAMA_API_KEY` and nothing reads it; probes
+  parse it explicitly. Never print or commit the value.
+- **Cloud models are absent from `/api/tags`.** `gpt-oss:20b-cloud` works (tools included) but must
+  be added to the menu explicitly; discovery will not find it.
+- Pass `think=False` to `gpt-oss:20b-cloud` in probe loops: the same tool-call turn cost 68 vs 272
+  eval tokens.
+- `gpt-oss:20b-cloud` is a cloud model, so it is not `local` under `AGENTS.md` §2 — fixtures only,
+  and the UI must label it.

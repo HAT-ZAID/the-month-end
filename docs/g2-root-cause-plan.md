@@ -44,9 +44,22 @@ re-deriving the evidence. It contains:
   `1F35043F00ADDC8275D5879026FA83F6595A19712EE814AE89A194F353376486`, must not change.
 - PowerShell cannot run inline `python -c` with nested quotes or `|`; write a temp `.py` under
   `C:\Users\zaidk\AppData\Local\Temp\opencode\` or pipe a here-string into `python -`.
-- Local model server: Ollama on `http://127.0.0.1:11434`, models
-  `gemma4:e2b-it-qat` (default, correct on bill reasoning), `llama3.2:3b` (1/3),
-  `qwen3-vl:2b-instruct-q4_K_M` (1/3). No `e4b` is pulled.
+- Ollama server: `http://127.0.0.1:11434`.
+- **Local models** (in `/api/tags`): `gemma4:e2b-it-qat` (default for bill reasoning,
+  3/3 correct on the settled-vs-unpaid questions), `llama3.2:3b` (1/3),
+  `qwen3-vl:2b-instruct-q4_K_M` (1/3), `qwen3-vl:2b`. No `e4b` is pulled.
+- **Cloud model (verified 2026-11-02): `gpt-oss:20b-cloud`** — 20.9 B params, MXFP4,
+  capabilities `completion`, `tools`, `thinking`. It answers, and it emits `tool_calls`
+  correctly (`think=False` → 68 eval tokens, default thinking → 272 for the same turn).
+  Use it as the **primary reasoning model** for the agentic probes (A1–A7); keep gemma as the
+  local fallback and as the bill-semantics regression model.
+- **Cloud models do not appear in `/api/tags`.** `code/models.py` discovery therefore misses
+  `gpt-oss:20b-cloud`; a menu entry has to be added explicitly (build-mode step 7).
+- **`.env` is not loaded by any code.** It contains exactly one key, `OLLAMA_API_KEY` (57 chars),
+  and no module calls `load_dotenv`; the interactive probes read it explicitly. Either load it
+  deliberately (and keep it out of traces) or export it before the process starts. Never print it.
+- **Privacy:** a cloud model leaves the machine. Under `AGENTS.md` §2 it is *not* `local`; it may
+  see development fixtures and non-sensitive text only, and the UI must label it as such.
 - Local inference runs sequentially on this hardware. Never start two model jobs at once.
 
 ---
@@ -435,11 +448,18 @@ that the kernel runs.
 
 Rules for all probes below:
 
-- local models only (`gemma4:e2b-it-qat`), never parallel, always with a small `max_tool_calls`;
+- **model tiering:** `gpt-oss:20b-cloud` is the primary reasoner for A1–A7 (it is the only model
+  here with a 20 B budget and verified tool-calling); `gemma4:e2b-it-qat` is the local fallback and
+  the bill-semantics regression model; `llama3.2:3b` and `qwen3-vl` are not to be trusted with
+  accounting questions (1/3 each). Kilo only if both fail;
+- probes run sequentially, with a small `max_tool_calls` (2–3) and `think=False` where the model
+  supports it, because a thinking turn costs 4× the tokens for the same tool call;
 - the model never computes a final money figure that ships; it proposes a *rule* or a *parameter*,
   and the harness evaluates it against the oracle;
 - record every prompt and reply in `docs/agentic-runs/` (existing convention) so the probe is
-  reproducible after a context reset.
+  reproducible after a context reset;
+- the cloud model must only ever see `mock_dataset` fixtures. It never sees an account from
+  `data/accounts.db`.
 
 ### A1 — Parameter search with the model as the proposer (highest value)
 
@@ -605,6 +625,12 @@ closed *loudly* (warning) and that the inverse direction is used when present.
 `code/models.py` — default to the gemma entry when present (already implemented);
 mark `llama3.2:3b` and `qwen3-vl` as unreliable for bill reasoning in the docstring; keep the three
 semantic questions as a regression pack (A8).
+
+The agentic probes use `gpt-oss:20b-cloud` as the primary reasoner. It is verified for tool calling
+but it is a **cloud** model: it must appear in the menu as non-local, it may only see fixtures, and
+`/api/tags` will not list it, so the entry has to be added explicitly. `.env` is not loaded by any
+code today (`OLLAMA_API_KEY` sits there unused); decide deliberately how it reaches the process
+without landing in a trace. See Appendix C.
 
 ### Step 8 — the rest of the goal (outside G2)
 
@@ -853,3 +879,71 @@ if __name__ == "__main__":
 - The oracle's safe amount is exactly `max(0, min(requested, min(daily_balances) − floor))`;
   this reproduces all 25 rows (formula check 25/25).
 - The oracle's `processed_events` already includes the forecast entries; never add `forecast` again.
+
+---
+
+## Appendix C — the model tier, verified 2026-11-02
+
+Everything below was measured, not assumed.
+
+### What is installed
+
+| model | where | params | quant | capabilities | bill questions |
+|---|---|---|---|---|---|
+| `gemma4:e2b-it-qat` | local | 4.6 B | Q4_0 | completion | **3/3** |
+| `llama3.2:3b` | local | 3.2 B | Q4_K_M | completion | 1/3 |
+| `qwen3-vl:2b-instruct-q4_K_M` | local | 1.7 B | Q4_K_M | completion, vision | 1/3 |
+| `qwen3-vl:2b` | local | 2.1 B | Q4_K_M | completion, vision | not tested |
+| `gpt-oss:20b-cloud` | Ollama Cloud | 20.9 B | MXFP4 | completion, **tools**, thinking | not tested on the 3 questions |
+
+`/api/show` for `gpt-oss:20b-cloud` returns `capabilities: ['completion', 'tools', 'thinking']`.
+It is **not** in `/api/tags`, so discovery misses it.
+
+### Verified calls
+
+Plain completion:
+
+```python
+POST http://127.0.0.1:11434/api/generate
+{"model": "gpt-oss:20b-cloud", "prompt": "Reply with the single word: OK",
+ "stream": false, "options": {"num_predict": 32}}
+# -> {"response": "OK", "done_reason": "stop", ...}
+```
+
+Tool call (the shape `code/chat.py` consumes):
+
+```python
+POST http://127.0.0.1:11434/api/chat
+{"model": "gpt-oss:20b-cloud",
+ "messages": [{"role": "user", "content": "Call the position tool."}],
+ "tools": [{"type": "function",
+            "function": {"name": "position", "description": "...",
+                         "parameters": {"type": "object", "properties": {}}}}],
+ "stream": false, "think": false, "options": {"num_predict": 512}}
+# -> message.tool_calls = [{"id": "call_…",
+#                           "function": {"index": 0, "name": "position", "arguments": {}}}]
+```
+
+Timing signal: the same turn cost **68 eval tokens with `think=False`** and **272 with thinking**
+(left on). For a probe loop, pass `think=False`.
+
+### Authentication and discovery gaps to close in build mode
+
+1. `.env` holds `OLLAMA_API_KEY` and **nothing loads it**. Options: a small `code/envfile.py` that
+   parses `.env` without exporting it into traces, or a documented `set` before running. Either way,
+   the key must never appear in a trace, a report or a commit.
+2. `code/models.py::ollama_models` reads `/api/tags`, which omits cloud models. Add a configured
+   cloud entry (`gpt-oss:20b-cloud`) behind an explicit flag, labelled with its privacy class.
+3. `code/providers.py::OllamaProvider` builds `ChatOllama`; confirm it forwards an API key and a
+   `base_url` for a cloud model, otherwise the loop will fail with a provider error rather than a
+   clear message.
+4. The model menu must show the cloud entry as **not local** — under `AGENTS.md` §2 it may not see a
+   real person's text, only the fixtures.
+
+### Probe budget guidance
+
+- A1 (parameter search) is the most expensive: keep each model turn to one proposal, ask for JSON
+  only, and cap the loop at ~12 rounds.
+- A4 (row auditor) is one call per row: 21 calls. With `gpt-oss:20b-cloud` that is minutes, not
+  hours; with gemma it is slower.
+- A6 (three bill questions) is the cheap regression: 9 calls total.
