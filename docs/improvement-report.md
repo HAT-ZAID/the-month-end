@@ -716,6 +716,34 @@ model's `ambiguity` prose from the task trace; taught the trace sanitiser camelC
 key names; made written and ordinal dates checkable; and made the `Disagreements`
 marker survive markdown emphasis, a spaced colon and a zero-width prefix.
 
+A seventh pass closed the round the sixth one opened, and its lesson was that a
+hand-written list of currency spellings is the same mistake as a hand-written list
+of money words:
+
+* `R88000` produced no claim at all. `R` is this repo's own ZAR symbol
+  (`code/amounts.py`), and the safe-amount field is under 1000 on most rows, so
+  the figure that slipped through was small and plausible. Suffix forms
+  (`88000ZAR`) and shorthand (`50k`) were open the same way. The scan now treats
+  a currency code or symbol on either side of the digits as a prefix, reads
+  `k`/`m`/`b`, and refuses to start mid-number (`R50,000` used to claim `000`).
+* a modal "may" before a small number was read as a date ("you may 2 payments"),
+  which demoted correct prose and told the repair loop to fix a date that did not
+  exist; a month name now needs an ordinal suffix or a year.
+* the `Disagreements` marker was still borrowable behind a list bullet, a quote
+  marker, a left-to-right mark, a soft hyphen or a bidi control. Markdown
+  structure and every invisible character are stripped before the test.
+* "no spending changes are needed" was not a claim, so prose could contradict the
+  action column on the six rows that carry one. It is claimed and checked now.
+* the value scrubber knew only `sk-` and `Bearer`. A provider error is persisted
+  to the JSON trace and to `app.db`, so it now also catches AWS key ids, GitHub
+  and Slack tokens, a JWT, and a Basic credential.
+* a task trace copied `result.concerns` verbatim; only the engine's own concern
+  codes persist now, and anything else becomes "other".
+* the embeddings and image-reader notices cover the two largest egresses — the
+  whole evidence corpus and the document images — and both honoured
+  `BUY_WAIT_ACCEPT_FREE_TIER`. A copied `.env` could quiet them; both now always
+  warn.
+
 ### 10.3 The disagreement note, and why it is agent-only
 
 The model's explanation used to be discarded whenever it disagreed with the computed
