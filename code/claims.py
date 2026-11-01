@@ -360,15 +360,16 @@ def _normalise_action(token: str) -> str:
     kind = kind.lower()
     if kind == "stop":
         return f"stop:{event_id}"
+    if amount is None:
+        # An incomplete action names no figure. It can never equal a kernel
+        # action, which always carries one, so it is reported as a claim
+        # instead of raising inside the comparison.
+        return f"reduce_to:{event_id}:"
     # ``output.csv`` prints the action at cents, so that is the token a correct
     # explanation can cite. The amount scan still rejects an unrounded figure.
     return f"reduce_to:{event_id}:{_to_cents(_decimal(amount))}"
 
 
-#: Every way a model denies a spending change. The action column is the one
-#: machine field a sentence can contradict without naming a number, so the
-#: wordings are enumerated rather than guessed: "no cuts", "need not stop",
-#: "spending stays as it is", "spending_changes_needed: none".
 #: A denial of a required change, matched by shape rather than by enumerating
 #: wordings: an auxiliary negation followed by a change verb, an absence-of-change
 #: statement about spending, or the field itself set to none.
@@ -397,10 +398,13 @@ _NO_CHANGES = re.compile(
 )
 
 
-#: A word that narrows a denial to "nothing beyond the required change".
+#: A phrase that narrows a denial to "nothing beyond the required change". The
+#: scope word has to attach to the change itself, not to some other noun in the
+#: same clause: "but other options include…" narrows nothing.
 _SCOPE = re.compile(
-    r"\b(?:other|else|further|additional|more|apart from|except|"
-    r"besides|aside from)\b",
+    r"\b(?:no|nothing|none|not|without)\s+(?:other|further|additional|more|else)\b"
+    rf"|\b(?:apart from|except(?: for)?|besides|aside from|other than)\s+"
+    rf"(?:the\s+)?{_CHANGE_VERB}",
     re.IGNORECASE,
 )
 #: The characters that end a clause for scoping purposes.

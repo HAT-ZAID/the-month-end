@@ -430,3 +430,33 @@ def test_an_action_amount_is_compared_at_the_cents_the_csv_prints():
     row = _row(spending_changes_needed="reduce_to:event_5:250.999")
     assert verify_claims("Reduce event_5 to 250.99 so the request fits.", row)["ok"] is True
     assert verify_claims("Reduce event_5 to 250.999 so the request fits.", row)["ok"] is False
+
+
+def test_a_scope_word_must_qualify_the_denied_change():
+
+    row = dict(ROW)
+    row["spending_changes_needed"] = "stop:event_9"
+    # "other" modifies "options", so the denial stands on its own.
+    assert verify_claims(
+        "No spending changes are needed, but other options include stopping event_9",
+        row,
+    )["ok"] is False
+    for sentence in (
+        "No other changes are needed once you stop event_9.",
+        "Stop event_9 and nothing else changes.",
+        "Apart from stopping event_9, nothing changes.",
+        "Besides stopping event_9, nothing else changes.",
+        "Nothing further is required beyond the stop on event_9.",
+    ):
+        assert verify_claims(sentence, row)["ok"] is True, sentence
+
+
+def test_an_incomplete_action_is_a_claim_not_a_crash():
+    from code.claims import _normalise_action
+
+    assert _normalise_action("reduce_to:event_5") == "reduce_to:event_5:"
+    row = dict(ROW)
+    row["spending_changes_needed"] = "reduce_to:event_5:250.999"
+    report = verify_claims("Apply reduce_to:event_5 so the request fits.", row)
+    assert report["ok"] is False
+    assert [item["kind"] for item in report["unsupported"]] == ["action"]
