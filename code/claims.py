@@ -133,10 +133,6 @@ _MONTHS = {
     "aug": 8, "sep": 9, "sept": 9, "oct": 10, "nov": 11, "dec": 12,
 }
 _MONTH_WORD = "|".join(sorted(_MONTHS, key=len, reverse=True))
-#: "<month> <day>" with no ordinal and no year: a date a reader sees, but not
-#: one the checker can verify, so it is neither claimed nor read as money.
-_MONTH_DAY_PAIR = re.compile(rf"\b(?:{_MONTH_WORD})\s+\d{{1,2}}(?!\d)\b", re.IGNORECASE)
-
 #: A bare ordinal day ("on the 14th"): a date claim with no month, checked
 #: against the day-of-month of the row's own dates.
 _DAY_ORDINAL = re.compile(r"\b(\d{1,2})(?:st|nd|rd|th)\b", re.IGNORECASE)

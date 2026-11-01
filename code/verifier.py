@@ -83,11 +83,6 @@ def _changes_equal(candidate_value, final_value) -> bool:
         return _as_text(candidate_value) == _as_text(final_value)
 
 
-#: Decimal money fields, and the precision the CSV writes them at.
-_CENT = Decimal("0.01")
-_CENT_FIELDS = ("amount_safe_to_pay",)
-
-
 def _kernel_row(kernel_result: dict) -> dict:
     """Copy the kernel row into the output contract; never alias or mutate it."""
     if not isinstance(kernel_result, dict):
