@@ -101,14 +101,23 @@ def _checked_explanation(text, row, extra_numbers=()) -> str:
     ``decision_explanation``, and it had no claim check at all, so a configured
     provider could put an unsupported figure in the required column.
     """
-    from code.claims import verify_claims
+    from code.claims import cites_every_action, states_the_decision, verify_claims
 
     prose = str(text or "").strip()
     fallback = str(row.get("decision_explanation") or "").strip()
     if not prose:
         return fallback
     report = verify_claims(prose, row, extra_numbers=extra_numbers)
-    return prose if report.get("ok") else fallback
+    # The same three questions enforce_decision asks of a candidate: every
+    # figure and date supported, every required action cited, and the decision
+    # itself stated. Without the last two a sentence could name the right method
+    # and amount while telling the user the opposite.
+    supported = (
+        report.get("ok")
+        and cites_every_action(prose, row.get("spending_changes_needed"))
+        and states_the_decision(prose, row)
+    )
+    return prose if supported else fallback
 
 
 def _money_plan(plan: str, safe_amount: str, requested_amount: str, partial: bool = False) -> str:

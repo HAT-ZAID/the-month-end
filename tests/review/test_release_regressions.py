@@ -687,7 +687,11 @@ def test_the_batch_writer_falls_back_when_its_prose_cannot_be_supported():
     assert _checked_explanation("You can pay 99999999 today.", row) == (
         "The kernel's own sentence."
     )
-    assert _checked_explanation("Pay the full amount.", row) == "Pay the full amount."
+    assert _checked_explanation("Pay the full amount.", row) == (
+        "The kernel's own sentence."
+    )
+    stated = "This is affordable now and full payment is the recommendation."
+    assert _checked_explanation(stated, row) == stated
     assert _checked_explanation("", row) == "The kernel's own sentence."
 
 

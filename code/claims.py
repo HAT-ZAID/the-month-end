@@ -517,30 +517,55 @@ def _clause_start(text: str, start: int) -> int:
     return left
 
 
+def _pieces(text: str):
+    """Yield ``(start, piece)`` for each comma-and-conjunction segment."""
+    position = 0
+    for piece in _SEGMENT_SPLIT.split(text):
+        yield position, piece
+        position += len(piece) + 1
+
+
 def _scope_excuse(prose: str, match, changes) -> bool:
     """True when the denial at ``match`` is qualified to mean "nothing beyond"."""
-    segment = _segment_at(prose, match.start(), match.end())
-    if _SCOPE_QUANTIFIER.search(segment):
+    clause_start = _clause_start(prose, match.start())
+    prefix = prose[clause_start:match.end()]
+    preposed = _SCOPE_PREPOSED.search(prefix)
+    covered = None if preposed is None else (preposed.start(), preposed.end())
+
+    # The denial pattern's window crosses a comma and a conjunction, so one
+    # match can hold two denials. A piece that both negates a change and names
+    # the event the row requires denies the action itself, and a qualifier
+    # beside it does not excuse that: "you don't need to stop it, and no other
+    # changes are needed" still tells the user to keep spending.
+    if changes not in {"", "none"}:
+        origin = match.start() - clause_start
+        for start, piece in _pieces(match.group(0)):
+            piece_start = origin + start
+            piece_end = piece_start + len(piece)
+            if (
+                covered is not None
+                and piece_start < covered[1]
+                and piece_end > covered[0]
+            ):
+                continue
+            # A negation is required: "stop the one event and nothing else
+            # changes" names the action without denying it, while "you don't
+            # need to stop it" denies it.
+            if (
+                re.search(rf"\b{_NEG_AUX}\b", piece, re.IGNORECASE)
+                and re.search(rf"\b{_CHANGE_VERB}\b", piece, re.IGNORECASE)
+                and cites_every_action(prefix, changes)
+            ):
+                return False
+
+    if _SCOPE_QUANTIFIER.search(_segment_at(prose, match.start(), match.end())):
         # The quantifier sits beside the denial it qualifies.
         return True
     # A preposed qualifier scopes what follows it, so it has to come before this
     # denial. The match itself is included: "apart from stopping the event,
     # nothing changes" matches as far as "nothing", so the qualifier sits inside
     # it.
-    clause_start = _clause_start(prose, match.start())
-    prefix = prose[clause_start:match.end()]
-    preposed = _SCOPE_PREPOSED.search(prefix)
-    if preposed is None:
-        return False
-    if preposed.end() > match.start() - clause_start:
-        # The qualifier sits inside the match itself ("apart from stopping it,
-        # nothing changes"), so the denial is scoped by its own words.
-        return True
-    if changes not in {"", "none"} and cites_every_action(segment, changes):
-        # "Apart from stopping it, you don't need to stop it" denies the very
-        # action the row requires, whatever qualifier stands beside it.
-        return False
-    return True
+    return preposed is not None
 
 
 def _clause_at(text: str, start: int, end: int) -> str:
@@ -607,16 +632,20 @@ def states_the_decision(prose, row) -> bool:
         named = {
             canonical for _, canonical, _span in _phrase_claims(text, STATUS_PHRASES)
         }
-        if status not in named and not (
-            status.startswith("affordable") and "affordable_any" in named
+        if (
+            status not in named
+            and not (status.startswith("affordable") and "affordable_any" in named)
+            and status.lower() not in text.lower()
         ):
+            # The contract's own token counts: the prompt hands the model those
+            # exact values, and verify_claims already accepts them.
             return False
 
     if method:
         named = {
             canonical for _, canonical, _span in _phrase_claims(text, METHOD_PHRASES)
         }
-        if method not in named:
+        if method not in named and method.lower() not in text.lower():
             # Naming the earliest date is not naming the recommendation: a
             # sentence about the date column has to say what is recommended too,
             # or the explanation ships without the decision it is explaining.
