@@ -145,3 +145,73 @@ repository. Reaching G2's 20/25 requires the organiser's reference arithmetic,
 extra labelled rows, or an explicit re-baseline of the threshold — a product
 decision, not something this report performs.
 
+## Third pass: statistical and model-mining sweep
+
+Scripts: `tools/g2_probe.py` (`actual_excl` proration knob) plus a one-off
+`sklearn` sweep. Targets, per row: `D = balance − floor − gold`, `D/full`,
+`D/(full − mtd)` and `gold`.
+
+| Model | Target | Leave-one-out result |
+|---|---|---|
+| OLS | `D/full` | R² −2.4e6 (diverges; 21 rows, 22 collinear features) |
+| Ridge (α=1) | `D/full` | R² −0.183, median abs error 0.493 |
+| Lasso (α=0.01) | `D/full` | R² −0.315, median abs error 0.557 |
+| Decision tree (depth 3) | `D/full` | interpretable splits below |
+| Random forest (400) | `D/full` | R² **+0.338**, median abs error **0.166** |
+| Gradient boosting | `D/full` | R² +0.128, median abs error 0.145 |
+| Random forest | `gold` | 2/25 exact, median relative error 0.714 |
+
+The linear family fails outright — the relation is not linear and the target is
+heavy-tailed (`D` CV 2.01). The forest and the tree both concentrate on one
+variable: **`full_ratio = monthly budget ÷ balance` carries 74% of the forest's
+importance**, then `mtd_ratio` (12%) and `income_cover` (8%).
+
+Interpretable tree on `D/full` (depth 3, min leaf 3):
+
+```
+full_ratio <= 0.267            -> 2.338   (budget small vs balance: multi-month deficit)
+full_ratio >  0.267
+  mtd_ratio <= 0.325
+      days_per_month <= 28.5   -> 0.779
+      days_per_month >  28.5   -> 0.929
+  mtd_ratio >  0.325
+      mtd <= 768               -> 0.439
+      mtd >  768               -> 0.588
+```
+
+That is the shape a 90-day ledger minimum must have: a rich user's safe amount is
+a multiple of several months of budget, a user who has already spent most of the
+month is protected by roughly the remainder. It is consistent with the existing
+architecture — which is why no missing *term* was found.
+
+Unsupervised: `KMeans` (k=2…5) over the 250 real requests splits rows into a
+tight group (`D/full` ≈ 0.67 ± 0.20) and a dispersed group (0.94–0.97 ± 0.8);
+the 25 labelled rows distribute across those clusters roughly proportionally to
+the 250, so the sample is not a biased subpopulation. `PCA` needs four
+components for 65% of variance, and its first component loads evenly on balance,
+floor, monthly budget and salary — one "size" axis, no separate hidden factor.
+
+### One measurable improvement, still not the rule
+
+`actual_excl` proration — numerator `days_left − 1`, denominator the real days
+in the month — beats the shipped rule on both the amount and the date:
+
+| Config | MAPE | earliest matches | informative exact |
+|---|---:|---:|---:|
+| shipped (`current` proration) | 0.613 | 18/25 | 0 |
+| `actual` (days_left / days_in_month) | 0.568 | 17/25 | 0 |
+| `actual_excl` + exclude partial month + MTD recurring-only | **0.486** | **19/25** | 0 |
+
+`request_02` moves from 12.11M to 13.88M against a 17.23M target under this rule
+— the right direction at roughly the right magnitude, but the remaining gap is
+not a proration artefact.
+
+### What the sweep rules out
+
+No model reaches exactness out of sample (best: 2/25), the best learner still
+carries a 15–17% error on the normalised target, and the residual has no cluster
+structure that a single alternative term could explain. The information content
+is "the reference is the same kind of ledger as ours, differing in magnitude of
+expense and income", not "a term is missing".
+
+

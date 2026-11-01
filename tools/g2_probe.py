@@ -276,6 +276,8 @@ def _forecast_variant(
         numerator, denominator = days_left, Decimal(30)
     elif proration == "actual":
         numerator, denominator = days_left, Decimal(days_in_month)
+    elif proration == "actual_excl":
+        numerator, denominator = max(1, days_left - 1), Decimal(days_in_month)
     else:
         numerator, denominator = days_left, Decimal(days_in_month)
 
