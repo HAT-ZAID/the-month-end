@@ -408,7 +408,8 @@ unproven and report anything it breaks.
 ## Development
 
 ```bash
-python -m pytest tests -q                      # full suite
+python -m pytest -q                            # release suite (365)
+python -m pytest tests/review -q               # wider review net (406)
 python -m pytest tests/test_providers.py tests/test_packaging.py -q
 python -m evaluation.run --mode pr             # required gates
 ```
@@ -430,7 +431,7 @@ python -m evaluation.run --mode pr             # required gates
 | `dataset/` | Input CSVs and image evidence; `dataset/output.csv` is the blank template |
 | `evaluation/` | Gate runner, semantic comparator, usage report |
 | `tools/` | TUI, static trace viewer, sample verifier |
-| `tests/` | Pytest suite (offline) |
+| `tests/` | Pytest suite (offline): the release gate; `tests/review/` holds the wider net |
 | `docs/` | Architecture, edge-case policy, plans |
 
 The full problem specification is preserved in

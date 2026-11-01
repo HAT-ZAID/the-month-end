@@ -180,7 +180,7 @@ def test_resolve_event_amounts_normalizes_same_amounts_across_linked_images(tmp_
 def test_all_sixteen_current_image_event_mappings_resolve_or_fail_closed():
     if configure_tesseract() is None:
         pytest.skip("native OCR unavailable")
-    repo = Path(__file__).resolve().parent.parent
+    repo = Path(__file__).resolve().parents[2]
     images = pd.read_csv(repo / "dataset/images.csv", dtype=str, keep_default_na=False)
     events = pd.read_csv(repo / "dataset/financial_events.csv", dtype=str, keep_default_na=False).to_dict("records")
     expected = json.loads((repo / "tests/fixtures/ocr_expected_amounts.json").read_text(encoding="utf-8"))

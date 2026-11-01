@@ -14,7 +14,7 @@ from pathlib import Path
 from code import agent as agent_module
 from code.tools import Toolbox, _amount_key, DatasetBundle
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _toolbox() -> Toolbox:

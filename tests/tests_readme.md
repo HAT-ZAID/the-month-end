@@ -9,14 +9,18 @@ evidence handling, gold-sample regression, and submission packaging — before A
 ## How it runs
 ```bash
 # from the repo root, always with the project environment (global python is fallback only)
-.venv\Scripts\python.exe -m pytest tests -q        # Windows
-.venv/Scripts/python -m pytest tests -q             # same venv, forward slashes also work
+.venv\Scripts\python.exe -m pytest -q             # release suite (Windows)
+.venv/Scripts/python -m pytest tests/review -q      # wider review net
 ```
-- Green pre-build state: tests that need solution output **skip** (currently 7 skips); everything else passes.
-- Post-build: skips re-arm automatically once root `output.csv` holds complete predictions,
-  `code/main.py` is non-empty, and `code/evaluation/usage_report.md` is non-blank.
-- Single-command gate for iterations: the same `pytest tests -q` line. Suite must be green
-  before any full-250 run; each solution iteration must keep it green and add failing-first fixtures.
+- **Two tiers.** `pytest -q` runs `tests/` only: the submission contract, the output
+  invariants, the deterministic kernel, the release gates and the privacy rules that
+  shipping depends on. `tests/review/` holds the wider net — evidence assembly, the agent
+  loop, vision/OCR, the TUI panels, the cache, the oracle comparisons, and
+  `test_release_regressions.py`, one table-driven file pinning every hole a reviewer found.
+  `pytest.ini` sets `testpaths = tests` and `norecursedirs = review`, so the review net runs
+  only when it is named.
+- Gate for iterations: `pytest -q` must be green before any full-250 run. A change to
+  evidence, the agent loop, vision, the TUI or the cache must also keep `tests/review` green.
 
 ## How to use it during iterative builds
 1. Build a solution increment (e.g. joins → ledger → rank → changes → validate).
@@ -40,8 +44,10 @@ evidence handling, gold-sample regression, and submission packaging — before A
 | `tests/test_hallucination.py` | Role-bound grounding (chosen-option figures only, REF-strip incl. cue scan, month-name dates, cue parsing with tight adjacency), computational re-verification (partial sums, installment totals, reduce floors), citation scope checks, abstention discipline, widened injection detector + controls, checkpoint gate, fee-as-total negative controls |
 | `tests/requirements-test.txt` | `pytest>=8`, `pandas>=2` (dev harness only, never shipped in code.zip) |
 | `tests/__init__.py` | Package marker so imports resolve identically on any machine |
+| `tests/review/` | The wider net: evidence, agent loop, vision/OCR, TUI panels, cache, oracle comparisons, review-derived regression tables. Not part of the default run |
+| `pytest.ini` | Tiering: `testpaths = tests`, `norecursedirs = review` |
 
-Current state: **76 passed, 10 skipped** (venv, `pytest tests -q`). Skips re-arm on complete predictions / built entrypoint / final usage report.
+Current state: **365 passed** in the release suite, **406 passed, 1 skipped** in `tests/review`.
 ## Open issues (tracked, not hidden)
 1. **U1–U6 organizer unknowns** (earliest-after-deadline semantics, FX missing-pair/month
    fallback, `reducible_or_stoppable` operator, 16 PNG contents, hidden scoring weights,
