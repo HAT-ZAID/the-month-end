@@ -179,6 +179,10 @@ def test_a_plan_leg_and_a_change_amount_are_compared_at_cents():
         "Pay 32036.45 today and 17413.55 on 2025-01-15.", row
     )["ok"] is True
     # the CSV prints the action at cents, so that is the citable figure
+    from code.main import _money_action
+
+    # what the CSV prints for the action is what the claim check compares
+    assert _money_action("reduce_to:event_5:250.999") == "reduce_to:event_5:250.99"
     assert verify_claims("Reduce event_5 to 250.99 so the request fits.", row)["ok"] is True
     assert verify_claims("Reduce event_5 to 250.999 so the request fits.", row)["ok"] is False
 

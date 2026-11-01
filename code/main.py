@@ -76,6 +76,24 @@ def _money(value) -> str:
     return text or "0"
 
 
+def _money_action(text: str) -> str:
+    """Round each ``reduce_to`` amount down to the cents the CSV writes.
+
+    The solver keeps full precision; ``amount_safe_to_pay`` and plan legs are
+    serialised at cents, and an action amount has to be too, or the column
+    prints a figure the claim check can never accept.
+    """
+    parts = []
+    for action in str(text or "none").split("|"):
+        kind, _, rest = action.partition(":")
+        event_id, _, amount = rest.partition(":")
+        if event_id and amount:
+            parts.append(f"{kind}:{event_id}:{_money(amount)}")
+        else:
+            parts.append(action)
+    return "|".join(parts)
+
+
 def _money_plan(plan: str, safe_amount: str, requested_amount: str, partial: bool = False) -> str:
     """Serialize payment_plan at cent precision.
 
@@ -471,7 +489,7 @@ def run_pipeline(
             "payment_plan": payment_plan,
             "earliest_date_for_full_payment": res["earliest_date_for_full_payment"] or "",
             "minimum_balance": profile.get("minimum_balance_to_keep", ""),
-            "spending_changes_needed": res["spending_changes_needed"],
+            "spending_changes_needed": _money_action(res["spending_changes_needed"]),
             "evidence_warnings": user_warnings,
             "_usage": usage,
         })
@@ -483,7 +501,7 @@ def run_pipeline(
             "recommended_payment_method": res["recommended_payment_method"],
             "payment_plan": payment_plan,
             "earliest_date_for_full_payment": res["earliest_date_for_full_payment"],
-            "spending_changes_needed": res["spending_changes_needed"],
+            "spending_changes_needed": _money_action(res["spending_changes_needed"]),
             "decision_explanation": explanation,
         }
         output_rows.append(output_row)
