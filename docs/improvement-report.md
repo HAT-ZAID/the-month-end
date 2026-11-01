@@ -670,25 +670,51 @@ three things that survived because each was a surface nobody had pointed at yet:
 The same review caught the duplicated loopback test in `code/vision.py`, which is
 the exact drift the provider fix removed; it now calls the shared predicate.
 
-A fifth pass happened because the first four kept finding things, and two of its
-findings were in the newest code of all:
+Five passes happened because each one kept finding things, and the last two found
+them in the newest code of all.
 
-* the claim check counted a short figure as money only when a money word sat near
-  it, so `The ceiling is 200 today.` shipped 200 that appears nowhere in the row —
-  and 141 of the 250 requests have a safe amount under 1,000. The rule is now
-  inverted: every figure is a claim unless a count unit follows it or it is one side of a small fraction ("3 of 5
-samples"). A currency code glued to the digits ("ZAR50000") is a prefix, not a
-word boundary, so it can no longer hide a figure. A word list is
-  not an invariant.
-* an agreeing candidate could open its rationale with `Disagreements:`, which is the
-  only in-band signal that separates an unendorsed note from a decision. A candidate
-  whose text starts with the marker now falls back to the kernel's prose.
+The fifth pass closed the claim check for good, and fixed two bugs in the
+conversational engine no reviewer had reached:
 
-The same round fixed two bugs in the conversational engine that no reviewer had
-reached: a what-if that names another request borrowed the previous question's
-amount (and left the stale figure behind for the following clause), and a count
-expression could exempt the figure after `of` by matching a truncated prefix
-(`paid 500   of 2000` hid the 2000).
+* a short figure counted as money only when a money word sat near it, so `The
+  ceiling is 200 today.` shipped 200 that appears nowhere in the row — and 141 of
+  the 250 requests have a safe amount under 1,000. Every figure is a claim now,
+  with two exemptions that are shapes rather than words: a count unit after the
+  figure ("2 payments"), and a small count that is one side of a fraction ("3 of 5
+  samples"). A word list was never an invariant.
+* an agreeing candidate could open its rationale with `Disagreements:`, the only
+  in-band signal that separates an unendorsed note from a decision.
+* a what-if that named another request borrowed the previous question's amount, and
+  a count expression could exempt the figure after `of` by matching a truncated
+  prefix (`paid 500   of 2000` hid the 2000).
+
+The sixth pass went back to the transport, and found that fixing the client in
+front of you is not the same as fixing the rule:
+
+* `OllamaProvider` — the default provider, used by the TUI, the task agent and the
+  agent loop — had neither a scheme guard nor a redirect policy. A 307 from the
+  configured loopback endpoint resent the whole facts prompt, including the user's
+  own sentence, to whatever the response named, while the privacy class still said
+  `local` and no notice printed.
+* the embeddings client read the same env var, refused a non-secure endpoint, and
+  then followed a 307 with the evidence chunk as the body.
+* the VLM reader — the one surface that hands images to an endpoint nobody
+  classified — checked only for loopback, had no scheme rule and no notice at all,
+  and read through a plain `urlopen` that followed 301/302/303.
+  All three now refuse a redirect; the chat and embedding clients and the reader
+  refuse a non-https remote endpoint; the reader prints the same notice the chat
+  path does, once per process.
+
+The same pass closed the claim rule's remaining edges: `of` was a count unit, so
+`2000 of your balance` was exempt; `ZAR50000` and `Rp2.000.000` were invisible to a
+scan that required a word boundary; a `reduce_to` amount could not be cited; and the
+check ran against the solver's full precision while `output.csv` ships cents, so on
+about a third of rows the correct sentence was rejected and a figure absent from the
+CSV was accepted. It also gave the borrowed amount provenance (`last_amount_for`), so
+`explain request_2` cannot leave a figure behind for the next clause; dropped the
+model's `ambiguity` prose from the task trace; taught the trace sanitiser camelCase
+key names; made written and ordinal dates checkable; and made the `Disagreements`
+marker survive markdown emphasis, a spaced colon and a zero-width prefix.
 
 ### 10.3 The disagreement note, and why it is agent-only
 
