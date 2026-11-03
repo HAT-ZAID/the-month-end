@@ -89,6 +89,21 @@ _CHANGES = re.compile(
     r"\b(?:changes?|candidates?|leaks?|leaking|gut\s+check)\b", re.IGNORECASE
 )
 _EXPLAIN = re.compile(r"\b(?:why|explain|justify|how\s+come)\b", re.IGNORECASE)
+# A why-word at the very start owns the clause: "why are there changes?" asks
+# for the reason, it does not ask for the change list.
+_EXPLAIN_START = re.compile(
+    r"^(?:please\s+)?(?:why|explain|justify|how\s+come)\b", re.IGNORECASE
+)
+# "do not stop my subscription" is a request to leave it alone, not to stop it.
+# The negation is read in the text before the verb, so an unrelated later "not"
+# cannot disarm a real instruction ("stop the gym so I don't overspend").
+_NEGATION = re.compile(
+    r"\b(?:do\s+not|don(?:'|\u2019)?t|does\s+not|doesn(?:'|\u2019)?t|"
+    r"did\s+not|didn(?:'|\u2019)?t|never|not|no\s+longer|without|avoid|"
+    r"cannot|can(?:'|\u2019)?t|won(?:'|\u2019)?t|would\s+not|"
+    r"should\s+not|shouldn(?:'|\u2019)?t|must\s+not|mustn(?:'|\u2019)?t)\b",
+    re.IGNORECASE,
+)
 _WHATIF = re.compile(
     r"\b(?:what\s*if|if\s+i\s+(?:wait|pay|spend|delay)|wait\s+until|until\s+the)\b",
     re.IGNORECASE,
@@ -277,14 +292,35 @@ def extract_date(text: str, reference: date | None = None) -> date | None:
 # --- instruction parsing ---------------------------------------------------
 
 
+def _negated(clause: str, verb: re.Pattern) -> bool:
+    """True when the clause's first ``verb`` is preceded by a negation."""
+    match = verb.search(clause)
+    return bool(match) and bool(_NEGATION.search(clause[: match.start()]))
+
+
+def _negates_an_action(clause: str) -> bool:
+    """True when a stop or reduce verb in the clause is negated."""
+    return _negated(clause, _REDUCE) or _negated(clause, _STOP)
+
+
 def _classify_clause(clause: str) -> str:
     """Pick the verb of one clause. Order matters: specific beats generic."""
     if _UNDO.search(clause):
         return "undo"
-    if _REDUCE.search(clause) and re.search(r"\bto\b", clause, re.IGNORECASE):
+    if (
+        _REDUCE.search(clause)
+        and re.search(r"\bto\b", clause, re.IGNORECASE)
+        and not _negated(clause, _REDUCE)
+    ):
         return "apply"
-    if _STOP.search(clause) and not _AFFORD.search(clause):
+    if (
+        _STOP.search(clause)
+        and not _AFFORD.search(clause)
+        and not _negated(clause, _STOP)
+    ):
         return "apply"
+    if _EXPLAIN_START.match(clause):
+        return "explain"
     if _CHANGES.search(clause):
         return "changes"
     if _EXPLAIN.search(clause):
@@ -307,6 +343,10 @@ def parse_instruction(text, *, reference: date | None = None) -> list[StepSpec]:
     for clause in clauses[:MAX_STEPS]:
         kind = _classify_clause(clause)
         params: dict = {"clause": clause}
+        if _negates_an_action(clause):
+            # "do not stop X" is not an instruction to stop X. Record it so
+            # the model path cannot promote the clause into a mutation either.
+            params["negated"] = True
         request_id = extract_request_id(clause)
         if request_id:
             params["request_id"] = request_id
@@ -1089,6 +1129,10 @@ def run_task(
             )
         )
         spec.params["intent"] = reading.as_dict()
+        if spec.params.get("negated"):
+            # A negated verb is never an instruction to act: the clause stays
+            # unactioned even when the model classifies it as an action.
+            continue
         if spec.kind != "unknown" or reading.source != "model":
             continue
         if reading.missing_parameters:

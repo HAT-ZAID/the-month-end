@@ -16,6 +16,7 @@ exactly what drove the run.
 from __future__ import annotations
 
 import json
+import math
 import re
 from dataclasses import dataclass, field
 
@@ -146,10 +147,19 @@ def parse_intent(payload, *, known_requests=(), known_events=()) -> tuple[Intent
     if event_id and known_events and event_id not in known_events:
         errors.append(f"target_event_id {event_id!r} is not in the dataset")
     try:
-        confidence = float(payload["confidence"])
-    except (TypeError, ValueError):
+        raw_confidence = payload["confidence"]
+        # bool is an int subclass, so True must not arrive as a 1.0 confidence.
+        confidence = (
+            None if isinstance(raw_confidence, bool) else float(raw_confidence)
+        )
+    except (TypeError, ValueError, OverflowError):
+        confidence = None
+    if (
+        confidence is None
+        or not math.isfinite(confidence)
+        or not 0.0 <= confidence <= 1.0
+    ):
         confidence = -1.0
-    if not 0.0 <= confidence <= 1.0:
         errors.append("confidence must be a number between 0 and 1")
     if errors:
         return None, errors
