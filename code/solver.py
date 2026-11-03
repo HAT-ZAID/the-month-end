@@ -486,6 +486,48 @@ def _build_candidates(state: dict, base: dict, ctx: dict) -> list[dict]:
 #: "how much can I spend right now without dropping below my floor".
 _POSITION_PROBE = "1000000000000"
 
+#: The profile facts a position cannot be valued without, paired with the words
+#: the refusal uses.  Kept in step with ``code.service.MISSING_FACTS``: the
+#: kernel and the service name the same two contract fields, so an unanswered
+#: fact reads identically whether it reaches a decision or a position (CR-14).
+POSITION_REQUIRED_FACTS = (
+    ("current_available_balance", "balance"),
+    ("minimum_balance_to_keep", "minimum balance to keep"),
+)
+
+
+def _unknown_position(user_id, as_of_str, profile, unknown) -> dict:
+    """The position envelope when a fact the kernel cannot invent is blank.
+
+    An unanswered balance is not zero.  Every derived monetary field is left
+    empty, the reasons are named in ``unknown`` and ``fail_closed_reason``, and
+    no ledger is built -- so a view (or a model reading the tool result) can say
+    what is missing instead of rendering a figure computed against a balance
+    nobody gave (CR-14).  The shape is the same dict :func:`position` returns,
+    so callers need no second contract.
+    """
+    reasons = [f"{label} is not set" for label in unknown]
+    return {
+        "user_id": user_id,
+        "as_of": as_of_str,
+        "currency": str((profile or {}).get("home_currency", "") or ""),
+        "available_balance": "",
+        "minimum_balance": "",
+        "headroom": "",
+        "committed": "",
+        "committed_until": None,
+        "max_safe_payment": "",
+        "window_days": 91,
+        "fail_closed": True,
+        "fail_closed_reason": "MISSING_FACTS: " + "; ".join(reasons),
+        "outflows": [],
+        "unknown": reasons,
+        "assumptions": [
+            "no position is computed while a fact the kernel cannot invent is "
+            f"missing ({'; '.join(reasons)})",
+        ],
+    }
+
 
 def position(user_id, as_of, profile, events, fx_rows, messages_df=None):
     """The kernel's view of a person's money on ``as_of``.
@@ -506,6 +548,12 @@ def position(user_id, as_of, profile, events, fx_rows, messages_df=None):
     Evidence messages are not applied here: a position is a statement about
     recorded facts.  ``messages_df`` is accepted so a caller that has already
     reconciled evidence can pass the amended rows in ``events``.
+
+    A blank ``current_available_balance`` or ``minimum_balance_to_keep`` is
+    *unknown*, not zero: the answer is the same dict shape with empty monetary
+    fields, ``fail_closed=True`` and an ``unknown`` list naming each fact
+    (CR-14).  A figure computed against an invented zero would be a number the
+    ledger cannot support.
     """
     import copy as _copy
 
@@ -513,6 +561,14 @@ def position(user_id, as_of, profile, events, fx_rows, messages_df=None):
     if not _is_iso_date(as_of_str):
         raise ValueError(f"position() needs an ISO date, got {as_of!r}")
     req_date = date.fromisoformat(as_of_str)
+
+    profile = profile or {}
+    missing = [
+        label for field, label in POSITION_REQUIRED_FACTS
+        if not str(profile.get(field) or "").strip()
+    ]
+    if missing:
+        return _unknown_position(user_id, as_of_str, profile, missing)
 
     events_for_oracle = _copy.deepcopy(events or [])
     try:
@@ -595,6 +651,7 @@ def position(user_id, as_of, profile, events, fx_rows, messages_df=None):
         "window_days": 91,
         "fail_closed": fail_closed,
         "fail_closed_reason": result.get("fail_closed_reason"),
+        "unknown": [],
         "outflows": outflows,
         "assumptions": assumptions,
     }

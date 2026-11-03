@@ -259,3 +259,120 @@ def test_the_purchase_tab_surfaces_the_same_refusal(db):
         return True
 
     assert asyncio.run(drive()) is True
+
+
+# --------------------------------------------------- the position contract
+
+
+#: The same two-event account used by the kernel position test in
+#: ``tests/review/test_general_use.py``: a settled salary and a scheduled rent.
+_POSITION_EVENTS = [
+    {
+        "event_id": "event_1", "user_id": "ana", "event_type": "income",
+        "description": "salary", "category": "income", "direction": "credit",
+        "amount": "15000", "currency": "ZAR", "event_date": "2026-10-25",
+        "settlement_date": "2026-10-25", "status": "settled",
+        "linked_event_id": "", "flexibility": "fixed", "minimum_allowed_amount": "",
+    },
+    {
+        "event_id": "event_2", "user_id": "ana", "event_type": "expense",
+        "description": "rent", "category": "rent", "direction": "debit",
+        "amount": "8000", "currency": "ZAR", "event_date": "2026-11-03",
+        "settlement_date": "2026-11-03", "status": "scheduled",
+        "linked_event_id": "", "flexibility": "fixed", "minimum_allowed_amount": "",
+    },
+]
+
+
+def _position_profile(**overrides) -> dict:
+    profile = {
+        "user_id": "ana",
+        "home_currency": "ZAR",
+        "current_available_balance": "12000",
+        "minimum_balance_to_keep": "2000",
+        "payment_methods_user_will_consider": "full_payment",
+    }
+    profile.update(overrides)
+    return profile
+
+
+def test_position_over_a_blank_balance_is_unknown_not_zero():
+    """The kernel names the missing fact instead of valuing the balance as 0."""
+    from code.solver import position as kernel_position
+
+    result = kernel_position(
+        "ana", "2026-11-01",
+        _position_profile(current_available_balance=""), _POSITION_EVENTS, [],
+    )
+
+    assert result["unknown"] == ["balance is not set"]
+    assert result["available_balance"] == ""
+    assert result["minimum_balance"] == ""
+    assert result["headroom"] == ""
+    assert result["max_safe_payment"] == ""
+    assert result["fail_closed"] is True
+    assert str(result["fail_closed_reason"]).startswith("MISSING_FACTS")
+    assert "balance is not set" in str(result["fail_closed_reason"])
+
+
+def test_position_names_a_blank_floor():
+    from code.solver import position as kernel_position
+
+    result = kernel_position(
+        "ana", "2026-11-01",
+        _position_profile(minimum_balance_to_keep=""), _POSITION_EVENTS, [],
+    )
+
+    assert result["unknown"] == ["minimum balance to keep is not set"]
+    assert result["minimum_balance"] == ""
+    assert result["max_safe_payment"] == ""
+
+
+def test_position_names_both_missing_facts():
+    from code.solver import position as kernel_position
+
+    result = kernel_position(
+        "ana", "2026-11-01",
+        _position_profile(current_available_balance="",
+                          minimum_balance_to_keep=""),
+        _POSITION_EVENTS, [],
+    )
+
+    assert result["unknown"] == [
+        "balance is not set",
+        "minimum balance to keep is not set",
+    ]
+    assert result["available_balance"] == ""
+    assert result["max_safe_payment"] == ""
+
+
+def test_position_with_a_real_balance_still_returns_numbers():
+    """The guard refuses only the unknown; an answered profile still values."""
+    from code.solver import position as kernel_position
+
+    result = kernel_position(
+        "ana", "2026-11-01", _position_profile(), _POSITION_EVENTS, [],
+    )
+
+    assert result["unknown"] == []
+    assert result["fail_closed"] is False
+    assert result["available_balance"] == "12000"
+    assert result["minimum_balance"] == "2000"
+    assert result["headroom"] == "10000"
+    # Pinned by tests/review/test_general_use.py on the same two events.
+    assert result["max_safe_payment"] == "2000.0"
+
+
+def test_the_service_and_chat_position_paths_carry_the_unknown_marker():
+    """CR-14 on the chat path: no zero-based figure reaches the model."""
+    from code import chat
+
+    account = _account(balance="", floor="2000")
+    responses = (
+        service.position(account, as_of="2026-11-01"),
+        chat.dispatch(account, "position"),
+    )
+    for result in responses:
+        assert result["unknown"] == ["balance is not set"]
+        assert result["available_balance"] == ""
+        assert result["max_safe_payment"] == ""
