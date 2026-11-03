@@ -22,45 +22,126 @@ import pandas as pd
 
 from code import account as acct
 from code import accounts as store
+from code.forecast import DISCRETIONARY_CATEGORIES, FORECASTABLE_EXPENSE_CATEGORIES
 from code.solver import position as kernel_position
 from code.solver import solve_request
 
 #: The four kinds a person records in one line.  Each maps onto the contract's
-#: own vocabulary rather than inventing a word the kernel would ignore.
+#: own vocabulary rather than inventing a word the kernel would ignore.  The
+#: *category* is not fixed here: it depends on what the money is, so
+#: :func:`resolve_category` names it.
 FACT_KINDS = {
     "income": {
         "event_type": "income",
         "direction": "credit",
-        "category": "income",
         "flexibility": "fixed",
         "status": "settled",
     },
     "bill": {
         "event_type": "expense",
         "direction": "debit",
-        "category": "bills",
         "flexibility": "fixed",
         "status": "scheduled",
     },
     "subscription": {
         "event_type": "subscription",
         "direction": "debit",
-        "category": "subscriptions",
         "flexibility": "stoppable",
         "status": "scheduled",
     },
     "refund": {
         "event_type": "refund",
         "direction": "credit",
-        "category": "refunds",
         "flexibility": "fixed",
         "status": "settled",
     },
 }
 
+#: Expense categories the ledger actually projects forward: the committed ones,
+#: never the lifestyle categories the forecast refuses to extrapolate.  Derived
+#: from :mod:`code.forecast` so the service cannot drift from the kernel.
+PROJECTED_EXPENSE_CATEGORIES = frozenset(
+    FORECASTABLE_EXPENSE_CATEGORIES - DISCRETIONARY_CATEGORIES
+)
+
+#: Categories that are recorded but never projected.  ``irregular_income`` and
+#: ``refunds`` are credits counted on their own date and never invented forward;
+#: the rest are the catch-all words this module used to store, kept here so a
+#: refusal can say what the person typed.
+NON_FORECASTABLE_CATEGORIES = frozenset(
+    {"irregular_income", "refunds", "bills", "subscriptions", "income"}
+)
+
+#: Where an unlabelled bill or subscription lands.  A committed bucket, because
+#: dropping the row would understate the month; the person's description stays
+#: as typed, so the money itself is never invented.
+DEFAULT_EXPENSE_CATEGORY = {"bill": "utilities", "subscription": "streaming"}
+
 
 class EngineError(ValueError):
     """A request the engine refuses before it can become a wrong number."""
+
+
+def _category_word(value) -> str:
+    """The lower-case, underscore-joined form of a typed category or label."""
+    text = str(value or "").strip().lower()
+    for separator in (" ", "-", "/"):
+        text = text.replace(separator, "_")
+    return "_".join(part for part in text.split("_") if part)
+
+
+def resolve_category(kind: str, category: str = "", recurrence: str = "",
+                     description: str = "") -> str:
+    """The contract category for one recorded fact, or a refusal.
+
+    A fact is only worth recording if the ledger can see it.  The forecast
+    projects exactly two vocabularies: ``salary`` income
+    (:data:`code.forecast.PRIMARY_INCOME_CATEGORIES`) and the committed expense
+    categories (:data:`PROJECTED_EXPENSE_CATEGORIES`).  Every other word --
+    including the ``bills``/``subscriptions``/``income``/``refunds`` catch-alls
+    this module used to store -- is kept on the row and then ignored by the
+    projection, which is how a salary typed into the app vanished from the
+    decision (CR-05).
+
+    * income paid monthly is ``salary``; any other income is
+      ``irregular_income``, counted on its own date and never projected;
+    * a bill or subscription must name a projected category, because the
+      forecast groups months by category to build its monthly budget;
+    * a refund keeps its own ``refunds`` category: it is credited once, never
+      repeated.
+    """
+    key = str(kind or "").strip().lower()
+    if key not in FACT_KINDS:
+        raise EngineError(
+            f"unknown kind {kind!r}; use one of {', '.join(sorted(FACT_KINDS))}"
+        )
+    if key == "income":
+        monthly = str(recurrence or "").strip().lower() == "monthly"
+        return "salary" if monthly else "irregular_income"
+    stated = _category_word(category)
+    if key == "refund":
+        return stated or "refunds"
+    resolved = stated
+    if not resolved:
+        # People often type the category into the description ("rent"); honour
+        # it when it is one the forecast projects.
+        word = _category_word(description)
+        if word in PROJECTED_EXPENSE_CATEGORIES:
+            resolved = word
+    if not resolved:
+        resolved = DEFAULT_EXPENSE_CATEGORY[key]
+    if resolved not in PROJECTED_EXPENSE_CATEGORIES:
+        because = (
+            " (that is the kind of word recorded but never projected)"
+            if resolved in NON_FORECASTABLE_CATEGORIES
+            else ""
+        )
+        raise EngineError(
+            f"{str(category or '').strip()!r} is not a category the forecast "
+            f"projects for a {key}{because}; use one of "
+            f"{', '.join(sorted(PROJECTED_EXPENSE_CATEGORIES))}"
+        )
+    return resolved
 
 
 def _decimal(value) -> Decimal:
@@ -139,12 +220,13 @@ def update_profile(account, *, currency=None, balance=None, floor=None, **extra)
 
 
 def add_fact(account, kind, amount, *, when=None, description="", category="",
-             source="", status=None) -> dict:
+             recurrence="", source="", status=None) -> dict:
     """Record one money movement in one call.
 
     ``kind`` is one of :data:`FACT_KINDS`; the contract words behind it are
     supplied here so the caller never has to remember ``credit`` versus
-    ``inflow``.
+    ``inflow``.  ``category`` and ``recurrence`` say what the money actually is,
+    and :func:`resolve_category` turns that into a word the forecast reads.
     """
     key = str(kind or "").strip().lower()
     if key not in FACT_KINDS:
@@ -157,12 +239,14 @@ def add_fact(account, kind, amount, *, when=None, description="", category="",
     day = str(when or date.today().isoformat())
     if not _is_iso(day):
         raise EngineError(f"{day!r} is not an ISO date (YYYY-MM-DD)")
+    written = str(description or key)
+    resolved = resolve_category(key, category, recurrence, description=written)
     template = FACT_KINDS[key]
     event = acct.add_event(
         account,
         event_type=template["event_type"],
-        description=str(description or key),
-        category=str(category or template["category"]),
+        description=written,
+        category=resolved,
         direction=template["direction"],
         amount=str(value),
         currency=str(account.get("profile", {}).get("home_currency") or ""),
