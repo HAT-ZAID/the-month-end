@@ -19,6 +19,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
 
+from code.amounts import strict_decimal
 from code.forecast import build_forecast
 from code.fx import resolve_rate
 from code.recurrence import detect_recurrence  # noqa: F401 (kept for tooling compat)
@@ -27,6 +28,11 @@ _ALLOWED_STATUSES = ("settled", "scheduled", "pending")
 _SETTLED_RANK = {"settled": 0, "scheduled": 1, "pending": 2}
 _CANCELLATION_STATUSES = {"cancelled", "canceled"}
 _KNOWN_IGNORED_STATUSES = {"failed", "unrealized"} | _CANCELLATION_STATUSES
+
+# Every direction a cash row may carry.  An unknown label is ambiguous
+# evidence: the sign cannot be guessed, so the ledger fails closed instead of
+# treating "anything not debit" as a credit.
+DIRECTIONS = frozenset({"debit", "credit", "non_cash"})
 
 
 def _norm_status(e: dict) -> str:
@@ -162,15 +168,16 @@ def solve_safe_amount(
     except (InvalidOperation, TypeError):
         req_amt = Decimal("0")
 
-    try:
-        min_bal = Decimal(str(profile.get("minimum_balance_to_keep", "0")))
-    except (InvalidOperation, TypeError):
-        min_bal = Decimal("0")
+    min_bal = strict_decimal(profile.get("minimum_balance_to_keep"))
+    start_bal = strict_decimal(profile.get("current_available_balance"))
 
-    try:
-        start_bal = Decimal(str(profile.get("current_available_balance", "0")))
-    except (InvalidOperation, TypeError):
-        start_bal = Decimal("0")
+    # An unanswered balance or reserve is not zero: without it the ledger
+    # cannot be proven safe, so the row fails closed with a named reason.
+    profile_fail_reasons: list[str] = []
+    if start_bal is None:
+        profile_fail_reasons.append("BALANCE_INVALID")
+    if min_bal is None:
+        profile_fail_reasons.append("RESERVE_INVALID")
 
     home_ccy = profile.get("home_currency", "USD")
 
@@ -203,30 +210,46 @@ def solve_safe_amount(
     user_events = _dedup_events(user_events_raw)
 
     processed_events = []
-    fail_reasons: list[str] = []
+    fail_reasons: list[str] = list(profile_fail_reasons)
     for e in user_events:
         status = _norm_status(e)
-        dir_norm = _norm_dir(e)
-        s_date_str = e.get("settlement_date") or e.get("event_date")
-        if not s_date_str or not isinstance(s_date_str, str):
+        # Unknown/blank statuses are ambiguous evidence. They must not be
+        # silently treated as a non-cash row: fail closed below.
+        if status not in _ALLOWED_STATUSES and status not in _KNOWN_IGNORED_STATUSES:
+            fail_reasons.append("STATUS_UNKNOWN")
             continue
-        try:
-            e_date = date.fromisoformat(s_date_str)
-        except ValueError:
+        if status in _KNOWN_IGNORED_STATUSES:
+            continue
+        dir_norm = _norm_dir(e)
+        if dir_norm not in DIRECTIONS:
+            # An unknown label must never be read as "not a debit, so a
+            # credit": guessing the sign could raise the safe amount.
+            fail_reasons.append("DIRECTION_UNKNOWN")
+            continue
+        if dir_norm == "non_cash":
+            continue
+        s_date_str = e.get("settlement_date") or e.get("event_date")
+        e_date = None
+        if isinstance(s_date_str, str) and s_date_str:
+            try:
+                e_date = date.fromisoformat(s_date_str)
+            except ValueError:
+                e_date = None
+        if e_date is None:
+            # An active cash row that cannot be dated could fall anywhere in
+            # the horizon; dropping it would hide an outflow.
+            fail_reasons.append("DATE_UNKNOWN")
             continue
 
         if req_date <= e_date <= window_end:
-            # Unknown/blank statuses are ambiguous evidence. They must not be
-            # silently treated as a non-cash row: fail closed below.
-            if status not in _ALLOWED_STATUSES and status not in _KNOWN_IGNORED_STATUSES:
-                fail_reasons.append("STATUS_UNKNOWN")
-                continue
-            if status in _KNOWN_IGNORED_STATUSES:
-                continue
-            if dir_norm == "non_cash":
-                continue
             # Ignore pending credits, reserve pending debits.
             if status == "pending" and dir_norm == "credit":
+                continue
+            amt_base = strict_decimal(e.get("amount"))
+            if amt_base is None or amt_base < 0:
+                # A signed amount or a blank one is not a magnitude: keeping
+                # "-9000" would flip a debit into a credit.  Reject, never abs.
+                fail_reasons.append("AMOUNT_INVALID")
                 continue
             fx_res = resolve_rate(fx_rows, e.get("currency"), home_ccy, s_date_str)
             rate = fx_res["rate"]
@@ -237,18 +260,9 @@ def solve_safe_amount(
                 fail_reasons.append("FX_UNKNOWN")
                 continue
 
-            try:
-                raw_amt = e.get("amount", "")
-                if raw_amt is None:
-                    raise ValueError("missing amount")
-                amt_val = Decimal(str(raw_amt).strip())
-                if not amt_val.is_finite():
-                    raise ValueError("non-finite amount")
-                amt = amt_val * rate
-            except Exception:
-                fail_reasons.append("FX_UNKNOWN")
-                continue
+            amt = amt_base * rate
 
+            # Only debit/credit reach this point (non_cash returned above).
             multiplier = -1 if dir_norm == "debit" else 1
             processed_events.append({
                 "date": e_date,

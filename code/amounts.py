@@ -98,6 +98,28 @@ def to_decimal(value, default=None, *, strip_grouping: bool = False):
     return number if number.is_finite() else default
 
 
+def strict_decimal(value) -> Decimal | None:
+    """Parse one scalar as a finite :class:`Decimal`, else return ``None``.
+
+    Stricter than :func:`to_decimal`: this helper never substitutes a default
+    and never guesses.  ``None``, a bool, a blank/whitespace string, ``"nan"``,
+    NaN, Infinity and unparseable text are all rejected with ``None`` so the
+    kernel can fail closed instead of defaulting an invalid user value to zero.
+    """
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, Decimal):
+        return value if value.is_finite() else None
+    text = str(value).strip()
+    if not text or text.lower() == "nan":
+        return None
+    try:
+        number = Decimal(text)
+    except (InvalidOperation, TypeError, ValueError):
+        return None
+    return number if number.is_finite() else None
+
+
 def extract_amounts(text: str, lang: str = "") -> list[dict]:
     text = (text or "").strip()
     text = _REF.sub(" ", text)
