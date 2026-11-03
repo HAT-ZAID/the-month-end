@@ -185,7 +185,9 @@ class Onboarding(Screen):
                 yield Button("Quit", id="ob-quit")
             yield Static(
                 "Your balance and floor are the two facts the kernel cannot invent. "
-                "Everything else is added one movement at a time.",
+                "Leave either blank and it stays unknown: the Position tab will name "
+                "the fact to fill in before it decides anything. Everything else is "
+                "added one movement at a time.",
                 classes="note",
             )
         yield Footer()
@@ -219,8 +221,8 @@ class Onboarding(Screen):
             account = service.create_user(
                 name,
                 currency=self.query_one("#ob-currency", Input).value.strip(),
-                balance=self.query_one("#ob-balance", Input).value.strip() or "0",
-                floor=self.query_one("#ob-floor", Input).value.strip() or "0",
+                balance=self.query_one("#ob-balance", Input).value.strip(),
+                floor=self.query_one("#ob-floor", Input).value.strip(),
             )
         except Exception as exc:
             self.notify(f"{type(exc).__name__}: {exc}", severity="error")
@@ -305,6 +307,7 @@ class BuyOrWait(App):
     #picker {{ background: #111c2b; border: round {BLUE}; padding: 1 2; width: 60; height: auto; }}
     #pos-head {{ color: {BLUE}; text-style: bold; }}
     #pos-sub {{ color: {MUTED}; padding-bottom: 1; }}
+    #pos-missing {{ color: {AMBER}; padding-bottom: 1; }}
     #buy-result {{ padding-top: 1; }}
     #buy-explain {{ color: #cbd5e1; padding-top: 1; }}
     RichLog {{ background: #0f172a; border: round #1f2a37; }}
@@ -323,6 +326,7 @@ class BuyOrWait(App):
                         yield Static(id="pos-head")
                         yield Static("", id="pos-who")
                     yield Static(id="pos-sub")
+                    yield Static(id="pos-missing")
                     with Horizontal(id="metrics"):
                         yield Metric("Available balance", id="m-balance")
                         yield Metric("Minimum to keep", id="m-floor")
@@ -331,9 +335,18 @@ class BuyOrWait(App):
                         yield Metric("Largest safe payment", id="m-safe")
                         yield Metric("Currency", id="m-currency")
                     yield Static(id="pos-assumptions", classes="note")
+                    yield Static("Your facts", classes="section")
+                    with Horizontal(classes="field-row"):
+                        yield Label("Balance now")
+                        yield Input(placeholder="e.g. 12000", id="profile-balance")
+                    with Horizontal(classes="field-row"):
+                        yield Label("Keep at least")
+                        yield Input(placeholder="e.g. 2000", id="profile-floor")
                     with Horizontal(classes="actions"):
+                        yield Button("Save facts", id="profile-save", variant="primary")
                         yield Button("Switch person", id="switch-person")
                         yield Button("Refresh", id="refresh-position")
+                    yield Static(id="profile-status", classes="note")
 
             with TabPane("Purchase", id="tab-buy"):
                 with VerticalScroll():
@@ -483,6 +496,7 @@ class BuyOrWait(App):
         self.account = account
         profile = account.get("profile") or {}
         self.sub_title = str(profile.get("user_id") or "")
+        self.query_one("#profile-status", Static).update("")
         self.refresh_all()
 
     def refresh_all(self) -> None:
@@ -498,11 +512,13 @@ class BuyOrWait(App):
         head = self.query_one("#pos-head", Static)
         who = self.query_one("#pos-who", Static)
         sub = self.query_one("#pos-sub", Static)
+        missing = self.query_one("#pos-missing", Static)
         notes = self.query_one("#pos-assumptions", Static)
         if self.account is None:
             head.update("Position")
             who.update("")
             sub.update("No person is loaded yet.")
+            missing.update("")
             notes.update("")
             return
         profile = self.account.get("profile") or {}
@@ -512,8 +528,22 @@ class BuyOrWait(App):
             pos = service.position(self.account)
         except Exception as exc:
             sub.update(Text(f"Could not read the position: {exc}", style=RED))
+            missing.update("")
             notes.update("")
             return
+        unknown = service.missing_facts(self.account)
+        balance_known = bool(str(profile.get("current_available_balance") or "").strip())
+        floor_known = bool(str(profile.get("minimum_balance_to_keep") or "").strip())
+        if unknown:
+            missing.update(Text(
+                "\n".join(
+                    f"{line}: fill it in below and press Save facts before deciding."
+                    for line in unknown
+                ),
+                style=AMBER,
+            ))
+        else:
+            missing.update("")
         sub.update(
             Text(
                 f"as of {pos['as_of']}  ·  {pos['window_days']}-day window  ·  "
@@ -522,25 +552,40 @@ class BuyOrWait(App):
             )
         )
         self.query_one("#m-balance", Metric).update(
-            _money(pos["available_balance"]), "recorded balance", BLUE)
+            _money(pos["available_balance"]) if balance_known else "—",
+            "recorded balance" if balance_known else "not answered yet",
+            BLUE if balance_known else AMBER)
         floor = pos["minimum_balance"]
-        self.query_one("#m-floor", Metric).update(_money(floor), "your floor", MUTED)
-        try:
-            headroom = float(pos["headroom"])
-        except (TypeError, ValueError):
-            headroom = 0.0
-        self.query_one("#m-headroom", Metric).update(
-            _money(pos["headroom"]), "above the floor",
-            GREEN if headroom >= 0 else RED)
+        self.query_one("#m-floor", Metric).update(
+            _money(floor) if floor_known else "—",
+            "your floor" if floor_known else "not answered yet",
+            MUTED if floor_known else AMBER)
+        if balance_known and floor_known:
+            try:
+                headroom = float(pos["headroom"])
+            except (TypeError, ValueError):
+                headroom = 0.0
+            self.query_one("#m-headroom", Metric).update(
+                _money(pos["headroom"]), "above the floor",
+                GREEN if headroom >= 0 else RED)
+        else:
+            self.query_one("#m-headroom", Metric).update(
+                "—", "needs both facts", MUTED)
         until = pos.get("committed_until")
         self.query_one("#m-committed", Metric).update(
             _money(pos["committed"]),
             f"before income on {until}" if until else "in the projection window",
             AMBER if pos["committed"] not in ("0", "0.0", "") else MUTED)
-        self.query_one("#m-safe", Metric).update(
-            _money(pos["max_safe_payment"]),
-            "largest one-off today" if not pos.get("fail_closed") else "ledger failed closed",
-            GREEN if not pos.get("fail_closed") else RED)
+        if unknown:
+            # The kernel would answer this against a zero balance; say so
+            # instead of showing a figure nobody's ledger supports.
+            self.query_one("#m-safe", Metric).update(
+                "—", "not computed: a fact is missing", AMBER)
+        else:
+            self.query_one("#m-safe", Metric).update(
+                _money(pos["max_safe_payment"]),
+                "largest one-off today" if not pos.get("fail_closed") else "ledger failed closed",
+                GREEN if not pos.get("fail_closed") else RED)
         self.query_one("#m-currency", Metric).update(
             str(pos.get("currency") or "—"), "home currency", MUTED)
         problems = pos.get("problems") or []
@@ -684,7 +729,15 @@ class BuyOrWait(App):
                 text=self.query_one("#buy-text", Input).value.strip(),
             )
         except Exception as exc:
-            explain.update(Text(f"{type(exc).__name__}: {exc}", style=RED))
+            message = f"{type(exc).__name__}: {exc}"
+            unknown = service.missing_facts(self.account)
+            if unknown:
+                # Say where the missing fact can be answered, not just that the
+                # decision failed.  The kernel refuses rather than guessing.
+                message += (
+                    "\nFill in the missing fact on the Position tab, then decide again."
+                )
+            explain.update(Text(message, style=RED))
             table.clear()
             return
         service.save_user(self.account)
@@ -707,6 +760,42 @@ class BuyOrWait(App):
         self.refresh_position()
         self.refresh_ledger()
         self.refresh_decisions()
+
+    @on(Button.Pressed, "#profile-save")
+    def _save_profile(self, event: Button.Pressed) -> None:
+        """Record the balance/floor a person fills in; a blank leaves it unknown."""
+        status = self.query_one("#profile-status", Static)
+        if self.account is None:
+            status.update(Text("Load a person first.", style=RED))
+            return
+        balance = self.query_one("#profile-balance", Input).value.strip()
+        floor = self.query_one("#profile-floor", Input).value.strip()
+        if not balance and not floor:
+            status.update(Text(
+                "Enter the balance or the floor you want to record.", style=MUTED))
+            return
+        try:
+            service.update_profile(
+                self.account,
+                balance=balance or None,
+                floor=floor or None,
+            )
+        except Exception as exc:
+            message = f"{type(exc).__name__}: {exc}"
+            status.update(Text(message, style=RED))
+            self.notify(message, severity="error")
+            return
+        service.save_user(self.account)
+        self.query_one("#profile-balance", Input).value = ""
+        self.query_one("#profile-floor", Input).value = ""
+        still = service.missing_facts(self.account)
+        if still:
+            status.update(Text("Recorded. Still needed: " + "; ".join(still), style=AMBER))
+        else:
+            status.update(Text("Recorded.", style=GREEN))
+        self.refresh_position()
+        self.refresh_decisions()
+        self.notify("Recorded", severity="information")
 
     @on(Button.Pressed, "#fact-add")
     def _add_fact(self, event: Button.Pressed) -> None:

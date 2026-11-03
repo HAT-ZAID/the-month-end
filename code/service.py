@@ -82,6 +82,38 @@ class EngineError(ValueError):
     """A request the engine refuses before it can become a wrong number."""
 
 
+#: The profile facts the kernel cannot invent, paired with the plain words a
+#: refusal uses for them.  An unanswered fact stays ``""`` (unknown) all the way
+#: to the decision gate: computing against an invented zero is how a skipped
+#: onboarding question became a confident "not affordable" verdict (CR-14).
+MISSING_FACTS = (
+    ("current_available_balance", "balance"),
+    ("minimum_balance_to_keep", "minimum balance to keep"),
+)
+
+
+def missing_facts(account) -> list[str]:
+    """What a decision still needs, as refusals that name each field.
+
+    An empty list means the account is answered well enough to decide.  The
+    check is presence only: a value that is present is parsed by
+    :func:`update_profile`, never reinterpreted here.
+    """
+    profile = account.get("profile") or {}
+    return [
+        f"{label} is not set"
+        for field, label in MISSING_FACTS
+        if not str(profile.get(field) or "").strip()
+    ]
+
+
+def _refuse_missing_facts(account) -> None:
+    """Stop a decision that would otherwise be computed against a zero."""
+    missing = missing_facts(account)
+    if missing:
+        raise EngineError("; ".join(missing))
+
+
 def _category_word(value) -> str:
     """The lower-case, underscore-joined form of a typed category or label."""
     text = str(value or "").strip().lower()
@@ -151,6 +183,25 @@ def _decimal(value) -> Decimal:
         raise EngineError(f"{value!r} is not an amount") from None
 
 
+def _profile_amount(value, what: str) -> str:
+    """A profile amount as stored: ``""`` for a blank answer, else the number.
+
+    A blank answer means *not answered yet*, so it is kept as ``""`` rather than
+    becoming a zero the person never gave (CR-14).  Anything present is parsed
+    exactly as before; a non-finite word is refused instead of being stored and
+    later read as a balance.
+    """
+    text = str(value).strip()
+    if not text:
+        return ""
+    amount = _decimal(text)
+    if not amount.is_finite():
+        raise EngineError(f"{what} must be a finite amount")
+    if amount < 0:
+        raise EngineError(f"{what} cannot be negative")
+    return str(amount)
+
+
 def money(value) -> str:
     """A kernel figure as a plain two-place string, for display only."""
     if value in (None, ""):
@@ -170,11 +221,14 @@ def list_users(root=None) -> list[str]:
 
 
 def create_user(name, currency="", balance="", floor="", root=None) -> dict:
-    """Create one named person and record what they told us so far."""
+    """Create one named person and record what they told us so far.
+
+    An unanswered balance or floor is stored blank -- unknown, not zero -- so
+    :func:`decide` can name the fact the person has yet to answer (CR-14).
+    """
     account = store.create(name, home_currency=currency, repo_root=root)
-    if str(balance).strip() or str(floor).strip():
-        update_profile(account, balance=balance, floor=floor, currency=currency)
-        store.save(account, repo_root=root)
+    update_profile(account, balance=balance, floor=floor, currency=currency)
+    store.save(account, repo_root=root)
     return account
 
 
@@ -187,20 +241,22 @@ def save_user(account, root=None) -> str:
 
 
 def update_profile(account, *, currency=None, balance=None, floor=None, **extra) -> dict:
-    """Record one or more profile facts, validating them before storage."""
+    """Record one or more profile facts, validating them before storage.
+
+    A blank balance or floor is stored as ``""``: the person has not answered,
+    and :func:`decide` says so rather than treating the silence as zero.
+    """
     fields = {}
     if currency is not None:
         fields["home_currency"] = currency
     if balance is not None:
-        amount = _decimal(balance)
-        if amount < 0:
-            raise EngineError("available balance cannot be negative")
-        fields["current_available_balance"] = str(amount)
+        fields["current_available_balance"] = _profile_amount(
+            balance, "available balance"
+        )
     if floor is not None:
-        amount = _decimal(floor)
-        if amount < 0:
-            raise EngineError("the minimum balance to keep cannot be negative")
-        fields["minimum_balance_to_keep"] = str(amount)
+        fields["minimum_balance_to_keep"] = _profile_amount(
+            floor, "the minimum balance to keep"
+        )
     for key, value in extra.items():
         fields[key] = value
     if not fields:
@@ -306,11 +362,16 @@ def _options_frame(account, request_id) -> pd.DataFrame:
 
 
 def decide(account, request_id) -> dict:
-    """Run the kernel for one recorded request and return its decision."""
+    """Run the kernel for one recorded request and return its decision.
+
+    Refuses while a fact the kernel cannot invent is unanswered: a verdict
+    computed against an invented zero is worse than no verdict (CR-14).
+    """
     requests = [row for row in (account.get("requests") or [])
                 if str(row.get("request_id")) == str(request_id)]
     if not requests:
         raise EngineError(f"no request {request_id!r} on this account")
+    _refuse_missing_facts(account)
     request = requests[0]
     profile = dict(account.get("profile") or {})
     events = [dict(row) for row in (account.get("events") or [])]
@@ -347,6 +408,9 @@ def buy(account, amount, *, on=None, by=None, text="", allows_partial=True,
     deadline = str(by or "")
     if deadline and not _is_iso(deadline):
         raise EngineError(f"{by!r} is not an ISO date (YYYY-MM-DD)")
+    # Checked before anything is recorded: a refused purchase must not leave a
+    # phantom request on the account (CR-14).
+    _refuse_missing_facts(account)
     request = acct.add_request(
         account,
         request_date=day,
