@@ -1,9 +1,12 @@
 """Which models this machine can actually run, and how to pick one.
 
 The interface has to offer a choice, so the choice has to be discoverable.  Only
-**local** endpoints are probed over the network: Ollama on loopback.  A hosted
-provider is listed only when its credentials are already in the environment,
-because this module must never make a paid call just to draw a dropdown.
+**local** endpoints are probed over the network: Ollama on loopback, decided by
+the host's address and never by whether a URL happens to contain a local-looking
+string.  A hosted provider is listed only when its credentials are already in the
+environment, because this module must never make a paid call just to draw a
+dropdown.  The credential names come from :mod:`code.providers`, so the menu and
+the builder agree on which variables configure which provider.
 
 Privacy classes follow :mod:`code.providers`: ``local`` may see anything,
 ``paid`` may see user text but never secrets, ``free`` trains on what it is sent
@@ -11,13 +14,71 @@ and is labelled as such wherever it appears.
 """
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
 import urllib.error
 import urllib.request
+from urllib.parse import urlsplit
+
+from code.providers import (
+    KILO_API_KEY_ENV,
+    MODEL_ENV,
+    OLLAMA_MODEL_ENV,
+    PAID_API_KEY_ENV,
+    PROVIDER_ENV,
+    OpenRouterProvider,
+)
 
 #: Loopback only. A model list is not worth a packet leaving the machine.
 OLLAMA_TAGS = "http://127.0.0.1:11434/api/tags"
+
+#: The transports a local endpoint may use. Anything else is refused before a
+#: host is even considered.
+LOCAL_SCHEMES = frozenset({"http", "https"})
+
+#: The hosted providers this menu may offer, with the credential variables that
+#: make each usable, in display order.  The names come from :mod:`code.providers`
+#: -- the same ones ``build_provider`` reads -- so a menu entry cannot advertise
+#: a provider the builder would refuse.
+HOSTED_CREDENTIAL_ENVS = (
+    ("openrouter", (OpenRouterProvider.api_key_env, *OpenRouterProvider.api_key_fallbacks)),
+    ("kilo", (KILO_API_KEY_ENV,)),
+    ("paid", (PAID_API_KEY_ENV,)),
+)
+
+
+def is_loopback(url) -> bool:
+    """True when ``url`` is a plain HTTP(S) endpoint served by this machine.
+
+    The host is compared as an address, never as text.  A substring test accepts
+    names such as ``127.0.0.1.nip.io`` or ``ollama-127.0.0.1.example``, which are
+    ordinary remote hosts: probing one would send a packet off this machine, and
+    treating it as local would silence the free-tier warning.
+
+    Userinfo is refused as well: ``http://user:pass@127.0.0.1:11434`` carries
+    credentials, so it is not the unremarkable local endpoint this decides for.
+    Only ``http`` and ``https`` name a host to probe at all.
+    """
+    try:
+        parts = urlsplit(str(url or ""))
+        has_userinfo = parts.username is not None or parts.password is not None
+        host = (parts.hostname or "").strip().lower()
+    except ValueError:
+        return False
+    if has_userinfo:
+        return False
+    if (parts.scheme or "").lower() not in LOCAL_SCHEMES:
+        return False
+    if not host:
+        return False
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
 
 NO_MODEL = "none"
 
@@ -34,12 +95,12 @@ def _get_json(url: str, timeout: float = 1.5) -> dict | None:
 
 def ollama_models(env=None) -> list[str]:
     """Model names served by a local Ollama, newest first, or an empty list."""
-    env = env or os.environ
+    env = os.environ if env is None else env
     if str(env.get("BUY_WAIT_MODEL_DISCOVERY") or "1").strip() in ("0", "false", "no"):
         return []
     base = str(env.get("OLLAMA_URL") or "http://127.0.0.1:11434")
     base = base.rstrip("/")
-    if "127.0.0.1" not in base and "localhost" not in base:
+    if not is_loopback(base):
         return []  # never probe a remote host for a menu
     payload = _get_json(f"{base}/api/tags")
     if not payload:
@@ -54,12 +115,11 @@ def ollama_models(env=None) -> list[str]:
 
 def hosted_configured(env=None) -> list[str]:
     """Hosted providers whose credentials are already present."""
-    env = env or os.environ
+    env = os.environ if env is None else env
     found = []
-    if str(env.get("KILO_API_KEY") or "").strip():
-        found.append("kilo")
-    if str(env.get("OPENROUTER_KEY") or env.get("OPENROUTER_API_KEY") or "").strip():
-        found.append("openrouter")
+    for kind, names in HOSTED_CREDENTIAL_ENVS:
+        if any(str(env.get(name) or "").strip() for name in names):
+            found.append(kind)
     return found
 
 
@@ -69,7 +129,8 @@ def options(env=None) -> list[dict]:
     The first entry is always the honest "no model" choice, so a caller can fall
     back to a screen that states it has no model instead of guessing.
     """
-    env = env or os.environ
+    env = os.environ if env is None else env
+    hosted = set(hosted_configured(env))
     items = [{
         "id": NO_MODEL,
         "label": "No model — run the kernel directly",
@@ -86,7 +147,7 @@ def options(env=None) -> list[dict]:
             "privacy": "local",
         })
     # The free tier trains on what it is sent; say so in the label itself.
-    if "openrouter" in hosted_configured(env):
+    if "openrouter" in hosted:
         items.append({
             "id": "openrouter:default",
             "label": "OpenRouter · free tier trains on your text",
@@ -94,11 +155,21 @@ def options(env=None) -> list[dict]:
             "model": "",
             "privacy": "free",
         })
-    if "kilo" in hosted_configured(env):
+    if "kilo" in hosted:
         items.append({
             "id": "kilo:default",
             "label": "Kilo · paid endpoint",
             "provider": "kilo",
+            "model": "",
+            "privacy": "paid",
+        })
+    # The paid class does not train on what it receives: no warning is owed, and
+    # the label says which class the choice belongs to.
+    if "paid" in hosted:
+        items.append({
+            "id": "paid:default",
+            "label": "Paid endpoint · no training terms",
+            "provider": "paid",
             "model": "",
             "privacy": "paid",
         })
@@ -113,17 +184,17 @@ def provider_for(choice: str, env=None):
     """
     from code.providers import build_provider
 
-    env = dict(env or os.environ)
+    env = dict(os.environ if env is None else env)
     choice = str(choice or NO_MODEL)
     if choice == NO_MODEL or ":" not in choice:
         return None
     provider, model = choice.split(":", 1)
-    env["BUY_WAIT_LLM_PROVIDER"] = provider
+    env[PROVIDER_ENV] = provider
     if model and model != "default":
-        env["BUY_WAIT_LLM_MODEL"] = model
+        env[MODEL_ENV] = model
         # Ollama reads its own model variable; set both so the choice is not
         # silently replaced by the provider default.
-        env["BUY_WAIT_OLLAMA_MODEL"] = model
+        env[OLLAMA_MODEL_ENV] = model
     built = build_provider(env)
     built = built[0] if isinstance(built, tuple) else built
     if built is not None and model and model != "default":
