@@ -77,6 +77,51 @@ def _money(value) -> str:
     return service.money(value)
 
 
+#: What "yes" looks like typed into the form's monthly-pay question.
+MONTHLY_ANSWERS = frozenset({"monthly", "yes", "y", "true"})
+
+
+def fact_payload(kind, amount, *, when="", description="", category="",
+                 recurrence="") -> dict:
+    """The Ledger form's raw strings, ready for :func:`code.service.add_fact`.
+
+    The form used to send only kind, amount, date and description, and the
+    forecast could not see the row it created (CR-05).  Two words decide that:
+    the *category* a bill lands on, and whether income is *monthly* pay -- the
+    service calls that ``salary`` and only then projects it forward.
+
+    A bill or subscription with no category is refused here, before anything is
+    stored, because guessing a bucket for someone's committed money is worse
+    than asking.  The refusal names the categories the forecast can read, so the
+    person can correct the entry in place.
+    """
+    key = str(kind or "").strip().lower()
+    if key not in service.FACT_KINDS:
+        raise service.EngineError(
+            f"unknown kind {kind!r}; use one of "
+            f"{', '.join(sorted(service.FACT_KINDS))}"
+        )
+    stated = str(category or "").strip()
+    if key in ("bill", "subscription") and not stated:
+        allowed = ", ".join(sorted(service.PROJECTED_EXPENSE_CATEGORIES))
+        raise service.EngineError(
+            f"a {key} needs a category the forecast projects; use one of {allowed}"
+        )
+    answer = str(recurrence or "").strip().lower()
+    if key == "income":
+        # Exactly one question is asked of income: is this monthly pay?  A
+        # conflicting answer is treated as "not monthly", never as a guess.
+        answer = "monthly" if answer in MONTHLY_ANSWERS else ""
+    return {
+        "kind": key,
+        "amount": str(amount or "").strip(),
+        "when": str(when or "").strip() or None,
+        "description": str(description or "").strip(),
+        "category": stated,
+        "recurrence": answer,
+    }
+
+
 class Metric(Vertical):
     """A labelled figure.  The value is always a kernel figure, never a sum."""
 
@@ -337,8 +382,17 @@ class BuyOrWait(App):
                     with Horizontal(classes="field-row"):
                         yield Label("Description")
                         yield Input(placeholder="e.g. salary", id="fact-text")
+                    with Horizontal(classes="field-row"):
+                        yield Label("Category")
+                        yield Input(placeholder="e.g. rent — required for a bill",
+                                    id="fact-category")
+                    with Horizontal(classes="field-row"):
+                        yield Label("Monthly pay?")
+                        yield Input(placeholder="yes / no — is this income a salary?",
+                                    id="fact-recurrence")
                     with Horizontal(classes="actions"):
                         yield Button("Add movement", id="fact-add", variant="primary")
+                    yield Static(id="fact-status", classes="note")
 
             with TabPane("Decisions", id="tab-decisions"):
                 with VerticalScroll():
@@ -656,23 +710,32 @@ class BuyOrWait(App):
 
     @on(Button.Pressed, "#fact-add")
     def _add_fact(self, event: Button.Pressed) -> None:
+        status = self.query_one("#fact-status", Static)
         if self.account is None:
+            status.update(Text("Load a person first.", style=RED))
             self.notify("Load a person first", severity="error")
             return
         try:
-            service.add_fact(
-                self.account,
-                self.query_one("#fact-kind", Input).value.strip(),
-                self.query_one("#fact-amount", Input).value.strip(),
-                when=self.query_one("#fact-date", Input).value.strip() or None,
-                description=self.query_one("#fact-text", Input).value.strip(),
+            payload = fact_payload(
+                self.query_one("#fact-kind", Input).value,
+                self.query_one("#fact-amount", Input).value,
+                when=self.query_one("#fact-date", Input).value,
+                description=self.query_one("#fact-text", Input).value,
+                category=self.query_one("#fact-category", Input).value,
+                recurrence=self.query_one("#fact-recurrence", Input).value,
             )
+            event = service.add_fact(self.account, **payload)
         except Exception as exc:
-            self.notify(f"{type(exc).__name__}: {exc}", severity="error")
+            # The refusal belongs next to the fields, not only in a toast.
+            message = f"{type(exc).__name__}: {exc}"
+            status.update(Text(message, style=RED))
+            self.notify(message, severity="error")
             return
         service.save_user(self.account)
         self.query_one("#fact-amount", Input).value = ""
         self.query_one("#fact-text", Input).value = ""
+        recorded = str(event.get("category") or payload["kind"])
+        status.update(Text(f"Recorded {recorded}.", style=GREEN))
         self.refresh_position()
         self.refresh_ledger()
         self.notify("Recorded", severity="information")
