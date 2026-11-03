@@ -54,3 +54,21 @@ def test_overflowing_amount_fails_closed_without_raising():
                                [_event(amount="1e1000000")], [], set())
     assert result["fail_closed"] is True
     assert result["fail_closed_reason"] == "AMOUNT_INVALID"
+
+def test_overflowing_opening_balance_fails_closed_without_raising():
+    # A finite opening balance past the context exponent range overflows on the
+    # first `curr_bal += day_delta`; that is an unrepresentable balance, not a
+    # crash for the TUI/position callers.
+    result = solve_safe_amount("u1", "2026-01-01", "7000",
+                               _profile(current_available_balance="1e1000000"),
+                               [_event()], [], set())
+    assert result["fail_closed"] is True
+    assert result["fail_closed_reason"] == "BALANCE_INVALID"
+
+def test_overflowing_same_day_sum_fails_closed_without_raising():
+    # Two individually representable deltas can overflow when summed on one day.
+    result = solve_safe_amount("u1", "2026-01-01", "7000", _profile(),
+                               [_event(event_id="e1", amount="9e999999"),
+                                _event(event_id="e2", amount="9e999999")], [], set())
+    assert result["fail_closed"] is True
+    assert result["fail_closed_reason"] == "AMOUNT_INVALID"

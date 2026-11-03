@@ -17,7 +17,7 @@ Contract (Task 3):
 from __future__ import annotations
 
 from datetime import date, timedelta
-from decimal import Decimal, InvalidOperation, Overflow
+from decimal import Decimal, DecimalException, InvalidOperation, Overflow
 
 from code.amounts import strict_decimal
 from code.forecast import build_forecast
@@ -138,6 +138,24 @@ def _dedup_events(events: list[dict]) -> list[dict]:
         if target is not None and target is not e:
             drop_ids.add(idx_by_obj[id(target)])
     return [e for i, e in enumerate(survivors) if i not in drop_ids]
+
+
+def _fail_closed_result(reason: str) -> dict:
+    """The single fail-closed payload: no safe amount, no date, no ledger.
+
+    A flat synthetic ledger would look like a real one downstream, so an
+    ambiguous or unvaluable ledger always returns this shape from one place.
+    """
+    return {
+        "safe_amount": Decimal("0"),
+        "earliest_date": None,
+        "ledger": [],
+        "fail_closed": True,
+        "fail_closed_reason": reason,
+        "processed_events": [],
+        "forecast": [],
+        "forecast_warnings": [],
+    }
 
 
 def solve_safe_amount(
@@ -285,16 +303,7 @@ def solve_safe_amount(
     if fail_reasons:
         # Explicit fail-closed contract: no safe amount, no date, and no ledger.
         # A flat synthetic ledger would look like a real one downstream.
-        return {
-            "safe_amount": Decimal("0"),
-            "earliest_date": None,
-            "ledger": [],
-            "fail_closed": True,
-            "fail_closed_reason": fail_reasons[0],
-            "processed_events": [],
-            "forecast": [],
-            "forecast_warnings": [],
-        }
+        return _fail_closed_result(fail_reasons[0])
 
     # Committed expense/salary projections come from the explicit policy module;
     # the oracle never extrapolates on its own.
@@ -325,24 +334,44 @@ def solve_safe_amount(
     curr_bal = start_bal
     for i in range(91):
         d = req_date + timedelta(days=i)
-        day_delta = sum((e["delta"] or 0) for e in processed_events if e["date"] == d)
-        curr_bal += day_delta
-        daily_balances.append(curr_bal)
-    # Safe amount based on the minimum balance over the horizon
-    if any(b.is_nan() for b in daily_balances):
-        safe_amount = Decimal('0')
-    else:
-        min_possible_safe = min(daily_balances) - min_bal
-        safe_amount = max(Decimal('0'), min(req_amt, min_possible_safe))
-
-    # 3. Earliest full payment date (first day where full amount can be paid safely on that day and remains safe thereafter)
-    earliest_date = None
-    for i in range(91):
-        t = req_date + timedelta(days=i)
-        # Ensure all future days after t stay above min_bal after paying the amount
-        if all(daily_balances[j] - req_amt >= min_bal for j in range(i, 91)):
-            earliest_date = t.isoformat()
+        try:
+            day_delta = sum((e["delta"] or 0) for e in processed_events if e["date"] == d)
+        except DecimalException:
+            # Dated deltas that cannot be summed are unvaluable money.
+            fail_reasons.append("AMOUNT_INVALID")
             break
+        try:
+            curr_bal += day_delta
+        except DecimalException:
+            # The opening balance cannot absorb a dated delta: it is not
+            # representable in the ledger arithmetic.
+            fail_reasons.append("BALANCE_INVALID")
+            break
+        daily_balances.append(curr_bal)
+    if fail_reasons:
+        return _fail_closed_result(fail_reasons[0])
+
+    # Safe amount based on the minimum balance over the horizon
+    try:
+        if any(b.is_nan() for b in daily_balances):
+            safe_amount = Decimal('0')
+        else:
+            min_possible_safe = min(daily_balances) - min_bal
+            safe_amount = max(Decimal('0'), min(req_amt, min_possible_safe))
+
+        # 3. Earliest full payment date (first day where full amount can be paid safely on that day and remains safe thereafter)
+        earliest_date = None
+        for i in range(91):
+            t = req_date + timedelta(days=i)
+            # Ensure all future days after t stay above min_bal after paying the amount
+            if all(daily_balances[j] - req_amt >= min_bal for j in range(i, 91)):
+                earliest_date = t.isoformat()
+                break
+    except DecimalException:
+        # Balance/request arithmetic that overflows the context is unvaluable
+        # too: fail closed instead of raising into the caller.
+        fail_reasons.append("BALANCE_INVALID")
+        return _fail_closed_result(fail_reasons[0])
 
     # Return results
     return {
