@@ -10,16 +10,19 @@ ledger may contain, under an explicit, conservative policy:
   (:data:`DISCRETIONARY_CATEGORIES`) is never invented forward;
 * the budget is the **median of the monthly home-currency totals** of the
   category's eligible history, so a one-off month or a single outlier cannot
-  dominate it, and two months of history are required before a category is
-  projected at all;
+  dominate it, and two **complete** months of history are required before a
+  category is projected at all (the still-running request month is not a month);
 * the budget posts on the request date and on each following month boundary of
   the horizon, net of the real countable rows already inside that month, so
-  nothing is double counted and no bucket goes negative;
-* the request month is prorated to its remaining days **only when the window
+  nothing is double counted and no bucket goes negative.  The first bucket keeps
+  only the unspent remainder of the request month (``full - month_to_date``),
+  never a negative amount;
+* the request month is prorated to the days after the request date (numerator
+  ``days_left - 1``) over the month's real length, and **only when the window
   contains a projected salary**: proration assumes the rest of the month is
   funded by the rest of the month's income;
 * at most **one** regular salary stream is projected, chosen by cadence and
-  amount stability, and never more than two occurrences inside the horizon;
+  amount stability, and never more than three occurrences inside the horizon;
 * gig/platform/freelance/commission/bonus/arrears/prize/seasonal/temporary/
   final/prorated/secondary streams are never projected, and an ended employment
   stops projection entirely;
@@ -49,7 +52,9 @@ DEFAULT_INTERVAL_DAYS = 30
 MAX_INCOME_OCCURRENCES = 3
 # A monthly budget needs at least two observed months: one month is a one-off.
 MIN_BUDGET_MONTHS = 2
-# A calendar month is charged as 30 days when prorating the request month.
+# Legacy fixed-30 proration denominator, kept for the historical G2 probe
+# (``tools/g2_probe.py``), which replays the superseded rule.  The shipped
+# proration uses the real days in the month.
 PRORATION_DAYS_PER_MONTH = 30
 # Latest calendar day a monthly budget boundary may land on.
 MAX_BUCKET_DAY = 28
@@ -341,12 +346,16 @@ def _monthly_budget_history(
 ) -> dict[str, Decimal]:
     """Median monthly home-currency total per forecastable category.
 
-    Every countable row before ``req_date`` counts, including the partial request
-    month up to the day before the request.  A month without a convertible amount
-    contributes no total (no zero months are invented), and a category needs at
-    least :data:`MIN_BUDGET_MONTHS` observed months before it becomes a budget.
+    Only *complete* months before the request count: the request month is still
+    running, so the days before the request date are not a monthly total and
+    including them would drag the median down and charge the same spend twice
+    (once here, once as coverage of the first bucket).  A month without a
+    convertible amount contributes no total (no zero months are invented), and a
+    category needs at least :data:`MIN_BUDGET_MONTHS` observed months before it
+    becomes a budget.
     """
     projected = FORECASTABLE_EXPENSE_CATEGORIES - DISCRETIONARY_CATEGORIES
+    request_month = (req_date.year, req_date.month)
     monthly: dict[str, dict[tuple[int, int], Decimal]] = {}
     for category, event_day, amount in _eligible_expense_rows(
         events,
@@ -358,8 +367,11 @@ def _monthly_budget_history(
     ):
         if event_day >= req_date:
             continue
-        bucket = monthly.setdefault(category, {})
         month_key = (event_day.year, event_day.month)
+        if month_key == request_month:
+            # The request month is incomplete; it is never a budget month.
+            continue
+        bucket = monthly.setdefault(category, {})
         bucket[month_key] = bucket.get(month_key, Decimal(0)) + amount
 
     budgets: dict[str, Decimal] = {}
@@ -393,6 +405,35 @@ def _real_in_window_expenses(
     return real
 
 
+def _month_to_date_expenses(
+    events,
+    req_date: date,
+    *,
+    categories,
+    home_currency: str,
+    fx_rows,
+) -> dict[str, Decimal]:
+    """Countable spend already posted in the request month, before the request.
+
+    The first bucket is the unspent remainder of that month, so a row from the
+    request month is subtracted from the budget instead of being projected a
+    second time.  It is strictly before ``req_date``, so it never overlaps the
+    in-window coverage that nets the bucket a second time.
+    """
+    month_start = req_date.replace(day=1)
+    spent: dict[str, Decimal] = {}
+    for category, event_day, amount in _eligible_expense_rows(
+        events,
+        categories=categories,
+        home_currency=home_currency,
+        fx_rows=fx_rows,
+    ):
+        if not (month_start <= event_day < req_date):
+            continue
+        spent[category] = spent.get(category, Decimal(0)) + amount
+    return spent
+
+
 def _monthly_budget_forecast(
     events,
     req_date: date,
@@ -407,7 +448,9 @@ def _monthly_budget_forecast(
 
     The first bucket starts on the request date and is prorated to the remaining
     days of the request month only when a salary is projected in the window.
-    Every bucket is net of the real countable rows it already contains.
+    A bucket is net of the real countable rows it already contains, and the first
+    bucket additionally keeps only the unspent remainder of its month
+    (``full - month_to_date``), never a negative amount.
     """
     if not budgets:
         return []
@@ -419,7 +462,17 @@ def _monthly_budget_forecast(
         home_currency=home_currency,
         fx_rows=fx_rows,
     )
+    month_to_date = _month_to_date_expenses(
+        events,
+        req_date,
+        categories=set(budgets),
+        home_currency=home_currency,
+        fx_rows=fx_rows,
+    )
     days_left = (_first_day_of_next_month(req_date) - req_date).days
+    # A calendar month is as long as it really is: prorating January as 30 days
+    # overstates its remaining share and understates February's.
+    days_in_month = monthrange(req_date.year, req_date.month)[1]
 
     entries: list[ForecastEntry] = []
     cursor = req_date
@@ -429,13 +482,21 @@ def _monthly_budget_forecast(
         for category in sorted(budgets):
             amount = budgets[category]
             if first and has_projected_income:
-                # The remaining share of a month can never exceed the whole
-                # month's budget: on the 1st/2nd of a 31-day month (or the 1st of
-                # a 30-day month) the inclusive day count pushes the factor above 1.
+                # `days_left` counts the request day itself; the request day is
+                # not projected again, so the remaining share of the month is
+                # (days_left - 1) / (real days in the month).  The guard keeps the
+                # first bucket at or below one month's budget.
                 prorated = (
-                    amount * Decimal(days_left + 1) / Decimal(PRORATION_DAYS_PER_MONTH)
+                    amount * Decimal(days_left - 1) / Decimal(days_in_month)
                 )
                 amount = min(amount, prorated)
+            if first:
+                # The budget is the whole month; the rows already posted this
+                # month are part of it, not an extra charge. The unspent
+                # remainder can never be negative.
+                amount = max(
+                    Decimal(0), amount - month_to_date.get(category, Decimal(0))
+                )
             covered = sum(
                 (value for day, value in real.get(category, ()) if cursor <= day < bucket_end),
                 Decimal(0),
