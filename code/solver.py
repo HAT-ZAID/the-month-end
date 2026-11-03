@@ -16,6 +16,7 @@ from __future__ import annotations
 import pandas as pd
 from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation
+from code.amounts import strict_decimal
 from code.oracle import solve_safe_amount
 from code.options import get_valid_options
 from code.changes import apply_changes, build_change_sets, describe_action
@@ -218,6 +219,54 @@ def _forecast_evidence(evidence: dict) -> tuple[set[str], list[dict]]:
     flags = {str(flag) for flag in (evidence.get("flags") or []) if str(flag).strip()}
     facts = [fact for fact in (evidence.get("expense_facts") or []) if isinstance(fact, dict)]
     return flags, facts
+
+
+def _forecast_invalid_detail(result: dict) -> str | None:
+    """Name the first non-finite value in a kernel result, or return ``None``.
+
+    A projected amount or a daily balance that is not a finite
+    :class:`~decimal.Decimal` is an unknown projection, not a zero.  Ranking a
+    plan on it would emit a figure the ledger cannot support, so the solver
+    treats it as a failed forecast.
+    """
+    for entry in result.get("forecast") or []:
+        amount = entry.get("amount") if isinstance(entry, dict) else getattr(entry, "amount", None)
+        if strict_decimal(amount) is None:
+            return f"a projected forecast amount is not finite ({amount!r})"
+    for balance in result.get("ledger") or []:
+        if strict_decimal(balance) is None:
+            return f"a daily balance is not finite ({balance!r})"
+    return None
+
+
+def _forecast_fail_closed(rid, evidence: dict, detail: str) -> dict:
+    """Fail-closed envelope for a forecast that cannot be valued.
+
+    Mirrors the oracle-ledger envelope: nothing safe, nothing to rank, and a
+    named reason (``FORECAST_INVALID``) so the failure is visible instead of
+    being reported as an ordinary "not affordable" verdict.
+    """
+    evidence = dict(evidence or {})
+    evidence["warnings"] = list(evidence.get("warnings") or []) + [{
+        "flag": "FORECAST_INVALID",
+        "detail": detail,
+    }]
+    return {
+        "request_id": rid,
+        "amount_safe_to_pay": "0",
+        "affordability_status": "not_affordable",
+        "recommended_payment_method": "not_recommended",
+        "payment_plan": "none",
+        "earliest_date_for_full_payment": None,
+        "spending_changes_needed": "none",
+        "decision_explanation": (
+            "No payment is safe: the forecast could not be valued "
+            f"(FORECAST_INVALID: {detail}). A plan ranked on a projection that "
+            "is not a finite number would report a figure the ledger cannot "
+            "support, so no payment is recommended."
+        ),
+        "evidence": evidence,
+    }
 
 
 def _parse_plan_legs(payment_plan: str) -> list[tuple[date, Decimal]] | None:
@@ -618,10 +667,19 @@ def solve_request(rid, user_id, req_date, req_amt, profile, events, fx_rows, opt
     # 2. Get Oracle results for the base state (modified copy carries salary injection).
     #    Typed evidence reaches the forecast layer here; the oracle signature is frozen.
     evidence_flags, expense_facts = _forecast_evidence(evidence)
-    res_now = solve_safe_amount(
-        user_id, req_date, str(req_amt_dec), profile, events_for_oracle, fx_rows, recurrence_flags,
-        evidence_flags=evidence_flags, expense_facts=expense_facts,
-    )
+    try:
+        res_now = solve_safe_amount(
+            user_id, req_date, str(req_amt_dec), profile, events_for_oracle, fx_rows, recurrence_flags,
+            evidence_flags=evidence_flags, expense_facts=expense_facts,
+        )
+        invalid_detail = _forecast_invalid_detail(res_now)
+    except (ArithmeticError, ValueError, TypeError) as exc:
+        # A forecast that raises (an unparsable amount, a type the ledger cannot
+        # add, NaN arithmetic) leaves the projection unknown.  Fail closed with a
+        # named reason instead of letting a half-built ledger be ranked.
+        return _forecast_fail_closed(rid, evidence, f"{type(exc).__name__}: {exc}")
+    if invalid_detail is not None:
+        return _forecast_fail_closed(rid, evidence, invalid_detail)
     if res_now.get("fail_closed"):
         # An ambiguous ledger cannot certify any amount: fail closed explicitly
         # instead of ranking options derived from a synthetic ledger.
@@ -702,6 +760,10 @@ def solve_request(rid, user_id, req_date, req_amt, profile, events, fx_rows, opt
                     continue
                 # A fail-closed ledger certifies nothing: never build options from it.
                 if changed.get("fail_closed"):
+                    continue
+                # Neither does a ledger or forecast the kernel cannot value: a
+                # non-finite plan state must never reach ranking.
+                if _forecast_invalid_detail(changed) is not None:
                     continue
                 # An identical real ledger means the change had no cash effect, so
                 # every plan shape it could offer already exists with fewer changes.
