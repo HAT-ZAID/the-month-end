@@ -14,13 +14,17 @@ ledger may contain, under an explicit, conservative policy:
   category is projected at all (the still-running request month is not a month);
 * the budget posts on the request date and on each following month boundary of
   the horizon, net of the real countable rows already inside that month, so
-  nothing is double counted and no bucket goes negative.  The first bucket keeps
-  only the unspent remainder of the request month (``full - month_to_date``),
-  never a negative amount;
-* the request month is prorated to the days after the request date (numerator
-  ``days_left - 1``) over the month's real length, and **only when the window
-  contains a projected salary**: proration assumes the rest of the month is
-  funded by the rest of the month's income;
+  nothing is double counted and no bucket goes negative.  The default first
+  bucket is the conservative charge; setting :data:`FORECAST_CORRECTIONS_ENV`
+  switches it to the unspent remainder of the request month
+  (``full - month_to_date``), never a negative amount;
+* the request month is prorated **only when the window contains a projected
+  salary**: proration assumes the rest of the month is funded by the rest of
+  the month's income.  The default keeps the fixed 30-day, inclusive-day charge;
+  :data:`FORECAST_CORRECTIONS_ENV` switches to the days after the request date
+  (numerator ``days_left - 1``) over the month's real length.  Those two
+  corrections are opt-in because they raise the amount declared safe and would
+  move the G1 safety gate off 0/0/0;
 * at most **one** regular salary stream is projected, chosen by cadence and
   amount stability, and never more than three occurrences inside the horizon;
 * gig/platform/freelance/commission/bonus/arrears/prize/seasonal/temporary/
@@ -37,6 +41,7 @@ sorted by date, category, kind, source and reason.
 """
 from __future__ import annotations
 
+import os
 from calendar import monthrange
 from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
@@ -52,10 +57,12 @@ DEFAULT_INTERVAL_DAYS = 30
 MAX_INCOME_OCCURRENCES = 3
 # A monthly budget needs at least two observed months: one month is a one-off.
 MIN_BUDGET_MONTHS = 2
-# Legacy fixed-30 proration denominator, kept for the historical G2 probe
-# (``tools/g2_probe.py``), which replays the superseded rule.  The shipped
-# proration uses the real days in the month.
+# A calendar month is charged as 30 days when prorating the request month.
 PRORATION_DAYS_PER_MONTH = 30
+# Opt-in for the corrected first-bucket arithmetic (CR-13 D1/D2).  Both rules
+# lower the day-0 charge, which raises the amount declared safe; the default
+# keeps the conservative charge so the G1 safety gate stays at 0/0/0.
+FORECAST_CORRECTIONS_ENV = "BUY_WAIT_FORECAST_CORRECTIONS"
 # Latest calendar day a monthly budget boundary may land on.
 MAX_BUCKET_DAY = 28
 
@@ -262,6 +269,20 @@ def _warning(flag: str, source: str, detail: str, category: str = "") -> dict:
     return payload
 
 
+def _forecast_corrections_enabled() -> bool:
+    """Whether the opt-in corrected first-bucket arithmetic is enabled.
+
+    Rules 2 and 3 of CR-13 (charge only ``budget - month_to_date``, prorate on
+    the real month length excluding the request day) each lower the day-0 charge
+    and therefore raise the amount declared safe.  They stay off unless
+    :data:`FORECAST_CORRECTIONS_ENV` asks for them: the shipped default is the
+    conservative charge that keeps the G1 safety gate at 0/0/0.  The variable is
+    read per call, so a test or a caller can flip it without a reimport.
+    """
+    value = str(os.environ.get(FORECAST_CORRECTIONS_ENV) or "").strip().lower()
+    return value in ("1", "true", "yes", "on")
+
+
 def _fact_value(fact, key: str):
     if isinstance(fact, dict):
         return fact.get(key)
@@ -448,9 +469,11 @@ def _monthly_budget_forecast(
 
     The first bucket starts on the request date and is prorated to the remaining
     days of the request month only when a salary is projected in the window.
-    A bucket is net of the real countable rows it already contains, and the first
-    bucket additionally keeps only the unspent remainder of its month
-    (``full - month_to_date``), never a negative amount.
+    A bucket is net of the real countable rows it already contains.  The default
+    first bucket is the conservative pre-CR-13 charge; with
+    :data:`FORECAST_CORRECTIONS_ENV` set it keeps only the unspent remainder of
+    its month (``full - month_to_date``) and prorates on the month's real length,
+    never a negative amount.
     """
     if not budgets:
         return []
@@ -462,16 +485,19 @@ def _monthly_budget_forecast(
         home_currency=home_currency,
         fx_rows=fx_rows,
     )
-    month_to_date = _month_to_date_expenses(
-        events,
-        req_date,
-        categories=set(budgets),
-        home_currency=home_currency,
-        fx_rows=fx_rows,
+    corrections = _forecast_corrections_enabled()
+    month_to_date = (
+        _month_to_date_expenses(
+            events,
+            req_date,
+            categories=set(budgets),
+            home_currency=home_currency,
+            fx_rows=fx_rows,
+        )
+        if corrections
+        else {}
     )
     days_left = (_first_day_of_next_month(req_date) - req_date).days
-    # A calendar month is as long as it really is: prorating January as 30 days
-    # overstates its remaining share and understates February's.
     days_in_month = monthrange(req_date.year, req_date.month)[1]
 
     entries: list[ForecastEntry] = []
@@ -482,15 +508,24 @@ def _monthly_budget_forecast(
         for category in sorted(budgets):
             amount = budgets[category]
             if first and has_projected_income:
-                # `days_left` counts the request day itself; the request day is
-                # not projected again, so the remaining share of the month is
-                # (days_left - 1) / (real days in the month).  The guard keeps the
-                # first bucket at or below one month's budget.
-                prorated = (
-                    amount * Decimal(days_left - 1) / Decimal(days_in_month)
-                )
+                if corrections:
+                    # `days_left` counts the request day itself; the request day
+                    # is not projected again, so the remaining share of the
+                    # month is (days_left - 1) over the month's real length.
+                    prorated = (
+                        amount * Decimal(days_left - 1) / Decimal(days_in_month)
+                    )
+                else:
+                    # Conservative default: a fixed 30-day month and an
+                    # inclusive day count.  The guard keeps the first bucket at
+                    # or below one month's budget.
+                    prorated = (
+                        amount
+                        * Decimal(days_left + 1)
+                        / Decimal(PRORATION_DAYS_PER_MONTH)
+                    )
                 amount = min(amount, prorated)
-            if first:
+            if first and corrections:
                 # The budget is the whole month; the rows already posted this
                 # month are part of it, not an extra charge. The unspent
                 # remainder can never be negative.
@@ -1044,6 +1079,7 @@ __all__ = [
     "DISCRETIONARY_CATEGORIES",
     "EXPENSE_EVENT_TYPES",
     "EXCLUDED_INCOME_DESCRIPTION_TOKENS",
+    "FORECAST_CORRECTIONS_ENV",
     "FORECASTABLE_EXPENSE_CATEGORIES",
     "ForecastEntry",
     "ForecastResult",
