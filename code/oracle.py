@@ -17,7 +17,7 @@ Contract (Task 3):
 from __future__ import annotations
 
 from datetime import date, timedelta
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal, InvalidOperation, Overflow
 
 from code.amounts import strict_decimal
 from code.forecast import build_forecast
@@ -260,13 +260,24 @@ def solve_safe_amount(
                 fail_reasons.append("FX_UNKNOWN")
                 continue
 
-            amt = amt_base * rate
-
-            # Only debit/credit reach this point (non_cash returned above).
-            multiplier = -1 if dir_norm == "debit" else 1
+            # A finite Decimal can still overflow when the FX rate scales its
+            # exponent, and the default context traps Overflow.  An unguarded
+            # multiplication would raise into the TUI/position callers, so fail
+            # closed on the same path as any other unvaluable amount.
+            try:
+                amt = amt_base * rate
+                # Only debit/credit reach this point (non_cash returned above).
+                multiplier = -1 if dir_norm == "debit" else 1
+                delta = amt * multiplier
+            except (InvalidOperation, Overflow):
+                fail_reasons.append("AMOUNT_INVALID")
+                continue
+            if not delta.is_finite():
+                fail_reasons.append("AMOUNT_INVALID")
+                continue
             processed_events.append({
                 "date": e_date,
-                "delta": amt * multiplier,
+                "delta": delta,
                 "flag": fx_res["flag"],
                 "category": e.get("category"),
             })

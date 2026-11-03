@@ -45,3 +45,12 @@ def test_active_event_without_date_fails_closed():
 def test_valid_rows_still_compute():
     result = solve_safe_amount("u1", "2026-01-01", "7000", _profile(), [_event()], [], set())
     assert result["fail_closed"] is False
+
+def test_overflowing_amount_fails_closed_without_raising():
+    # A finite Decimal with an extreme exponent still overflows when the FX
+    # conversion scales it (the default context traps Overflow). The ledger must
+    # fail closed with a named reason instead of raising into the caller.
+    result = solve_safe_amount("u1", "2026-01-01", "7000", _profile(),
+                               [_event(amount="1e1000000")], [], set())
+    assert result["fail_closed"] is True
+    assert result["fail_closed_reason"] == "AMOUNT_INVALID"
