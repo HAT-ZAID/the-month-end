@@ -22,6 +22,7 @@ import pandas as pd
 
 from code import account as acct
 from code import accounts as store
+from code.accounts import AccountExistsError
 from code.forecast import DISCRETIONARY_CATEGORIES, FORECASTABLE_EXPENSE_CATEGORIES
 from code.solver import position as kernel_position
 from code.solver import solve_request
@@ -227,13 +228,18 @@ def list_users(root=None) -> list[str]:
     return store.list_users(repo_root=root)
 
 
-def create_user(name, currency="", balance="", floor="", root=None) -> dict:
+def create_user(name, currency="", balance="", floor="", root=None, *, overwrite=False) -> dict:
     """Create one named person and record what they told us so far.
 
     An unanswered balance or floor is stored blank -- unknown, not zero -- so
     :func:`decide` can name the fact the person has yet to answer (CR-14).
+    A name that already exists is refused unless ``overwrite`` is true, because
+    the store replaces every row for that person; a blank profile must never
+    erase a ledger by accident.
     """
-    account = store.create(name, home_currency=currency, repo_root=root)
+    account = store.create(
+        name, home_currency=currency, repo_root=root, overwrite=overwrite
+    )
     update_profile(account, balance=balance, floor=floor, currency=currency)
     store.save(account, repo_root=root)
     return account

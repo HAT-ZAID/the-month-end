@@ -363,7 +363,7 @@ def test_position_with_a_real_balance_still_returns_numbers():
     assert result["max_safe_payment"] == "2000.0"
 
 
-def test_the_service_and_chat_position_paths_carry_the_unknown_marker():
+def test_the_service_and_chat_position_paths_carry_the_unknown_marker(db):
     """CR-14 on the chat path: no zero-based figure reaches the model."""
     from code import chat
 

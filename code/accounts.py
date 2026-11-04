@@ -148,6 +148,16 @@ def normalise_name(name) -> str:
     return text
 
 
+class AccountExistsError(ValueError):
+    """Refused because creating this name would replace an existing account.
+
+    ``save`` replaces every row for a name wholesale, so a create that ignored
+    an existing row would delete that person's ledger.  The caller has to ask
+    for the replacement explicitly.
+    """
+
+
+
 def list_users(path=None, repo_root=None) -> list[str]:
     """Every stored user, alphabetically."""
     connection = connect(path, repo_root)
@@ -251,9 +261,20 @@ def save(account: dict, name=None, path=None, repo_root=None) -> str:
     return user_name
 
 
-def create(name, home_currency="", path=None, repo_root=None) -> dict:
-    """A new, empty account for ``name``, already stored."""
+def create(name, home_currency="", path=None, repo_root=None, *, overwrite=False) -> dict:
+    """A new, empty account for ``name``, already stored.
+
+    An existing name is refused unless ``overwrite=True``: storing a blank
+    account under a name that already has one deletes every fact recorded for
+    that person, so the replacement has to be an explicit decision rather than
+    a typo in the onboarding form.
+    """
     user_name = normalise_name(name)
+    if not overwrite and has_user(user_name, path=path, repo_root=repo_root):
+        raise AccountExistsError(
+            f"{user_name!r} already exists; choose another name or confirm "
+            "replacing that account"
+        )
     account = blank_account(user_id=user_name, home_currency=home_currency)
     save(account, name=user_name, path=path, repo_root=repo_root)
     return account

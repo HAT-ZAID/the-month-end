@@ -185,6 +185,10 @@ class Onboarding(Screen):
 
     BINDINGS = [("escape", "dismiss_quiet", "Back")]
 
+    #: A name whose existing account the person has been warned about.  The
+    #: next press of Start is the explicit confirmation to replace it.
+    _pending_overwrite: str | None = None
+
     def compose(self) -> ComposeResult:
         yield Header(show_clock=False)
         with VerticalScroll(id="onboard"):
@@ -222,6 +226,9 @@ class Onboarding(Screen):
         yield Footer()
 
     def on_mount(self) -> None:
+        # A screen is a fresh decision: never inherit a half-confirmed replace
+        # from an earlier visit to this form.
+        self._pending_overwrite = None
         holder = self.query_one("#known-users", Vertical)
         names = service.list_users()
         if not names:
@@ -246,16 +253,31 @@ class Onboarding(Screen):
         if not name:
             self.notify("A name is needed before anything can be kept", severity="error")
             return
+        # An existing name is never replaced on the first press: the store
+        # writes a blank account over every row, so the person has to confirm
+        # the loss of that account with a second, explicit action.
+        confirmed = self._pending_overwrite == name
         try:
             account = service.create_user(
                 name,
                 currency=self.query_one("#ob-currency", Input).value.strip(),
                 balance=self.query_one("#ob-balance", Input).value.strip(),
                 floor=self.query_one("#ob-floor", Input).value.strip(),
+                overwrite=confirmed,
             )
+        except service.AccountExistsError:
+            self._pending_overwrite = name
+            self.notify(
+                f"{name} already exists. Press Start again to replace that "
+                "account and everything in it, or change the name.",
+                severity="warning",
+                timeout=10,
+            )
+            return
         except Exception as exc:
             self.notify(f"{type(exc).__name__}: {exc}", severity="error")
             return
+        self._pending_overwrite = None
         self.app.use_account(account)
         self.app.pop_screen()
 

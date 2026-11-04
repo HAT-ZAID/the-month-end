@@ -105,7 +105,7 @@ def test_the_contract_words_are_normalised_before_matching():
     )
 
 
-def test_a_stated_category_is_honoured_for_a_subscription():
+def test_a_stated_category_is_honoured_for_a_subscription(db):
     account = service.create_user("e", currency="USD", balance="10000", floor="2000")
     event = service.add_fact(account, "subscription", "15", when="2026-01-01",
                              description="a show", category="streaming")
