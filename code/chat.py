@@ -414,20 +414,68 @@ BUDGET_REPLY = (
     "kernel's; nothing was estimated."
 )
 
-#: Every run of digits in a reply: one figure, however it is grouped.
-_FIGURE = re.compile(r"\d[\d,]*(?:\.\d+)?")
+#: Every signed run of digits in a reply: one figure, however it is grouped.
+#: The lookbehind keeps the ``-11`` inside an ISO date from reading as a
+#: negative amount while still allowing a sign that starts a figure.
+_FIGURE = re.compile(r"(?<![\w.])[+-]?\d[\d,]*(?:\.\d+)?")
+
+#: Where one claim ends and the next begins, so a figure is checked against the
+#: field named in its own clause rather than any field in a longer sentence.
+_CLAUSE_BREAK = re.compile(r"[.;!?,\n]|\b(?:and|but|so|while|then)\b", re.IGNORECASE)
 
 
-def _figures(text) -> list[tuple[str, Decimal]]:
-    """The digit runs in ``text``, each with the number it writes."""
-    found: list[tuple[str, Decimal]] = []
+def _figures(text) -> list[tuple[str, Decimal, int]]:
+    """The signed figures in ``text``, each with its value and start offset.
+
+    Thousands separators are dropped and a trailing ``.0`` needs no special
+    handling because :class:`Decimal` compares numeric values.  The sign is
+    kept: ``-12000`` is not the same figure as ``12000``.
+    """
+    found: list[tuple[str, Decimal, int]] = []
     for match in _FIGURE.finditer(str(text or "")):
         token = match.group(0)
         try:
-            found.append((token, Decimal(token.replace(",", ""))))
+            found.append((token, Decimal(token.replace(",", "")), match.start()))
         except (InvalidOperation, ValueError):
             continue
     return found
+
+
+def _clause_for(text: str, start: int) -> str:
+    """The clause of ``text`` that contains the figure starting at ``start``."""
+    begin = 0
+    for match in _CLAUSE_BREAK.finditer(text):
+        if match.end() <= start:
+            begin = match.end()
+            continue
+        if match.start() >= start:
+            return text[begin:match.start()]
+    return text[begin:]
+
+
+def _claimed_fields(clause: str) -> set[str]:
+    """The observation fields a clause names, most specific phrase first.
+
+    An unknown phrase returns no field, so a figure in ordinary prose is still
+    checked against the whole observation set; a clause that names a field is
+    checked against that field alone.
+    """
+    text = " ".join(str(clause or "").lower().replace("_", " ").split())
+    if not text:
+        return set()
+    if "minimum balance" in text or "floor" in text or "reserve" in text:
+        return {"minimum_balance_to_keep", "minimum_balance"}
+    if "headroom" in text:
+        return {"headroom"}
+    if "balance" in text:
+        return {"current_available_balance", "available_balance"}
+    if "committed" in text or "scheduled" in text:
+        return {"committed"}
+    if "safe" in text:
+        return {"max_safe_payment", "amount_safe_to_pay"}
+    if "requested amount" in text or "purchase amount" in text:
+        return {"requested_amount"}
+    return set()
 
 
 #: The keys of every fail-closed tool reply: a protocol rejection or a failure.
@@ -559,13 +607,26 @@ def _kernel_observations(observations) -> list[dict]:
     ]
 
 
-def _observed_figures(observations) -> set[Decimal]:
-    """Every number the serialized tool results reproduce."""
-    figures: set[Decimal] = set()
+def _observed_values(observations) -> dict[str, set[Decimal]]:
+    """Every number a tool result reproduces, grouped by the field that holds it.
+
+    Keeping the field key is what lets :func:`verify_reply` refuse a figure that
+    is real but belongs to another field: a balance is not a safe amount.
+    """
+    values: dict[str, set[Decimal]] = {}
     for observation in observations:
-        serialized = json.dumps(observation, default=str, sort_keys=True)
-        figures.update(value for _token, value in _figures(serialized))
-    return figures
+        if not isinstance(observation, dict):
+            continue
+        for key, value in observation.items():
+            name = str(key)
+            if isinstance(value, (dict, list, tuple)):
+                text = json.dumps(value, default=str, sort_keys=True)
+            else:
+                text = "" if value is None else str(value)
+            values.setdefault(name, set()).update(
+                number for _token, number, _start in _figures(text)
+            )
+    return values
 
 
 def _render_value(value) -> str | None:
@@ -604,11 +665,13 @@ def verify_reply(text: str, observations: list[dict]) -> tuple[str, bool]:
     """Check a model reply against the tool results produced in the same turn.
 
     Returns ``(reply, verified)``.  No kernel observation means nothing can be
-    checked, so the reply is a plain refusal.  Otherwise every digit run in the
-    prose has to be reproduced by the serialized observations; a reply that
-    cites anything else is replaced by :func:`_summary` of what the tools
-    actually returned.  The replacement is built from those results, so its
-    figures are grounded by construction.
+    checked, so the reply is a plain refusal.  Otherwise every signed figure in
+    the prose has to be reproduced by the observation field its own clause
+    names, with the sign intact; a figure read from an unrelated field (a
+    balance standing in for a safe amount) or with the wrong sign does not
+    witness the claim.  A reply that cites anything else is replaced by
+    :func:`_summary` of what the tools actually returned.  The replacement is
+    built from those results, so its figures are grounded by construction.
     """
     checked = _kernel_observations(observations)
     prose = str(text or "").strip()
@@ -616,9 +679,20 @@ def verify_reply(text: str, observations: list[dict]) -> tuple[str, bool]:
         return UNVERIFIED_REPLY, False
     if not prose:
         return _summary(checked), False
-    supported = _observed_figures(checked)
-    if any(value not in supported for _token, value in _figures(prose)):
-        return _summary(checked), False
+    observed = _observed_values(checked)
+    every_value: set[Decimal] = set()
+    for numbers in observed.values():
+        every_value.update(numbers)
+    for _token, value, start in _figures(prose):
+        fields = _claimed_fields(_clause_for(prose, start))
+        if fields:
+            supported: set[Decimal] = set()
+            for field in fields:
+                supported.update(observed.get(field, ()))
+        else:
+            supported = every_value
+        if value not in supported:
+            return _summary(checked), False
     return prose, True
 
 

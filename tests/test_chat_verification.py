@@ -86,6 +86,65 @@ def test_answer_figures_must_appear_in_tool_results(db):
     assert str(position["max_safe_payment"]) in result["reply"]
 
 
+def test_a_balance_cannot_witness_a_safe_payment_claim():
+    """A figure must be grounded in the field the sentence is about, not anywhere."""
+    observations = [
+        {
+            "available_balance": "12000",
+            "max_safe_payment": "10000",
+            "minimum_balance": "2000",
+        }
+    ]
+
+    reply, verified = chat.verify_reply("You can safely pay 12000 today.", observations)
+
+    assert verified is False
+    assert reply != "You can safely pay 12000 today."
+    assert reply.startswith("From your ledger:")
+
+
+def test_a_sign_flipped_figure_is_rejected():
+    observations = [
+        {
+            "available_balance": "12000",
+            "max_safe_payment": "10000",
+            "minimum_balance": "2000",
+        }
+    ]
+
+    reply, verified = chat.verify_reply("Your balance is -12000.", observations)
+
+    assert verified is False
+    assert reply != "Your balance is -12000."
+    assert reply.startswith("From your ledger:")
+
+
+def test_a_genuine_safe_payment_figure_stays_verified():
+    observations = [
+        {
+            "available_balance": "12000",
+            "max_safe_payment": "10000",
+            "minimum_balance": "2000",
+        }
+    ]
+
+    reply, verified = chat.verify_reply("You can safely pay 10000 today.", observations)
+
+    assert verified is True
+    assert reply == "You can safely pay 10000 today."
+
+
+def test_grouped_and_trailing_zero_figures_normalise_to_the_observed_value():
+    observations = [{"max_safe_payment": "10000"}]
+
+    reply, verified = chat.verify_reply(
+        "You can safely pay 10,000.0 today.", observations
+    )
+
+    assert verified is True
+    assert reply == "You can safely pay 10,000.0 today."
+
+
 def test_a_reply_that_cites_a_tool_figure_is_accepted_verbatim(db):
     account = _account()
     position = chat.dispatch(account, "position")
