@@ -235,12 +235,18 @@ def create_user(name, currency="", balance="", floor="", root=None, *, overwrite
     :func:`decide` can name the fact the person has yet to answer (CR-14).
     A name that already exists is refused unless ``overwrite`` is true, because
     the store replaces every row for that person; a blank profile must never
-    erase a ledger by accident.
+    erase a ledger by accident.  Both amounts are parsed before the store is
+    touched, so a refused value cannot leave a blank account behind or wipe the
+    one it was meant to replace.
     """
+    stored_balance = _profile_amount(balance, "available balance")
+    stored_floor = _profile_amount(floor, "the minimum balance to keep")
     account = store.create(
         name, home_currency=currency, repo_root=root, overwrite=overwrite
     )
-    update_profile(account, balance=balance, floor=floor, currency=currency)
+    update_profile(
+        account, balance=stored_balance, floor=stored_floor, currency=currency
+    )
     store.save(account, repo_root=root)
     return account
 
