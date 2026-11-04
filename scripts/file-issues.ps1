@@ -34,7 +34,7 @@ if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
     throw "GitHub CLI not found. Install it from https://cli.github.com and run: gh auth login"
 }
 
-$issueDir = Join-Path $PSScriptRoot ".." "docs" "issues"
+$issueDir = Join-Path $PSScriptRoot ".." | Join-Path -ChildPath "docs" | Join-Path -ChildPath "issues"
 $files = Get-ChildItem -Path $issueDir -Filter "*.md" |
     Where-Object { $_.Name -ne "README.md" } |
     Sort-Object Name
@@ -45,6 +45,10 @@ $repoArgs = @()
 if ($Repo) { $repoArgs = @("--repo", $Repo) }
 
 $labelSet = New-Object System.Collections.Generic.HashSet[string]
+$existingTitles = @()
+if (-not $DryRun) {
+    $existingTitles = @(gh issue list @repoArgs --limit 300 --state all --json title --jq '.[].title' 2>$null)
+}
 foreach ($file in $files) {
     $text = Get-Content -Path $file.FullName -Raw
     if ($text -match '(?s)^---\s*\r?\n(.*?)\r?\n---\s*\r?\n(.*)$') {
@@ -72,11 +76,15 @@ foreach ($file in $files) {
         continue
     }
 
+    if ($existingTitles -contains $title) {
+        Write-Output ("skipping (already filed): {0}" -f $title)
+        continue
+    }
+
     if ($EnsureLabels) {
         foreach ($label in $labels) {
-            gh label create $label --description "Filed from the remediation branch" --color "ededed" @repoArgs 2>$null | Out-Null
+            gh label create $label --description "Filed from the remediation branch" --color "ededed" --force @repoArgs 2>$null | Out-Null
         }
-        $EnsureLabels = $false  # once is enough
     }
 
     $labelArgs = @()
