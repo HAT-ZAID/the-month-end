@@ -70,7 +70,7 @@ def test_switching_models_withdraws_an_armed_consent(db, monkeypatch):
     from textual.widgets import Button, Select
 
     from code import models as model_registry
-    from tools.app import BuyOrWait
+    from tools.app import TheMonthEnd
 
     _account("ana")
     provider = FakeProvider(privacy=PRIVACY_FREE)
@@ -80,7 +80,7 @@ def test_switching_models_withdraws_an_armed_consent(db, monkeypatch):
     calls = _spy_on_ask(monkeypatch)
 
     async def drive():
-        app = BuyOrWait()
+        app = TheMonthEnd()
         async with app.run_test() as pilot:
             await pilot.pause()
             await _open_chat(app, pilot)
@@ -119,7 +119,7 @@ def test_refreshing_the_position_withdraws_an_armed_consent(db, monkeypatch):
     from textual.widgets import Button
 
     from code import models as model_registry
-    from tools.app import BuyOrWait
+    from tools.app import TheMonthEnd
 
     _account("ana")
     provider = FakeProvider(privacy=PRIVACY_FREE)
@@ -129,7 +129,7 @@ def test_refreshing_the_position_withdraws_an_armed_consent(db, monkeypatch):
     calls = _spy_on_ask(monkeypatch)
 
     async def drive():
-        app = BuyOrWait()
+        app = TheMonthEnd()
         async with app.run_test() as pilot:
             await pilot.pause()
             await _open_chat(app, pilot)
@@ -155,7 +155,7 @@ def test_a_consent_whose_warning_no_longer_applies_is_withdrawn(db, monkeypatch)
     from textual.widgets import Button
 
     from code import models as model_registry
-    from tools.app import BuyOrWait
+    from tools.app import TheMonthEnd
 
     _account("ana")
     provider = FakeProvider(privacy=PRIVACY_FREE)
@@ -165,7 +165,7 @@ def test_a_consent_whose_warning_no_longer_applies_is_withdrawn(db, monkeypatch)
     calls = _spy_on_ask(monkeypatch)
 
     async def drive():
-        app = BuyOrWait()
+        app = TheMonthEnd()
         async with app.run_test() as pilot:
             await pilot.pause()
             await _open_chat(app, pilot)

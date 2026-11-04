@@ -1,4 +1,4 @@
-# Optional agent stack for the Buy or Wait? agent loop (Task 5B).
+# Optional agent stack for the The Month-End agent loop (Task 5B).
 #
 # The deterministic pipeline (python -m code.main, python -m evaluation.run)
 # keeps working without these packages: every import is lazy and the agent layer

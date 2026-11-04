@@ -208,7 +208,7 @@ class Onboarding(Screen):
     def compose(self) -> ComposeResult:
         yield Header(show_clock=False)
         with VerticalScroll(id="onboard"):
-            yield Static("Buy or Wait?", classes="brand")
+            yield Static("The Month-End", classes="brand")
             yield Static(
                 "A decision assistant for your own money. Nothing here is written to "
                 "the calibration fixture; your facts live in your own local account.",
@@ -348,7 +348,7 @@ class UserPicker(ModalScreen):
         self.app.pop_screen()
 
 
-class BuyOrWait(App):
+class TheMonthEnd(App):
     """The application shell: seven views of one account, never of the fixture."""
 
     CSS = """
@@ -818,7 +818,7 @@ class BuyOrWait(App):
     def chat_hello(self) -> None:
         log = self.query_one("#chat-log", RichLog)
         log.clear()
-        log.write(Text("Buy or Wait?", style=f"bold {BLUE}"))
+        log.write(Text("The Month-End", style=f"bold {BLUE}"))
         if self.model_choice == model_registry.NO_MODEL:
             log.write(Text(
                 "No model is selected, so nothing here can reason about your ledger. "
@@ -1408,7 +1408,7 @@ class BuyOrWait(App):
 
 
 def main(argv=None) -> int:
-    BuyOrWait().run()
+    TheMonthEnd().run()
     return 0
 
 

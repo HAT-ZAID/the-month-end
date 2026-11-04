@@ -1,4 +1,4 @@
-"""Deterministic correctness harness for the Buy or Wait? submission.
+"""Deterministic correctness harness for the The Month-End submission.
 
 Machine-checkable summary of the hard contract (AGENTS 6.2/6.3 and
 problem_statement): row count, exact column order, per-request ID set
@@ -466,7 +466,7 @@ def check_no_secrets(report) -> None:
 
 
 def main() -> int:
-    print("== Buy or Wait? correctness report ==")
+    print("== The Month-End correctness report ==")
     report = Report()
 
     if not REQUESTS_PATH.is_file():

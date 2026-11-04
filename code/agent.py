@@ -1,4 +1,4 @@
-"""Bounded, tool-calling agent loop for the Buy or Wait? decision (Task 5B).
+"""Bounded, tool-calling agent loop for the The Month-End decision (Task 5B).
 
 The model never owns the answer.  It inspects evidence and computations through a
 small, fixed tool set, proposes a decision through a schema-checked tool, and
@@ -121,7 +121,7 @@ REQUEST_SCOPED_TOOLS = (
 #: model supplies one*, so a probe cannot point at another request's evidence.
 REQUEST_FILTER_TOOLS = ("search_evidence",)
 
-SYSTEM_PROMPT = f"""You are the planning agent for the Buy or Wait? financial decision task.
+SYSTEM_PROMPT = f"""You are the planning agent for the The Month-End financial decision task.
 
 You do NOT own the answer. A deterministic kernel computes the seven machine
 fields and a verifier replaces every machine field you propose with the kernel

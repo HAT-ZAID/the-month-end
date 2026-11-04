@@ -1,4 +1,4 @@
-# General-use plan — make Buy or Wait? usable on a real person's money
+# General-use plan — make The Month-End usable on a real person's money
 
 **Read this first after any context reset.** It is written to be self-contained: the state, the
 contract, the API surfaces, the phases and the acceptance criteria are all here, so no prior

@@ -1,4 +1,4 @@
-# Base runtime and test dependencies for the deterministic Buy or Wait? path.
+# Base runtime and test dependencies for the deterministic The Month-End path.
 #
 #     python -m pip install -r requirements.txt
 #     python -m pytest tests -q

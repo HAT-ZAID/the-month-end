@@ -178,10 +178,10 @@ def test_the_missing_fact_vocabulary_has_one_definition():
 
 def test_onboarding_leaves_a_blank_balance_and_floor_blank(db):
     """(c) Skipping the questions stores unknown, not "0"."""
-    from tools.app import BuyOrWait, Onboarding
+    from tools.app import TheMonthEnd, Onboarding
 
     async def drive():
-        app = BuyOrWait()
+        app = TheMonthEnd()
         async with app.run_test() as pilot:
             await pilot.pause()
             assert isinstance(app.screen, Onboarding)
@@ -206,13 +206,13 @@ def test_onboarding_leaves_a_blank_balance_and_floor_blank(db):
 
 def test_the_app_names_the_missing_fact_and_offers_to_fill_it(db):
     """The screen says which fact is missing and gives a field for it."""
-    from tools.app import BuyOrWait
+    from tools.app import TheMonthEnd
 
     account = _account(balance="", floor="2000")
     store.save(account)
 
     async def drive():
-        app = BuyOrWait()
+        app = TheMonthEnd()
         async with app.run_test() as pilot:
             await pilot.pause()
             shown = str(app.query_one("#pos-missing").render())
@@ -248,13 +248,13 @@ def test_the_app_names_the_missing_fact_and_offers_to_fill_it(db):
 
 def test_the_purchase_tab_surfaces_the_same_refusal(db):
     """A purchase with a blank balance shows the refusal and records nothing."""
-    from tools.app import BuyOrWait
+    from tools.app import TheMonthEnd
 
     account = _account(balance="", floor="2000")
     store.save(account)
 
     async def drive():
-        app = BuyOrWait()
+        app = TheMonthEnd()
         async with app.run_test() as pilot:
             await pilot.pause()
             app.query_one("#tabs").active = "tab-buy"

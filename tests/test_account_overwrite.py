@@ -88,12 +88,12 @@ def test_a_new_person_is_still_created_in_one_step(db):
 def test_the_start_button_refuses_until_it_is_pressed_a_second_time(db):
     from textual.widgets import Button, Input
 
-    from tools.app import BuyOrWait, Onboarding
+    from tools.app import TheMonthEnd, Onboarding
 
     before = _stored("ana")
 
     async def drive():
-        app = BuyOrWait()
+        app = TheMonthEnd()
         async with app.run_test() as pilot:
             await pilot.pause()
             await pilot.pause()

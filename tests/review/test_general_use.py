@@ -217,10 +217,10 @@ def test_an_unknown_fact_kind_names_the_ones_that_work(db):
 
 
 def _drive_app():
-    from tools.app import BuyOrWait, Metric
+    from tools.app import TheMonthEnd, Metric
 
     async def drive():
-        app = BuyOrWait()
+        app = TheMonthEnd()
         async with app.run_test() as pilot:
             await pilot.pause()
             assert app.account is not None
@@ -251,10 +251,10 @@ def test_the_app_opens_on_the_kernels_position_not_the_fixture(db, monkeypatch):
 
 
 def test_the_app_starts_on_onboarding_when_nobody_is_stored(db):
-    from tools.app import BuyOrWait, Onboarding
+    from tools.app import TheMonthEnd, Onboarding
 
     async def drive():
-        app = BuyOrWait()
+        app = TheMonthEnd()
         async with app.run_test() as pilot:
             await pilot.pause()
             assert isinstance(app.screen, Onboarding)
@@ -265,7 +265,7 @@ def test_the_app_starts_on_onboarding_when_nobody_is_stored(db):
 
 def test_every_tab_renders_and_a_purchase_goes_through_the_screen(db):
     """The screens must survive a real interaction, not just a mount."""
-    from tools.app import BuyOrWait
+    from tools.app import TheMonthEnd
 
     account = store.create("ana", home_currency="ZAR")
     service.update_profile(account, balance="12000", floor="2000")
@@ -275,7 +275,7 @@ def test_every_tab_renders_and_a_purchase_goes_through_the_screen(db):
     store.save(account)
 
     async def drive():
-        app = BuyOrWait()
+        app = TheMonthEnd()
         async with app.run_test() as pilot:
             await pilot.pause()
             tabs = app.query_one("#tabs")

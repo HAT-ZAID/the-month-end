@@ -148,12 +148,12 @@ def test_switching_account_forgets_the_last_facts(db):
 
 
 def test_the_app_says_nothing_yet_before_any_turn(db):
-    from tools.app import BuyOrWait
+    from tools.app import TheMonthEnd
 
     _account("ana")
 
     async def drive():
-        app = BuyOrWait()
+        app = TheMonthEnd()
         async with app.run_test() as pilot:
             await pilot.pause()
             app.query_one("#tabs").active = "tab-chat"
@@ -170,7 +170,7 @@ def test_the_app_prints_the_facts_the_last_answer_used(db, monkeypatch):
     from textual.widgets import Input
 
     from code import models as model_registry
-    from tools.app import BuyOrWait
+    from tools.app import TheMonthEnd
 
     account = _account("ana")
     position = service.position(account)
@@ -186,7 +186,7 @@ def test_the_app_prints_the_facts_the_last_answer_used(db, monkeypatch):
     )
 
     async def drive():
-        app = BuyOrWait()
+        app = TheMonthEnd()
         async with app.run_test() as pilot:
             await pilot.pause()
             app.query_one("#tabs").active = "tab-chat"

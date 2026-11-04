@@ -1,4 +1,4 @@
-"""Interactive TUI for Buy or Wait?.
+"""Interactive TUI for The Month-End.
 
 Launch from the repo root:
 
@@ -1609,7 +1609,7 @@ def run_tui(data=None, input_fn=input, trace_dir=None) -> None:
     _reconfigure_stdout()
     app = TUI(data=data, input_fn=input_fn, trace_dir=trace_dir)
     console = app.console
-    console.print("Buy or Wait? interactive TUI", style="bold")
+    console.print("The Month-End interactive TUI", style="bold")
     console.print(
         "session-only: edits live in memory; output.csv and dataset/ are never written."
     )
@@ -1658,7 +1658,7 @@ def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         prog="python -m tools.tui",
         description=(
-            "Buy or Wait? interactive TUI. Session-only: it never writes "
+            "The Month-End interactive TUI. Session-only: it never writes "
             "output.csv, dataset/ or any trace."
         ),
     )

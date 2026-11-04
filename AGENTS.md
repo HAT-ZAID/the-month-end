@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Agent guidance for **Buy or Wait?**, the financial decision assistant in this repo.
+Agent guidance for **The Month-End**, the financial decision assistant in this repo.
 
 This file is the single source of truth for any AI coding agent working here: Claude Code, OpenAI Codex CLI / Codex Cloud, Gemini CLI, Cursor, Windsurf, opencode, Aider, goose, Factory, RooCode, JetBrains Junie, GitHub Copilot, Devin, or any other AGENTS.md-aware tool. Read it in full before taking action. Where this file conflicts with a tool's default behaviour, this file wins. Where the user gives a direct instruction, the user wins.
 
@@ -23,7 +23,7 @@ Section numbering in §6 is load-bearing: `code/changes.py`, `code/options.py`, 
 
 ## 1. What This Repo Is
 
-`the-month-end` is the production home of **Buy or Wait?**, an AI-powered financial decision assistant. For every purchase or payment request it decides whether the user should pay in full, pay partially, use an available installment option, wait, or not proceed.
+`the-month-end` is the production home of **The Month-End**, an AI-powered financial decision assistant. For every purchase or payment request it decides whether the user should pay in full, pay partially, use an available installment option, wait, or not proceed.
 
 The project began as a HackerRank Orchestrate (September 2026) challenge entry and scored 9/10 on the chat-transcript criterion. That history is kept in `README.md` and `docs/improvement-report.md` as provenance; the repo is no longer organised around the competition.
 

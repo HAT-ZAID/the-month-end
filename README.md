@@ -1,8 +1,8 @@
-# Buy or Wait?
+# The Month-End
 
 **Know what you can actually afford — before you commit.**
 
-Most budgeting apps tell you what you *spent*. Buy or Wait? answers the question
+Most budgeting apps tell you what you *spent*. The Month-End answers the question
 you actually ask at the checkout: **can I pay for this right now without
 breaking the rest of my month — and if not, what is the smartest way to do it
 anyway?**
@@ -18,7 +18,7 @@ installments, wait for a date, or don't do it.
 
 A language model alone will happily invent a number that sounds right. A
 spreadsheet alone can't read "the trip is IDR 46,018,000 and I need it done by
-10 October". Buy or Wait? refuses to choose between the two.
+10 October". The Month-End refuses to choose between the two.
 
 **The model investigates and explains. Python decides.** Every machine-readable
 field — the safe amount, the status, the plan, the date, the spending changes —
@@ -304,7 +304,7 @@ your own model key lives.
 
 ## Status
 
-- Deterministic core: stable, 717 tests green, 503 in the wider review suite.
+- Deterministic core: stable, 733 tests green, 503 in the wider review suite.
 - Interactive product: accounts, facts, decisions, verified chat, scenarios,
   provider consent and cancellations.
 - Known gaps and deferred work are tracked as issues: the G2 reference gap, the

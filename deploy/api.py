@@ -35,7 +35,7 @@ from code.solver import solve_request
 ROOT = Path(__file__).resolve().parents[1]
 MOCK = ROOT / "mock_dataset"
 
-app = FastAPI(title="Buy or Wait? kernel API", version="1.0")
+app = FastAPI(title="The Month-End kernel API", version="1.0")
 
 
 class _Data:

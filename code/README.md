@@ -2,7 +2,7 @@
 
 Starter repository for the **HackerRank Orchestrate** 24-hour hackathon (September 2026).
 
-## Buy or Wait?
+## The Month-End
 
 Build an AI-powered financial agent that decides whether a user can safely afford a requested expense.
 

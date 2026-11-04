@@ -140,7 +140,7 @@ def test_the_app_prints_one_summary_line_after_the_reply(db, monkeypatch):
     from textual.widgets import Input
 
     from code import models as model_registry
-    from tools.app import BuyOrWait
+    from tools.app import TheMonthEnd
 
     account = _account("ana")
     position = service.position(account)
@@ -156,7 +156,7 @@ def test_the_app_prints_one_summary_line_after_the_reply(db, monkeypatch):
     )
 
     async def drive():
-        app = BuyOrWait()
+        app = TheMonthEnd()
         async with app.run_test() as pilot:
             await pilot.pause()
             app.query_one("#tabs").active = "tab-chat"

@@ -22,7 +22,7 @@ top).
    counts there are a snapshot, not a certificate: for any later run, see the
    release record.
 
-The product is **Buy or Wait?**: a local-first financial decision assistant. The
+The product is **The Month-End**: a local-first financial decision assistant. The
 deterministic kernel owns every machine field; the agent layer may explain,
 classify intent and propose — never compute. `AGENTS.md` is the repo contract;
 this document records state, not rules.

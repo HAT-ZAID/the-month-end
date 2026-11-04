@@ -147,13 +147,13 @@ def test_a_bill_with_no_category_is_refused_before_add_fact(db, monkeypatch):
 
 def test_a_bill_with_no_category_is_refused_through_the_screen(db, monkeypatch):
     """The screen shows the same refusal inline, with the allowed words."""
-    from tools.app import BuyOrWait
+    from tools.app import TheMonthEnd
 
     account = _account()
     store.save(account)
 
     async def drive():
-        app = BuyOrWait()
+        app = TheMonthEnd()
         async with app.run_test() as pilot:
             await pilot.pause()
             app.query_one("#tabs").active = "tab-ledger"
@@ -197,13 +197,13 @@ def test_a_bill_with_a_named_category_passes_it_through(db):
 
 
 def test_the_screen_records_monthly_income_as_a_salary(db):
-    from tools.app import BuyOrWait
+    from tools.app import TheMonthEnd
 
     account = _account()
     store.save(account)
 
     async def drive():
-        app = BuyOrWait()
+        app = TheMonthEnd()
         async with app.run_test() as pilot:
             await pilot.pause()
             app.query_one("#tabs").active = "tab-ledger"
@@ -228,13 +228,13 @@ def test_the_screen_records_monthly_income_as_a_salary(db):
 
 
 def test_the_screen_records_a_named_bill_on_its_category(db):
-    from tools.app import BuyOrWait
+    from tools.app import TheMonthEnd
 
     account = _account()
     store.save(account)
 
     async def drive():
-        app = BuyOrWait()
+        app = TheMonthEnd()
         async with app.run_test() as pilot:
             await pilot.pause()
             app.query_one("#tabs").active = "tab-ledger"
@@ -259,13 +259,13 @@ def test_the_screen_records_a_named_bill_on_its_category(db):
 
 def test_the_form_keeps_its_existing_fields_and_adds_the_two_new_ones(db):
     """Layout behaviour is preserved: same ids, same order, two new inputs."""
-    from tools.app import BuyOrWait
+    from tools.app import TheMonthEnd
 
     account = _account()
     store.save(account)
 
     async def drive():
-        app = BuyOrWait()
+        app = TheMonthEnd()
         async with app.run_test() as pilot:
             await pilot.pause()
             for field in ("#fact-kind", "#fact-amount", "#fact-date", "#fact-text",

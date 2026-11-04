@@ -1,4 +1,4 @@
-# Buy or Wait? runtime image.
+# The Month-End runtime image.
 #
 #   docker build -t month-end:test .
 #   docker run --rm month-end:test --help          # usage

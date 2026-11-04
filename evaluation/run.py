@@ -1,4 +1,4 @@
-"""Single-command evaluation authority for the Buy or Wait? submission.
+"""Single-command evaluation authority for the The Month-End submission.
 
 Run the PR gate::
 
@@ -900,7 +900,7 @@ def _table(headers, rows) -> list[str]:
 
 
 def render_markdown(report: dict) -> str:
-    lines: list[str] = ["# Buy or Wait? evaluation report", ""]
+    lines: list[str] = ["# The Month-End evaluation report", ""]
     lines.append(f"- Mode: `{report.get('mode')}`")
     lines.append(f"- Overall: **{report.get('overall_status')}** (exit {report.get('exit_code')})")
     lines.append(f"- Machine fingerprint: `sha256:{report.get('machine_sha256')}`")
@@ -1187,7 +1187,7 @@ def build_parser() -> argparse.ArgumentParser:
     """Build the CLI parser; kept separate so the documented contract is testable."""
     parser = argparse.ArgumentParser(
         description=(
-            "Run the Buy or Wait? evaluation harness against the real production pipeline. "
+            "Run the The Month-End evaluation harness against the real production pipeline. "
             "PR mode scores the existing output.csv snapshot and does not rewrite output.csv: "
             "the pipeline runs in memory, then the 25 public sample rows are scored semantically "
             "and safety, determinism and provenance are checked."
@@ -1223,7 +1223,7 @@ def main(argv=None) -> int:
 
     json_path, markdown_path = write_reports(report, report_dir)
 
-    print(f"== Buy or Wait? evaluation ({report['mode']}) ==")
+    print(f"== The Month-End evaluation ({report['mode']}) ==")
     for gate in report["gates"]:
         required = "required" if gate.get("required") else "release-only"
         print(f"{gate['status']:<14} {gate['id']} {gate['name']:<18} [{required}] {gate['detail']}")

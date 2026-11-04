@@ -188,7 +188,7 @@ def test_the_app_holds_a_hosted_question_until_it_is_allowed(db, monkeypatch):
     from textual.widgets import Button, Input
 
     from code import models as model_registry
-    from tools.app import BuyOrWait
+    from tools.app import TheMonthEnd
 
     _account("ana")
     provider = FakeProvider(
@@ -200,7 +200,7 @@ def test_the_app_holds_a_hosted_question_until_it_is_allowed(db, monkeypatch):
     calls = _spy_on_ask(monkeypatch)
 
     async def drive():
-        app = BuyOrWait()
+        app = TheMonthEnd()
         async with app.run_test() as pilot:
             await pilot.pause()
             await _open_chat(app, pilot)
@@ -246,7 +246,7 @@ def test_the_app_does_not_block_a_local_question(db, monkeypatch):
     from textual.widgets import Input
 
     from code import models as model_registry
-    from tools.app import BuyOrWait
+    from tools.app import TheMonthEnd
 
     _account("ana")
     provider = FakeProvider(
@@ -258,7 +258,7 @@ def test_the_app_does_not_block_a_local_question(db, monkeypatch):
     calls = _spy_on_ask(monkeypatch)
 
     async def drive():
-        app = BuyOrWait()
+        app = TheMonthEnd()
         async with app.run_test() as pilot:
             await pilot.pause()
             await _open_chat(app, pilot)
@@ -283,7 +283,7 @@ def test_cancelling_withdraws_a_held_hosted_question(db, monkeypatch):
     from textual.widgets import Button, Input
 
     from code import models as model_registry
-    from tools.app import BuyOrWait
+    from tools.app import TheMonthEnd
 
     _account("ana")
     provider = FakeProvider(privacy=PRIVACY_FREE)
@@ -293,7 +293,7 @@ def test_cancelling_withdraws_a_held_hosted_question(db, monkeypatch):
     calls = _spy_on_ask(monkeypatch)
 
     async def drive():
-        app = BuyOrWait()
+        app = TheMonthEnd()
         async with app.run_test() as pilot:
             await pilot.pause()
             await _open_chat(app, pilot)

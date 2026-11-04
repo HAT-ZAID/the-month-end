@@ -44,13 +44,13 @@ def _scenario_text(app) -> str:
 
 
 def test_the_purchase_tab_delays_a_decided_purchase_without_saving_it(db):
-    from tools.app import BuyOrWait
+    from tools.app import TheMonthEnd
 
     _account()
     before = copy.deepcopy(store.load("ana"))
 
     async def drive():
-        app = BuyOrWait()
+        app = TheMonthEnd()
         async with app.run_test() as pilot:
             await pilot.pause()
             app.query_one("#tabs").active = "tab-buy"
@@ -86,7 +86,7 @@ def test_the_purchase_tab_delays_a_decided_purchase_without_saving_it(db):
 
 
 def test_the_screen_refuses_a_protected_expense_change(db):
-    from tools.app import BuyOrWait
+    from tools.app import TheMonthEnd
 
     account = _account()
     decision = service.buy(
@@ -98,7 +98,7 @@ def test_the_screen_refuses_a_protected_expense_change(db):
     before = copy.deepcopy(store.load("ana"))
 
     async def drive():
-        app = BuyOrWait()
+        app = TheMonthEnd()
         async with app.run_test() as pilot:
             await pilot.pause()
             with pytest.raises(ValueError) as caught:

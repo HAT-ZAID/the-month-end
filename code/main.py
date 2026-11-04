@@ -1,4 +1,4 @@
-"""Main solver for the Buy or Wait? problem.
+"""Main solver for the The Month-End problem.
 
 Reads the dataset, processes each request using the solver pipeline,
 and writes output.csv.

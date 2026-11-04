@@ -6,7 +6,7 @@ Branch `release-curate`, range `b757162..HEAD`. Verified 2026-11-04.
 
 | Command | Result |
 |---|---|
-| `pytest -q` | **717 passed** |
+| `pytest -q` | **724 passed** |
 | `pytest -q tests/review` | **503 passed, 1 skipped** |
 
 Baseline before this branch was 366 default tests; the branch adds 306.

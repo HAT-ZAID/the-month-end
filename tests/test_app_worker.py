@@ -77,12 +77,12 @@ async def _open_chat(app, pilot) -> None:
 
 def test_two_stored_people_are_not_narrowed_to_the_first_one(db):
     """(a) Opening the app must not choose between people on its own."""
-    from tools.app import BuyOrWait, UserPicker
+    from tools.app import TheMonthEnd, UserPicker
 
     _two_people()
 
     async def drive():
-        app = BuyOrWait()
+        app = TheMonthEnd()
         async with app.run_test() as pilot:
             await pilot.pause()
             assert app.account is None, "the first stored person was loaded anyway"
@@ -94,12 +94,12 @@ def test_two_stored_people_are_not_narrowed_to_the_first_one(db):
 
 def test_picking_one_of_two_people_loads_that_person(db):
     """The explicit answer is what loads an account, and it is the one asked for."""
-    from tools.app import BuyOrWait, UserPicker
+    from tools.app import TheMonthEnd, UserPicker
 
     _two_people()
 
     async def drive():
-        app = BuyOrWait()
+        app = TheMonthEnd()
         async with app.run_test() as pilot:
             await pilot.pause()
             assert isinstance(app.screen, UserPicker)
@@ -116,12 +116,12 @@ def test_picking_one_of_two_people_loads_that_person(db):
 
 def test_decide_with_two_people_and_no_selection_reports_choose_an_account(db):
     """(a) The decide action asks for a choice instead of deciding for ana."""
-    from tools.app import BuyOrWait
+    from tools.app import TheMonthEnd
 
     _two_people()
 
     async def drive():
-        app = BuyOrWait()
+        app = TheMonthEnd()
         async with app.run_test() as pilot:
             await pilot.pause()
             app.pop_screen()  # dismiss the picker without answering it
@@ -156,7 +156,7 @@ def test_chat_with_two_people_and_no_selection_never_reaches_the_model(db, monke
     from textual.widgets import Input
 
     from code import chat
-    from tools.app import BuyOrWait
+    from tools.app import TheMonthEnd
 
     _two_people()
     calls = []
@@ -168,7 +168,7 @@ def test_chat_with_two_people_and_no_selection_never_reaches_the_model(db, monke
     monkeypatch.setattr(chat, "ask", _spy)
 
     async def drive():
-        app = BuyOrWait()
+        app = TheMonthEnd()
         async with app.run_test() as pilot:
             await pilot.pause()
             app.pop_screen()
@@ -195,7 +195,7 @@ def test_the_ask_handler_returns_before_the_provider_answers(db, monkeypatch):
     from textual.widgets import Input
 
     from code import models as model_registry
-    from tools.app import BuyOrWait
+    from tools.app import TheMonthEnd
 
     account = _account("ana")
     # The app only shows a reply the kernel can vouch for, so the script asks for
@@ -216,7 +216,7 @@ def test_the_ask_handler_returns_before_the_provider_answers(db, monkeypatch):
     )
 
     async def drive():
-        app = BuyOrWait()
+        app = TheMonthEnd()
         async with app.run_test() as pilot:
             await pilot.pause()
             await _open_chat(app, pilot)
@@ -250,7 +250,7 @@ def test_cancel_stops_waiting_for_the_provider(db, monkeypatch):
     from textual.widgets import Input
 
     from code import models as model_registry
-    from tools.app import BuyOrWait
+    from tools.app import TheMonthEnd
 
     _account("ana")
     provider = FakeProvider(replies=["too late"], delay=0.5)
@@ -259,7 +259,7 @@ def test_cancel_stops_waiting_for_the_provider(db, monkeypatch):
     )
 
     async def drive():
-        app = BuyOrWait()
+        app = TheMonthEnd()
         async with app.run_test() as pilot:
             await pilot.pause()
             await _open_chat(app, pilot)
@@ -291,7 +291,7 @@ def test_a_second_ask_cancels_the_turn_it_replaces(db, monkeypatch):
     from textual.widgets import Input
 
     from code import models as model_registry
-    from tools.app import BuyOrWait
+    from tools.app import TheMonthEnd
 
     account = _account("ana")
     # Both turns must be verifiable for the surviving one to be rendered: the
@@ -316,7 +316,7 @@ def test_a_second_ask_cancels_the_turn_it_replaces(db, monkeypatch):
     monkeypatch.setattr(model_registry, "provider_for", _provider)
 
     async def drive():
-        app = BuyOrWait()
+        app = TheMonthEnd()
         async with app.run_test() as pilot:
             await pilot.pause()
             await _open_chat(app, pilot)
@@ -348,7 +348,7 @@ def test_a_cancelled_turn_leaves_the_shared_session_unchanged(db, monkeypatch):
 
     from code import chat
     from code import models as model_registry
-    from tools.app import BuyOrWait
+    from tools.app import TheMonthEnd
 
     _account("ana")
     provider = FakeProvider(replies=["too late"], delay=0.3)
@@ -357,7 +357,7 @@ def test_a_cancelled_turn_leaves_the_shared_session_unchanged(db, monkeypatch):
     )
 
     async def drive():
-        app = BuyOrWait()
+        app = TheMonthEnd()
         async with app.run_test() as pilot:
             await pilot.pause()
             await _open_chat(app, pilot)
@@ -392,7 +392,7 @@ def test_a_successful_turn_commits_its_private_session(db, monkeypatch):
 
     from code import chat
     from code import models as model_registry
-    from tools.app import BuyOrWait
+    from tools.app import TheMonthEnd
 
     account = _account("ana")
     safe = service.position(account)["max_safe_payment"]
@@ -406,7 +406,7 @@ def test_a_successful_turn_commits_its_private_session(db, monkeypatch):
     )
 
     async def drive():
-        app = BuyOrWait()
+        app = TheMonthEnd()
         async with app.run_test() as pilot:
             await pilot.pause()
             await _open_chat(app, pilot)
@@ -445,7 +445,7 @@ def test_a_replaced_turn_cannot_overwrite_the_survivors_observations(db, monkeyp
     from textual.widgets import Input
 
     from code import models as model_registry
-    from tools.app import BuyOrWait
+    from tools.app import TheMonthEnd
 
     _account("ana")
     first_provider = FakeProvider(
@@ -464,7 +464,7 @@ def test_a_replaced_turn_cannot_overwrite_the_survivors_observations(db, monkeyp
     )
 
     async def drive():
-        app = BuyOrWait()
+        app = TheMonthEnd()
         async with app.run_test() as pilot:
             await pilot.pause()
             await _open_chat(app, pilot)
@@ -507,12 +507,12 @@ def test_a_replaced_turn_cannot_overwrite_the_survivors_observations(db, monkeyp
 
 def test_cancel_with_no_turn_running_is_harmless(db):
     """The action exists and does nothing when there is nothing to cancel."""
-    from tools.app import BuyOrWait
+    from tools.app import TheMonthEnd
 
     _account("ana")
 
     async def drive():
-        app = BuyOrWait()
+        app = TheMonthEnd()
         async with app.run_test() as pilot:
             await pilot.pause()
             app.action_cancel_ask()
