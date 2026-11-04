@@ -10,9 +10,10 @@ Run the (still partial) release gate::
 
 The harness executes the real production pipeline in ``code.main.run_pipeline``:
 it never synthesizes rows and never bypasses OCR/evidence resolution.  PR mode
-runs the full 250-row production pipeline once (writing ``output.csv`` and the
-usage reports, exactly like ``python -m code.main``) and the 25-row sample
-pipeline twice from a clean state for semantic quality plus determinism.
+scores the existing ``output.csv`` snapshot and does not write ``output.csv`` or
+the usage report: the full 250-row production pipeline runs in memory, and the
+25-row sample pipeline runs twice from a clean state for semantic quality plus
+determinism.
 
 Gate slots G5 (archive), G6 (security archive/history) and G7 (agent
 robustness) are reported as ``NOT_APPLICABLE`` until the later tasks create
@@ -1182,12 +1183,14 @@ def run_release(root: Path, archive_path=None, provider: str = "replay") -> dict
     return report
 
 
-def main(argv=None) -> int:
+def build_parser() -> argparse.ArgumentParser:
+    """Build the CLI parser; kept separate so the documented contract is testable."""
     parser = argparse.ArgumentParser(
         description=(
             "Run the Buy or Wait? evaluation harness against the real production pipeline. "
-            "PR mode regenerates output.csv, then scores the 25 public sample rows "
-            "semantically and checks safety, determinism and provenance."
+            "PR mode scores the existing output.csv snapshot and does not rewrite output.csv: "
+            "the pipeline runs in memory, then the 25 public sample rows are scored semantically "
+            "and safety, determinism and provenance are checked."
         )
     )
     parser.add_argument("--mode", choices=("pr", "release"), default="pr")
@@ -1200,6 +1203,11 @@ def main(argv=None) -> int:
     parser.add_argument("--archive", default=None, help="release-mode archive path")
     parser.add_argument("--repo-root", default=None)
     parser.add_argument("--report-dir", default=None)
+    return parser
+
+
+def main(argv=None) -> int:
+    parser = build_parser()
     args = parser.parse_args(argv)
 
     if args.mode == "release" and args.provider != "replay":
