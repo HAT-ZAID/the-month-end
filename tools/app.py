@@ -20,6 +20,7 @@ import sys
 from datetime import date
 from functools import partial
 from pathlib import Path
+from typing import NamedTuple
 
 try:  # Textual is optional: the Rich TUI must keep working without it.
     from textual import on
@@ -108,6 +109,21 @@ MONTHLY_ANSWERS = frozenset({"monthly", "yes", "y", "true"})
 #: The one chat worker group.  Exclusive means a new question cancels the turn
 #: it replaces instead of leaving two provider turns racing for the same log.
 ASK_GROUP = "chat-ask"
+
+
+class PendingAsk(NamedTuple):
+    """A held question and the exact provider/model its warning was about.
+
+    Consent is not a property of the screen: it is a yes for one warning, shown
+    for one endpoint, at one moment.  Keeping the model id and the warning text
+    with the question is what lets a refresh or a model change withdraw it
+    instead of leaving the old provider behind the same button.
+    """
+
+    text: str
+    provider: object
+    model: str
+    warning: str
 
 
 def fact_payload(kind, amount, *, when="", description="", category="",
@@ -379,7 +395,7 @@ class BuyOrWait(App):
     ask_worker: Worker | None = None
     chat_session: object | None = None
     #: A hosted question waiting for the person's explicit confirmation.
-    pending_ask: tuple[str, object] | None = None
+    pending_ask: PendingAsk | None = None
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -838,13 +854,14 @@ class BuyOrWait(App):
 
         Nothing is sent here.  The warning is shown, the question is kept, and
         only the "Allow sending" control can reach :meth:`start_ask` with
-        ``consent=True``.
+        ``consent=True``.  The held record names the model and the exact warning
+        that was shown, so a later change can withdraw it.
         """
         from code import chat
         from code.providers import privacy_warning
 
         warning = privacy_warning(provider, honour_acceptance=False)
-        self.pending_ask = (text, provider)
+        self.pending_ask = PendingAsk(text, provider, self.model_choice, warning)
         self._chat_log(warning or chat.CONSENT_MESSAGE, AMBER)
         self._chat_log(
             f'Nothing has been sent. Press "Allow sending" to send this question '
@@ -855,15 +872,38 @@ class BuyOrWait(App):
         self.query_one("#chat-consent", Button).disabled = False
 
     def allow_pending_ask(self) -> Worker | None:
-        """Send the held question after the person's explicit confirmation."""
+        """Send the held question after the person's explicit confirmation.
+
+        The yes is only valid for the warning and the model it was shown for.
+        If either changed while the question was held, it is withdrawn instead
+        of sending with a stale consent.
+        """
+        from code.providers import privacy_warning
+
         pending = self.pending_ask
         self._clear_pending_ask()
         if pending is None:
             self._chat_log("Nothing is waiting to be sent.", MUTED)
             return None
-        text, provider = pending
+        if pending.model != self.model_choice:
+            self._chat_log(
+                "The model changed after that warning, so the held question was "
+                "not sent. Ask again to review the new model's terms.",
+                AMBER,
+            )
+            self._set_chat_progress("Cancelled: the model changed.", MUTED)
+            return None
+        warning = privacy_warning(pending.provider, honour_acceptance=False)
+        if not warning or warning != pending.warning:
+            self._chat_log(
+                "The privacy warning no longer applies to this selection, so the "
+                "held question was not sent. Ask again to review its terms.",
+                AMBER,
+            )
+            self._set_chat_progress("Cancelled: the warning changed.", MUTED)
+            return None
         self._chat_log("Allowed for this question.", MUTED)
-        return self.start_ask(text, provider, consent=True)
+        return self.start_ask(pending.text, pending.provider, consent=True)
 
     def action_facts(self) -> None:
         """Print the tools the last answer used, or say none has run yet."""
@@ -983,11 +1023,23 @@ class BuyOrWait(App):
 
     @on(Button.Pressed, "#refresh-position")
     def _refresh(self, event: Button.Pressed) -> None:
+        held = self.pending_ask is not None
+        if held:
+            # The refresh clears the log that carried the warning, so the
+            # consent that warning asked for must go with it.
+            self._clear_pending_ask()
+            self._set_chat_progress("", MUTED)
         if self.account is not None:
             self.account = service.load_user(
                 str((self.account.get("profile") or {}).get("user_id") or "")
             ) or self.account
         self.refresh_all()
+        if held:
+            self._chat_log(
+                "The held question was withdrawn when the screen refreshed. Ask "
+                "again to review the model's terms.",
+                AMBER,
+            )
 
     @on(Button.Pressed, "#buy-go")
     def _buy(self, event: Button.Pressed) -> None:
@@ -1111,7 +1163,20 @@ class BuyOrWait(App):
 
     @on(Select.Changed, "#model-select")
     def _model_changed(self, event: Select.Changed) -> None:
-        self.model_choice = str(event.value or model_registry.NO_MODEL)
+        new_choice = str(event.value or model_registry.NO_MODEL)
+        if new_choice != self.model_choice and self.pending_ask is not None:
+            # The held yes was for the previous model's warning.  Leaving it
+            # armed would let the same button send to a different provider.
+            self._clear_pending_ask()
+            self._set_chat_progress("", MUTED)
+            self.query_one("#chat-log", RichLog).write(
+                Text(
+                    "The model changed, so the held question and its permission "
+                    "were withdrawn. Ask again to review the new model's terms.",
+                    style=AMBER,
+                )
+            )
+        self.model_choice = new_choice
         log = self.query_one("#chat-log", RichLog)
         if self.model_choice == model_registry.NO_MODEL:
             log.write(Text(
