@@ -13,9 +13,10 @@ rule table and present the result as a conversation: an honest "I have no model"
 is worth more than a confident FAQ bot, and it is the difference this module was
 written to remove.
 
-The loop is bounded by ``max_tool_calls`` and by the provider's own call budget
-(``BUY_WAIT_LLM_MAX_CALLS``), so a model that keeps asking cannot run away with a
-session.
+The loop is bounded by ``max_tool_calls`` **dispatched calls** and by the
+provider's own call budget (``BUY_WAIT_LLM_MAX_CALLS``), so a model that keeps
+asking cannot run away with a session.  A batch that asks for more calls than the
+remainder is trimmed: the overflow gets a tool error, never a kernel call.
 """
 from __future__ import annotations
 
@@ -116,6 +117,12 @@ class NoModel(RuntimeError):
 
 #: The answer shown when no kernel result exists in this turn to check against.
 UNVERIFIED_REPLY = "I could not verify that against your ledger."
+
+#: Shown when the run used or exceeded its dispatched-call budget.
+BUDGET_REPLY = (
+    "I stopped after the tool budget ran out. The figures above are the "
+    "kernel's; nothing was estimated."
+)
 
 #: Every run of digits in a reply: one figure, however it is grouped.
 _FIGURE = re.compile(r"\d[\d,]*(?:\.\d+)?")
@@ -293,6 +300,25 @@ def _provider(provider=None):
     return provider
 
 
+def _tool_message(call_id, result: dict) -> dict:
+    """One protocol-correct tool reply, whatever the tool said."""
+    return {
+        "role": "tool",
+        "tool_call_id": str(call_id),
+        "content": json.dumps(result, default=str)[:4000],
+    }
+
+
+def _budget_error(limit: int) -> dict:
+    """The fail-closed reply for a call the run had no budget left to dispatch."""
+    return {
+        "error": (
+            f"tool call budget exhausted: this run dispatches at most {limit} "
+            "tool call(s), and this call was not executed"
+        )
+    }
+
+
 def ask(account, text: str, provider=None, *, max_tool_calls: int = 4) -> dict:
     """Answer a question with tools, or say plainly that there is no model.
 
@@ -302,6 +328,11 @@ def ask(account, text: str, provider=None, *, max_tool_calls: int = 4) -> dict:
     grounded in a tool result from this turn; an answer with no kernel result is
     a refusal, and a figure no tool returned replaces the prose with a summary
     of the results.
+
+    ``max_tool_calls`` caps the number of *dispatched* calls, not the number of
+    model turns.  A batch that asks for more than the remainder is trimmed: each
+    overflow call still gets a tool error, so the conversation stays
+    protocol-correct, and the run ends with ``reason="tool_budget"``.
     """
     provider = _provider(provider)
     if provider is None:
@@ -337,8 +368,12 @@ def ask(account, text: str, provider=None, *, max_tool_calls: int = 4) -> dict:
     ]
     ran: list[str] = []
     observations: list[dict] = []
+    budget = max(0, int(max_tool_calls))
+    remaining = budget
 
-    for _ in range(max(1, int(max_tool_calls))):
+    # One turn beyond the call budget: a model that has spent its last call may
+    # still answer from the results it already has.
+    for _ in range(budget + 1):
         try:
             message = bound.invoke(messages)
         except Exception as exc:
@@ -364,29 +399,41 @@ def ask(account, text: str, provider=None, *, max_tool_calls: int = 4) -> dict:
                 "verified": verified,
             }
         messages.append(_assistant_message(content, calls))
+        overflowed = False
         for call in calls:
-            name = str((call or {}).get("name") or "")
-            args = (call or {}).get("args") or {}
+            entry = call or {}
+            name = str(entry.get("name") or "")
+            call_id = str(entry.get("id") or name or "call")
+            # The budget is consumed per dispatched call, before dispatch.  An
+            # overflow call never reaches the kernel; it still needs a reply so
+            # the next turn, if any, is well formed.
+            if remaining <= 0:
+                overflowed = True
+                messages.append(_tool_message(call_id, _budget_error(budget)))
+                continue
+            remaining -= 1
+            args = entry.get("args") or {}
             try:
                 result = dispatch(account, name, args)
             except Exception as exc:
                 result = {"error": f"{type(exc).__name__}: {exc}"}
             ran.append(name)
             observations.append(result)
-            messages.append({
-                "role": "tool",
-                "tool_call_id": str((call or {}).get("id") or name),
-                "content": json.dumps(result, default=str)[:4000],
-            })
+            messages.append(_tool_message(call_id, result))
+        if overflowed:
+            return {
+                "reply": BUDGET_REPLY,
+                "tool_calls": ran,
+                "model": getattr(provider, "name", "provider"),
+                "reason": "tool_budget",
+                "verified": False,
+            }
         if provider.remaining_calls <= 0:
             break
         provider.reserve_call()
 
     return {
-        "reply": (
-            "I stopped after the tool budget ran out. The figures above are the "
-            "kernel's; nothing was estimated."
-        ),
+        "reply": BUDGET_REPLY,
         "tool_calls": ran,
         "model": getattr(provider, "name", "provider"),
         "reason": "budget",
