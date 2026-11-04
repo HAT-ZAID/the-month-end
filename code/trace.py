@@ -72,12 +72,16 @@ _PASSWORD_ASSIGNMENT = re.compile(
     r"|(?:set-)?cookie\s*:\s*[^\n]+"
     r"|[?&]sig=\S+"
     r"|\bcookie\s*=\s*\S+"
-    # Both runs are bounded, and the value cannot contain ":" — without that
-    # exclusion a colon-dense body ("a:1,a:1,…") restarts a user run at every
-    # offset and then swallows the rest of the string as the value, which is
-    # quadratic. With it, a scheme-less DSN still redacts, and the scheme form
-    # is handled by _URL_USERINFO before this pattern runs.
-    r"|(?<![\w.])([A-Za-z0-9._~%+-]{1,256}):([^\s@/:]{1,64})@(?=[A-Za-z0-9\[])"
+    # Start the match only at the beginning of the username run: the lookbehind
+    # excludes every username character, so a long run of "-+%~" has one
+    # candidate start instead of one per offset and the run is scanned once.
+    # Neither run is bounded, because a real username or password can exceed
+    # any fixed cap. The value may not contain ":" — without that exclusion a
+    # colon-dense body ("a:1,a:1,…") starts a fresh password run at each colon
+    # and swallows the rest of the string, which is quadratic. With it, a
+    # scheme-less DSN still redacts, and the scheme form is handled by
+    # _URL_USERINFO before this pattern runs.
+    r"|(?<![A-Za-z0-9._~%+-])([A-Za-z0-9._~%+-]+):([^\s@/:]+)@(?=[A-Za-z0-9\[])"
     # A provider error can quote a JSON body, where the name sits inside quotes
     # and the separator is a colon inside them.
     r"|\"\w*(?:api|access|session|refresh|client|private|secret|id)?(?:key|token|secret)\"\s*:\s*\"[^\"]+",

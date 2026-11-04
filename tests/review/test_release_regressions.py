@@ -862,3 +862,29 @@ def test_the_natural_wait_phrasing_ships():
     )
     assert verify_claims("Wait until 2026-05-15 and then pay in full.", row)["ok"] is True
     assert verify_claims("The plan pays in full on 2026-05-15.", row)["ok"] is True
+
+
+# --- the round-nineteen findings, pinned at their real edge ------------------
+
+
+def test_a_scheme_less_userinfo_is_redacted_whatever_the_run_length():
+    # The review's case is a 65-character username; a real credential can be
+    # longer, and neither the username nor the password may have a fixed cap.
+    for size in (65, 300):
+        for password in ("hunter2value", "p" * 100):
+            user = "a" * size
+            cleaned = sanitize({"e": f"{user}:{password}@gateway.example"})["e"]
+            assert password not in cleaned, (size, len(password))
+            assert cleaned.endswith("gateway.example"), cleaned
+
+
+def test_a_long_username_run_is_scanned_once_not_at_every_offset():
+    import time
+
+    # A run of username characters with no colon used to let the engine start
+    # a match at every offset; the start-anchored lookbehind gives it one.
+    body = "-+%~" * 100_000 + ":"
+    started = time.monotonic()
+    sanitize({"e": body})
+    elapsed = time.monotonic() - started
+    assert elapsed < 1.0, (len(body), elapsed)
