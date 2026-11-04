@@ -157,6 +157,22 @@ def test_a_real_balance_still_decides(db):
     assert len(account["requests"]) == 1
 
 
+def test_the_missing_fact_vocabulary_has_one_definition():
+    """CR-14: the kernel and the service must name the same two facts, once.
+
+    Two tuples kept in step by comments drift silently: rename a field in one
+    module and the other keeps refusing with a stale word.  The kernel is the
+    lower layer, so it owns the vocabulary and the service imports it.
+    """
+    from code import solver
+
+    assert service.MISSING_FACTS is solver.MISSING_FACTS
+    assert solver.MISSING_FACTS == (
+        ("current_available_balance", "balance"),
+        ("minimum_balance_to_keep", "minimum balance to keep"),
+    )
+
+
 # --------------------------------------------------------------- onboarding
 
 

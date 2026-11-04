@@ -486,11 +486,11 @@ def _build_candidates(state: dict, base: dict, ctx: dict) -> list[dict]:
 #: "how much can I spend right now without dropping below my floor".
 _POSITION_PROBE = "1000000000000"
 
-#: The profile facts a position cannot be valued without, paired with the words
-#: the refusal uses.  Kept in step with ``code.service.MISSING_FACTS``: the
-#: kernel and the service name the same two contract fields, so an unanswered
-#: fact reads identically whether it reaches a decision or a position (CR-14).
-POSITION_REQUIRED_FACTS = (
+#: The profile facts the kernel cannot invent, paired with the plain words a
+#: refusal uses for them.  This definition lives in the kernel because the
+#: kernel is the lower layer: :mod:`code.service` imports it, so a decision and
+#: a position name an unanswered fact with the same words (CR-14).
+MISSING_FACTS = (
     ("current_available_balance", "balance"),
     ("minimum_balance_to_keep", "minimum balance to keep"),
 )
@@ -564,7 +564,7 @@ def position(user_id, as_of, profile, events, fx_rows, messages_df=None):
 
     profile = profile or {}
     missing = [
-        label for field, label in POSITION_REQUIRED_FACTS
+        label for field, label in MISSING_FACTS
         if not str(profile.get(field) or "").strip()
     ]
     if missing:

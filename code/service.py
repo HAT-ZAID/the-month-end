@@ -24,6 +24,7 @@ from code import account as acct
 from code import accounts as store
 from code.accounts import AccountExistsError
 from code.forecast import DISCRETIONARY_CATEGORIES, FORECASTABLE_EXPENSE_CATEGORIES
+from code.solver import MISSING_FACTS
 from code.solver import position as kernel_position
 from code.solver import solve_request
 
@@ -83,20 +84,19 @@ class EngineError(ValueError):
     """A request the engine refuses before it can become a wrong number."""
 
 
-#: The profile facts the kernel cannot invent, paired with the plain words a
-#: refusal uses for them.  An unanswered fact stays ``""`` (unknown) all the way
-#: to the decision gate: computing against an invented zero is how a skipped
-#: onboarding question became a confident "not affordable" verdict (CR-14).
-MISSING_FACTS = (
-    ("current_available_balance", "balance"),
-    ("minimum_balance_to_keep", "minimum balance to keep"),
-)
+# The profile facts the kernel cannot invent, paired with the plain words a
+# refusal uses for them.  An unanswered fact stays ``""`` (unknown) all the way
+# to the decision gate: computing against an invented zero is how a skipped
+# onboarding question became a confident "not affordable" verdict (CR-14).
+# Defined once in the kernel and imported above, so this module cannot drift
+# into naming fields or labels a position does not name.
 
 
 def missing_facts(account) -> list[str]:
     """What a decision still needs, as refusals that name each field.
 
     An empty list means the account is answered well enough to decide.  The
+    vocabulary is the kernel's own (:data:`code.solver.MISSING_FACTS`); the
     check is presence only: a value that is present is parsed by
     :func:`update_profile`, never reinterpreted here.
     """
