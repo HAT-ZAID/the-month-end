@@ -72,16 +72,6 @@ _PASSWORD_ASSIGNMENT = re.compile(
     r"|(?:set-)?cookie\s*:\s*[^\n]+"
     r"|[?&]sig=\S+"
     r"|\bcookie\s*=\s*\S+"
-    # Start the match only at the beginning of the username run: the lookbehind
-    # excludes every username character, so a long run of "-+%~" has one
-    # candidate start instead of one per offset and the run is scanned once.
-    # Neither run is bounded, because a real username or password can exceed
-    # any fixed cap. The value may not contain ":" — without that exclusion a
-    # colon-dense body ("a:1,a:1,…") starts a fresh password run at each colon
-    # and swallows the rest of the string, which is quadratic. With it, a
-    # scheme-less DSN still redacts, and the scheme form is handled by
-    # _URL_USERINFO before this pattern runs.
-    r"|(?<![A-Za-z0-9._~%+-])([A-Za-z0-9._~%+-]+):([^\s@/:]+)@(?=[A-Za-z0-9\[])"
     # A provider error can quote a JSON body, where the name sits inside quotes
     # and the separator is a colon inside them.
     r"|\"\w*(?:api|access|session|refresh|client|private|secret|id)?(?:key|token|secret)\"\s*:\s*\"[^\"]+",
@@ -98,6 +88,19 @@ _PASSWORD_PROSE = re.compile(
 #: credentials in its base URL, and a provider error is persisted verbatim, so
 #: the userinfo part has to go even though it matches no key-name pattern.
 _URL_USERINFO = re.compile(r"(?<=://)[^/\s@]+@")
+#: The scheme-less form (``alice:secret@gateway.example``) is found by scanning
+#: out from each ``@`` rather than by a regex.  A password may contain colons
+#: (``alice:part1:part2@gateway.example``), and letting a regex value class
+#: accept ``:`` makes the engine restart at every colon in a colon-dense body,
+#: which is quadratic.  The scan in :func:`_redact_scheme_less_userinfo` walks
+#: each character at most once.
+_USERINFO_STOP = frozenset(" \t\r\n\f\v@/")
+_USERINFO_USER = frozenset(
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._~%+-"
+)
+_USERINFO_HOST = frozenset(
+    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789["
+)
 #: CamelCase compounds (``apiKey``, ``sessionToken``, ``clientSecret``) have no
 #: separator for the pattern above to anchor on, so they are matched separately.
 _CAMEL_SECRET_KEY = re.compile(
@@ -186,9 +189,48 @@ def _redact_pem(text: str) -> str:
         position = end.end()
 
 
+def _redact_scheme_less_userinfo(text: str) -> str:
+    """Redact the secret half of every scheme-less ``user:secret@host``.
+
+    Anchoring on ``@`` keeps the pass linear: each backward walk stops at the
+    previous separator, so one character belongs to one walk.  The username is
+    kept (it is not the secret), and everything between its colon and the ``@``
+    becomes :data:`REDACTED`.  A password may contain colons, so the first colon
+    after the longest username run is the separator, not the last one.
+    """
+    pieces: list[str] = []
+    position = 0
+    at = text.find("@")
+    while at != -1:
+        following = at + 1
+        if following < len(text) and text[following] in _USERINFO_HOST:
+            run_start = at - 1
+            while run_start >= 0 and text[run_start] not in _USERINFO_STOP:
+                run_start -= 1
+            run_start += 1
+            colon = text.find(":", run_start, at)
+            while colon != -1:
+                user_start = colon - 1
+                while user_start >= run_start and text[user_start] in _USERINFO_USER:
+                    user_start -= 1
+                # A non-empty username run is a valid boundary: the scan either
+                # stopped at ``run_start`` (after a stop character) or at a
+                # non-username character.
+                if user_start < colon - 1 and colon + 1 < at:
+                    pieces.append(text[position:colon + 1])
+                    pieces.append(REDACTED)
+                    position = at
+                    break
+                colon = text.find(":", colon + 1, at)
+        at = text.find("@", at + 1)
+    pieces.append(text[position:])
+    return "".join(pieces)
+
+
 def _scrub_text(value: str) -> str:
     """One string, with every known shape and registered literal replaced."""
     cleaned = _URL_USERINFO.sub(f"{REDACTED}@", value)
+    cleaned = _redact_scheme_less_userinfo(cleaned)
     # Count-bounded: a hostile body can repeat a BEGIN marker thousands of
     # times, and each one costs a window scan.
     cleaned = _PUTTY_PRIVATE.sub(REDACTED, cleaned)

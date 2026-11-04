@@ -419,6 +419,17 @@ def test_redaction_covers_the_shapes_a_gateway_error_echoes():
         assert "[REDACTED]" in sanitize({"e": text})["e"], text
 
 
+def test_a_multi_colon_scheme_less_userinfo_is_redacted_whole():
+    from code.trace import REDACTED, sanitize
+
+    cleaned = sanitize(
+        {"e": "connect failed for alice:part1:part2:part3@gateway.example"}
+    )["e"]
+    assert cleaned == f"connect failed for alice:{REDACTED}@gateway.example"
+    for fragment in ("part1", "part2", "part3"):
+        assert fragment not in cleaned
+
+
 def test_a_registered_secret_is_redacted_whatever_its_shape():
     from code.trace import register_secret, sanitize
 
