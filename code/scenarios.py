@@ -9,10 +9,16 @@ caller's account is byte-for-byte what it was before the call.
 Three hypotheses are supported: pay for the request on another day
 (``pay_on``), shift it by a whole number of days (``delay_days``), or re-price
 one committed expense (``change_expense``).  A field the kind cannot apply, a
-date or amount that cannot be read, a request or event that does not exist, and
-a re-pricing of an income row are all refused with :class:`ValueError` before the
-kernel runs.  Ignoring half a hypothesis would produce a confident number about a
-question nobody asked.
+date or amount that cannot be read, a request or event that does not exist, a
+re-pricing of an income row, a change that would remove or reduce a protected
+expense, and a record that belongs to another account are all refused with
+:class:`ValueError` before the kernel runs.  Ignoring half a hypothesis would
+produce a confident number about a question nobody asked; inventing income or
+spending protected money would produce one about a position the person never
+had.
+
+:func:`compare_scenarios` runs two hypotheses through the same path and names
+the machine fields that differ, so a caller can see exactly what moved.
 """
 from __future__ import annotations
 
@@ -76,8 +82,9 @@ def simulate_scenario(account, scenario) -> dict:
         )
 
     kind = _kind(scenario)
+    owner = _owner(account)
     copied = copy.deepcopy(account)
-    assumptions = _apply(copied, scenario, kind)
+    assumptions = _apply(copied, scenario, kind, owner)
 
     request_id = str(scenario.request_id or "").strip()
     decision = service.decide(copied, request_id)
@@ -89,6 +96,38 @@ def simulate_scenario(account, scenario) -> dict:
         "kernel_result": {name: decision.get(name) for name in KERNEL_FIELDS},
         "assumptions": assumptions,
         "persisted": False,
+    }
+
+
+def compare_scenarios(account, baseline, alternative) -> dict:
+    """Decide two hypotheses and name the machine fields that moved.
+
+    Both sides run through :func:`simulate_scenario`, so each gets its own copy
+    of the account and neither is saved.  ``delta_fields`` lists the contract
+    fields whose value differs, in :data:`KERNEL_FIELDS` order; an empty list
+    means the two hypotheses decide the request identically.
+    """
+    if not isinstance(baseline, Scenario):
+        raise TypeError(
+            f"compare_scenarios needs a Scenario baseline, got {type(baseline).__name__}"
+        )
+    if not isinstance(alternative, Scenario):
+        raise TypeError(
+            "compare_scenarios needs a Scenario alternative, got "
+            f"{type(alternative).__name__}"
+        )
+
+    left = simulate_scenario(account, baseline)
+    right = simulate_scenario(account, alternative)
+    delta_fields = [
+        name
+        for name in KERNEL_FIELDS
+        if left["kernel_result"].get(name) != right["kernel_result"].get(name)
+    ]
+    return {
+        "baseline": left,
+        "alternative": right,
+        "delta_fields": delta_fields,
     }
 
 
@@ -105,9 +144,9 @@ def _kind(scenario) -> str:
     return kind
 
 
-def _apply(copied, scenario, kind) -> list[str]:
+def _apply(copied, scenario, kind, owner) -> list[str]:
     """Apply exactly one change to ``copied`` and say what it assumed."""
-    request = _request_row(copied, scenario.request_id)
+    request = _request_row(copied, scenario.request_id, owner)
     lines = [
         "the account was deep-copied; the original is unchanged",
         f"request {request['request_id']} keeps its amount of "
@@ -137,12 +176,9 @@ def _apply(copied, scenario, kind) -> list[str]:
         )
     else:  # change_expense
         _refuse_unused(scenario, keep=("request_id", "event_id", "new_amount"))
-        event = _event_row(copied, scenario.event_id)
-        if str(event.get("direction") or "").strip().lower() != "debit":
-            raise ValueError(
-                "change_expense only re-prices a debit movement; inventing income "
-                "is refused"
-            )
+        event = _event_row(copied, scenario.event_id, owner)
+        _refuse_income(event)
+        _refuse_protected(copied, event)
         amount = _non_negative_amount(scenario.new_amount)
         before = str(event.get("amount") or "")
         event["amount"] = str(amount)
@@ -165,22 +201,88 @@ def _refuse_unused(scenario, *, keep) -> None:
         )
 
 
-def _request_row(copied, request_id) -> dict:
+def _refuse_income(event) -> None:
+    """Refuse to re-price anything that is not a committed expense debit.
+
+    The kernel counts an income row forward; lowering or raising it inside a
+    what-if would invent (or erase) money the person did not move.  A direction
+    that claims ``debit`` does not make an income row spendable, so the event
+    type is checked too.
+    """
+    event_type = str(event.get("event_type") or "").strip().lower()
+    direction = str(event.get("direction") or "").strip().lower()
+    if direction == "debit" and event_type in ("expense", "subscription"):
+        return
+    label = event_type or "unclassified"
+    raise ValueError(
+        f"change_expense only re-prices an expense or subscription debit; "
+        f"row {event.get('event_id')!r} is {label!r}, so re-pricing it would "
+        "invent income and is refused"
+    )
+
+
+def _refuse_protected(copied, event) -> None:
+    """Refuse to touch an expense in a category the person asked to protect."""
+    profile = copied.get("profile") or {}
+    protected = _profile_categories(profile, "expense_categories_to_protect")
+    category = _category_word(event.get("category"))
+    if category and category in protected:
+        raise ValueError(
+            f"row {event.get('event_id')!r} is in protected category "
+            f"{category!r}; changing or removing a protected expense is refused"
+        )
+
+
+def _profile_categories(profile, key) -> set[str]:
+    raw = str((profile or {}).get(key, "") or "")
+    return {
+        word
+        for word in (_category_word(part) for part in raw.replace(",", "|").split("|"))
+        if word
+    }
+
+
+def _category_word(value) -> str:
+    """The lower-case, underscore-joined form of a category label."""
+    text = str(value or "").strip().lower()
+    for separator in (" ", "-", "/"):
+        text = text.replace(separator, "_")
+    return "_".join(part for part in text.split("_") if part)
+
+
+def _owner(account) -> str:
+    profile = account.get("profile") or {}
+    return str((profile or {}).get("user_id") or "me")
+
+
+def _refuse_foreign(row, owner, kind) -> None:
+    row_user = str(row.get("user_id") or "").strip()
+    if row_user and row_user != owner:
+        row_id = row.get("request_id") or row.get("event_id")
+        raise ValueError(
+            f"{kind} {row_id!r} belongs to another account ({row_user!r}); "
+            f"this scenario may only target {owner!r}"
+        )
+
+
+def _request_row(copied, request_id, owner) -> dict:
     wanted = str(request_id or "").strip()
     if not wanted:
         raise ValueError("a scenario needs the request_id it is asked about")
     for row in copied.get("requests") or []:
         if str(row.get("request_id")) == wanted:
+            _refuse_foreign(row, owner, "request")
             return row
     raise ValueError(f"no request {wanted!r} on this account")
 
 
-def _event_row(copied, event_id) -> dict:
+def _event_row(copied, event_id, owner) -> dict:
     wanted = str(event_id or "").strip()
     if not wanted:
         raise ValueError("change_expense needs the event_id of the expense to re-price")
     for row in copied.get("events") or []:
         if str(row.get("event_id")) == wanted:
+            _refuse_foreign(row, owner, "event")
             return row
     raise ValueError(f"no event {wanted!r} on this account")
 
