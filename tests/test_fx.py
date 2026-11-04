@@ -45,3 +45,33 @@ def test_after_last_snapshot_stays_on_last_prior(fx_df):
     r = resolve_rate(fx_df.to_dict("records"), "USD", "EUR", "2026-09-20")
     assert r["method"] == "prior"
     assert r["flag"] == "FX_UNKNOWN"
+
+
+def _one_rate(value):
+    return [
+        {
+            "from_currency": "EUR",
+            "to_currency": "USD",
+            "rate_date": "2026-01-01",
+            "rate": value,
+        }
+    ]
+
+
+def test_a_negative_rate_fails_closed():
+    r = resolve_rate(_one_rate("-1"), "EUR", "USD", "2026-01-01")
+    assert r["rate"] is None
+    assert r["flag"] == "FX_UNKNOWN"
+
+
+def test_a_non_numeric_rate_fails_closed_without_raising():
+    r = resolve_rate(_one_rate("abc"), "EUR", "USD", "2026-01-01")
+    assert r["rate"] is None
+    assert r["flag"] == "FX_UNKNOWN"
+
+
+def test_a_non_finite_or_zero_rate_fails_closed():
+    for bad in ("0", "Infinity", "-Infinity", "NaN"):
+        r = resolve_rate(_one_rate(bad), "EUR", "USD", "2026-01-01")
+        assert r["rate"] is None, bad
+        assert r["flag"] == "FX_UNKNOWN", bad

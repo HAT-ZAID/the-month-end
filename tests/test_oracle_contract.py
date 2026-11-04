@@ -42,6 +42,34 @@ def test_active_event_without_date_fails_closed():
     assert result["fail_closed"] is True
     assert result["fail_closed_reason"] == "DATE_UNKNOWN"
 
+def test_a_negative_fx_rate_cannot_turn_a_debit_into_a_credit():
+    # 5000 EUR at the signed rate -1 would become +5000 and raise safe from 0
+    # to 6000. It is not a rate: the row fails closed as FX_UNKNOWN.
+    result = solve_safe_amount(
+        "u1", "2026-01-01", "6000", _profile(),
+        [_event(amount="5000", currency="EUR")],
+        [{"from_currency": "EUR", "to_currency": "USD",
+          "rate_date": "2026-01-05", "rate": "-1"}],
+        set(),
+    )
+    assert result["fail_closed"] is True
+    assert result["fail_closed_reason"] == "FX_UNKNOWN"
+    assert result["safe_amount"] == Decimal("0")
+
+
+def test_a_non_numeric_fx_rate_fails_closed_without_raising():
+    result = solve_safe_amount(
+        "u1", "2026-01-01", "6000", _profile(),
+        [_event(amount="5000", currency="EUR")],
+        [{"from_currency": "EUR", "to_currency": "USD",
+          "rate_date": "2026-01-05", "rate": "abc"}],
+        set(),
+    )
+    assert result["fail_closed"] is True
+    assert result["fail_closed_reason"] == "FX_UNKNOWN"
+    assert result["safe_amount"] == Decimal("0")
+
+
 def test_valid_rows_still_compute():
     result = solve_safe_amount("u1", "2026-01-01", "7000", _profile(), [_event()], [], set())
     assert result["fail_closed"] is False
