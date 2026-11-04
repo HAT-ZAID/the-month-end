@@ -14,7 +14,10 @@ it over in the shape the contract already defines.
 from __future__ import annotations
 
 import json
+from datetime import date
 from pathlib import Path
+
+from code.amounts import ISO_CODES, strict_decimal
 
 ACCOUNT_VERSION = 1
 
@@ -153,6 +156,127 @@ def save_account(account: dict, path=None, repo_root=None) -> Path:
         json.dump(payload, handle, indent=2, sort_keys=False)
         handle.write("\n")
     return target
+
+
+def _present(value) -> bool:
+    """Whether a contract field carries an answer at all.
+
+    A blank value means *unknown*, not zero: the person has not answered yet,
+    and the decision path names the missing fact instead of computing against
+    an invented figure.
+    """
+    return bool(str(value if value is not None else "").strip())
+
+
+def _check_amount(problems: list[str], label: str, value) -> None:
+    """Reject a present amount that is not a finite, non-negative Decimal."""
+    if not _present(value):
+        return
+    amount = strict_decimal(value)
+    if amount is None:
+        problems.append(f"{label}: {str(value)!r} is not a finite amount")
+    elif amount < 0:
+        problems.append(f"{label}: the amount cannot be negative ({str(value)!r})")
+
+
+def _check_date(problems: list[str], label: str, value) -> None:
+    """Reject a present date the kernel cannot read."""
+    if not _present(value):
+        return
+    try:
+        date.fromisoformat(str(value).strip())
+    except ValueError:
+        problems.append(f"{label}: {str(value)!r} is not an ISO date (YYYY-MM-DD)")
+
+
+def _check_currency(problems: list[str], label: str, value) -> None:
+    """Reject a present currency outside the contract's ISO set."""
+    if not _present(value):
+        return
+    code = str(value).strip()
+    if code not in ISO_CODES:
+        problems.append(
+            f"{label}: {code!r} is not one of the ISO currency codes "
+            f"({', '.join(sorted(ISO_CODES))})"
+        )
+
+
+def _check_direction(problems: list[str], label: str, value) -> None:
+    """Reject a present direction the ledger would silently misread."""
+    if not _present(value):
+        return
+    direction = str(value).strip()
+    if direction not in DIRECTIONS:
+        problems.append(
+            f"{label}: unknown direction {direction!r}; "
+            f"use one of {', '.join(DIRECTIONS)}"
+        )
+
+
+def validate_account(account: dict) -> list[str]:
+    """Every reason this account would store a fact the kernel cannot trust.
+
+    Called before a save.  An empty list means the account may be written; a
+    blank value stays unknown, so only a value that is present and malformed is
+    reported.  Duplicate event ids are refused because two rows sharing one id
+    make an amendment ambiguous -- the ledger cannot tell which row a later
+    correction refers to.
+    """
+    if not isinstance(account, dict):
+        return ["the account must be a JSON object"]
+    problems: list[str] = []
+    profile = account.get("profile") or {}
+    if not isinstance(profile, dict):
+        problems.append("the profile must be a JSON object")
+        profile = {}
+    _check_currency(problems, "profile home currency", profile.get("home_currency"))
+    for name in ("current_available_balance", "minimum_balance_to_keep"):
+        _check_amount(problems, f"profile {name}", profile.get(name))
+
+    seen_events: set[str] = set()
+    for position, event in enumerate(account.get("events") or [], start=1):
+        if not isinstance(event, dict):
+            problems.append(f"event {position}: the record must be a JSON object")
+            continue
+        event_id = str(event.get("event_id") or "").strip()
+        label = event_id or f"event {position}"
+        if event_id:
+            if event_id in seen_events:
+                problems.append(f"{label}: duplicate event_id {event_id!r}")
+            else:
+                seen_events.add(event_id)
+        _check_direction(problems, label, event.get("direction"))
+        for name in ("amount", "minimum_allowed_amount"):
+            _check_amount(problems, f"{label} {name}", event.get(name))
+        _check_currency(problems, f"{label} currency", event.get("currency"))
+        for name in ("event_date", "settlement_date"):
+            _check_date(problems, f"{label} {name}", event.get(name))
+
+    for position, request in enumerate(account.get("requests") or [], start=1):
+        if not isinstance(request, dict):
+            problems.append(f"request {position}: the record must be a JSON object")
+            continue
+        request_id = str(request.get("request_id") or "").strip()
+        label = request_id or f"request {position}"
+        _check_amount(
+            problems, f"{label} requested_amount", request.get("requested_amount")
+        )
+        for name in ("request_date", "desired_completion_date"):
+            _check_date(problems, f"{label} {name}", request.get(name))
+
+    for position, option in enumerate(account.get("options") or [], start=1):
+        if not isinstance(option, dict):
+            problems.append(f"payment option {position}: the record must be a JSON object")
+            continue
+        option_id = str(option.get("payment_option_id") or "").strip()
+        label = option_id or f"payment option {position}"
+        for name in ("payment_amount", "financing_fee", "total_payable_amount"):
+            _check_amount(problems, f"{label} {name}", option.get(name))
+        _check_date(
+            problems, f"{label} first_payment_date", option.get("first_payment_date")
+        )
+
+    return problems
 
 
 def as_list(value) -> list[str]:

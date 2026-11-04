@@ -25,6 +25,7 @@ from code.account import (
     PROFILE_FIELDS,
     REQUEST_FIELDS,
     blank_account,
+    validate_account,
 )
 
 SCHEMA_VERSION = 1
@@ -170,7 +171,13 @@ def save(account: dict, name=None, path=None, repo_root=None) -> str:
     The repeated entities are replaced wholesale. An account is small (dozens of
     rows), and replacing is the only version that cannot leave a half-written
     ledger behind if the process dies mid-write.
+
+    A malformed account is refused before anything is written: the store never
+    becomes the place a bad fact is discovered.
     """
+    errors = validate_account(account)
+    if errors:
+        raise ValueError("; ".join(errors))
     user_name = normalise_name(
         name or account.get("profile", {}).get("user_id") or "me"
     )
