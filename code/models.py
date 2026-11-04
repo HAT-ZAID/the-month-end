@@ -228,6 +228,12 @@ def provider_for(choice: str, env=None):
         return None
     provider, model = choice.split(":", 1)
     env[PROVIDER_ENV] = provider
+    if provider == "ollama" and not str(env.get(OLLAMA_BASE_URL_ENV) or "").strip():
+        # The menu probes the documented base, else the legacy ``OLLAMA_URL``,
+        # else the provider default; the builder reads only the documented
+        # variable.  Copy the resolved base across so the turn and the probe
+        # target the same host instead of silently falling back to localhost.
+        env[OLLAMA_BASE_URL_ENV] = _configured_ollama_base(env)
     if model and model != "default":
         env[MODEL_ENV] = model
         # Ollama reads its own model variable; set both so the choice is not

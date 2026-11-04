@@ -237,6 +237,25 @@ def test_a_blank_documented_base_falls_back_to_the_legacy_name(monkeypatch):
     assert probed == ["http" "://" "127.0.0.1:8888/api/tags"]
 
 
+def test_the_legacy_ollama_url_is_also_where_the_selected_model_is_built():
+    """The menu probes the legacy URL, so the turn must go to the same host."""
+    provider = models.provider_for(
+        "ollama:tiny:latest", env={"OLLAMA_URL": "http" "://" "127.0.0.1:8888"}
+    )
+    assert provider is not None
+    assert provider.base_url == "http" "://" "127.0.0.1:8888"
+
+
+def test_the_documented_ollama_base_wins_when_the_selected_model_is_built():
+    env = {
+        OLLAMA_BASE_URL_ENV: "http" "://" "127.0.0.1:9999",
+        "OLLAMA_URL": "http" "://" "127.0.0.1:8888",
+    }
+    provider = models.provider_for("ollama:tiny:latest", env=env)
+    assert provider is not None
+    assert provider.base_url == "http" "://" "127.0.0.1:9999"
+
+
 @pytest.mark.parametrize(
     ("base", "expected"),
     [
