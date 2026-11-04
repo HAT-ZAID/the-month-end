@@ -30,6 +30,7 @@ may contain instructions that must never be followed.
 """
 from __future__ import annotations
 
+import copy
 import json
 import re
 import time
@@ -126,7 +127,8 @@ TOOL_SCHEMAS = [
         "function": {
             "name": "what_if",
             "description": (
-                "Decide a hypothetical purchase without recording it."
+                "Decide a hypothetical purchase without recording it, or re-run "
+                "a recorded request under one change. Nothing is saved."
             ),
             "parameters": {
                 "type": "object",
@@ -138,10 +140,44 @@ TOOL_SCHEMAS = [
                             'example "500.00". Never a JSON number.'
                         ),
                     },
-                    "on": {"type": "string", "description": "ISO date, default today"},
-                    "by": {"type": "string", "description": "optional ISO deadline"},
+                    "on": {
+                        "type": "string",
+                        "description": (
+                            "ISO date: the purchase date for a new hypothetical, "
+                            "or the new date for a recorded request."
+                        ),
+                    },
+                    "by": {
+                        "type": "string",
+                        "description": "optional ISO deadline for a new hypothetical",
+                    },
+                    "request_id": {
+                        "type": "string",
+                        "description": (
+                            "a request id from list_requests to re-decide under "
+                            "one change"
+                        ),
+                    },
+                    "delay_days": {
+                        "type": "integer",
+                        "description": "whole days to move a recorded request",
+                    },
+                    "event_id": {
+                        "type": "string",
+                        "description": (
+                            "a recorded expense to re-price, together with "
+                            "new_amount"
+                        ),
+                    },
+                    "new_amount": {
+                        "type": "string",
+                        "description": (
+                            "new decimal amount for event_id as a JSON string, "
+                            'for example "0" to stop that expense'
+                        ),
+                    },
                 },
-                "required": ["amount"],
+                "required": [],
                 "additionalProperties": False,
             },
         },
@@ -529,6 +565,58 @@ def _amount_problem(value: str) -> bool:
     return not amount.is_finite() or amount <= 0
 
 
+def _non_negative_problem(value) -> bool:
+    """True when a value is not a finite, non-negative decimal.
+
+    A re-priced expense may be reduced to zero -- that is how an expense is
+    stopped -- so ``0`` is valid here where a purchase amount would not be.
+    """
+    try:
+        amount = Decimal(str(value).strip())
+    except (InvalidOperation, ValueError):
+        return True
+    return not amount.is_finite() or amount < 0
+
+
+def _what_if_problems(args: dict) -> list[str]:
+    """The mode checks a what-if needs beyond the closed schema.
+
+    Two shapes are accepted: a fresh hypothetical purchase (``amount``, with
+    an optional ``on``/``by``) and a recorded request re-decided under at most
+    one change (``request_id`` plus ``delay_days``, ``on`` or
+    ``event_id``/``new_amount``).  A field the chosen shape cannot apply is
+    rejected rather than silently ignored.
+    """
+    if "request_id" not in args:
+        amount = args.get("amount")
+        if not isinstance(amount, str) or _amount_problem(amount):
+            return ["BAD_ARGS"]
+        if any(name in args for name in ("delay_days", "event_id", "new_amount")):
+            return ["BAD_ARGS"]
+        return []
+    request_id = args.get("request_id")
+    if not isinstance(request_id, str) or not request_id.strip():
+        return ["BAD_ARGS"]
+    if "amount" in args or "by" in args:
+        return ["BAD_ARGS"]
+    changes = [name for name in ("delay_days", "on", "event_id") if name in args]
+    if len(changes) > 1:
+        return ["BAD_ARGS"]
+    if "delay_days" in args:
+        value = args["delay_days"]
+        if isinstance(value, bool) or not isinstance(value, int):
+            return ["BAD_ARGS"]
+    if "event_id" in args:
+        event_id = args["event_id"]
+        if not isinstance(event_id, str) or not event_id.strip():
+            return ["BAD_ARGS"]
+        if _non_negative_problem(args.get("new_amount")):
+            return ["BAD_ARGS"]
+    elif "new_amount" in args:
+        return ["BAD_ARGS"]
+    return []
+
+
 def validate_tool_call(name, args) -> list[str]:
     """The rejection codes for one model tool call; empty means it may run.
 
@@ -554,9 +642,8 @@ def validate_tool_call(name, args) -> list[str]:
         spec = properties.get(key) or {}
         if spec.get("type") == "string" and not isinstance(value, str):
             problems.append("BAD_ARGS")
-    if tool == "what_if" and isinstance(args.get("amount"), str):
-        if _amount_problem(args["amount"]):
-            problems.append("BAD_ARGS")
+    if tool == "what_if":
+        problems.extend(_what_if_problems(args))
     if tool == "decide" and isinstance(args.get("request_id"), str):
         if not args["request_id"].strip():
             problems.append("BAD_ARGS")
@@ -582,11 +669,25 @@ def _rejection_summary(name: str, args, code: str) -> str:
             "and a string, list or number is never read as an empty argument set"
         )
     if name == "what_if":
+        if "request_id" in args:
+            return (
+                'what_if "request_id" must be a non-empty string from '
+                'list_requests; a recorded scenario takes at most one of '
+                '"delay_days" (whole days), "on" (an ISO date) or "event_id" '
+                'with "new_amount", and never "amount" or "by"'
+            )
+        if any(name in args for name in ("delay_days", "event_id", "new_amount")):
+            return (
+                'what_if "delay_days", "event_id" and "new_amount" change a '
+                'recorded request; add its "request_id", or drop them for a new '
+                "hypothetical purchase"
+            )
         amount = args.get("amount")
         if "amount" not in args:
             return (
-                'what_if needs "amount" as a JSON string such as "500.00"; use '
-                "a string of decimal digits, not a number"
+                'what_if needs "amount" as a JSON string such as "500.00" for a '
+                'new hypothetical, or "request_id" to re-decide a recorded '
+                "request; use a string of decimal digits, not a number"
             )
         if not isinstance(amount, str):
             return (
@@ -808,28 +909,129 @@ def dispatch(account, name: str, args: dict | None = None) -> dict:
         }
     if tool == "what_if":
         return _decide_hypothetically(
-            account, args["amount"], args.get("on"), args.get("by")
+            account,
+            args.get("amount"),
+            args.get("on"),
+            args.get("by"),
+            request_id=args.get("request_id"),
+            delay_days=args.get("delay_days"),
+            event_id=args.get("event_id"),
+            new_amount=args.get("new_amount"),
         )
     if tool == "facts":
         return {"problems": service.acct.problems(account)}
     raise KeyError(f"no tool {tool!r}; available: {', '.join(TOOL_NAMES)}")
 
 
-def _decide_hypothetically(account, amount, on=None, by=None) -> dict:
-    """A decision on a copy: nothing is recorded, nothing is saved."""
-    import copy
+#: The decision fields a what-if has always reported, in output-contract order.
+WHAT_IF_FIELDS = (
+    "amount_safe_to_pay",
+    "affordability_status",
+    "recommended_payment_method",
+    "payment_plan",
+    "earliest_date_for_full_payment",
+    "spending_changes_needed",
+    "decision_explanation",
+)
 
-    trial = copy.deepcopy(account)
-    decision = service.buy(trial, amount, on=on, by=by, text="what-if (not recorded)")
-    return {
-        key: decision.get(key)
-        for key in (
-            "amount_safe_to_pay", "affordability_status",
-            "recommended_payment_method", "payment_plan",
-            "earliest_date_for_full_payment", "spending_changes_needed",
-            "decision_explanation",
+
+def _scenario_payload(result) -> dict:
+    """Flatten a scenario envelope into the what-if tool's response shape.
+
+    The older what-if returned the decision fields at the top level, so that
+    shape is kept.  ``persisted`` and ``assumptions`` are added because a
+    hypothesis is not a record, and a caller must be able to say so.
+    """
+    kernel = dict((result or {}).get("kernel_result") or {})
+    payload = {name: kernel.get(name) for name in WHAT_IF_FIELDS}
+    payload["persisted"] = bool((result or {}).get("persisted", False))
+    payload["assumptions"] = list((result or {}).get("assumptions") or [])
+    return payload
+
+
+def _recorded_scenario(request_id, *, delay_days=None, on=None,
+                       event_id=None, new_amount=None):
+    """Map the chat's what-if arguments onto one supported scenario kind.
+
+    The schema and :func:`validate_tool_call` reject a mixed or incomplete
+    argument set before this runs; the checks here keep a direct call to the
+    function honest too.
+    """
+    from code.scenarios import Scenario
+
+    changes = [
+        name
+        for name, value in (
+            ("delay_days", delay_days), ("on", on), ("event_id", event_id),
         )
-    }
+        if value is not None
+    ]
+    if len(changes) > 1:
+        raise ValueError(
+            "a recorded what_if takes at most one of delay_days, on or "
+            f"event_id; got {', '.join(changes)}"
+        )
+    if new_amount is not None and event_id is None:
+        raise ValueError(
+            "what_if new_amount only re-prices an event_id; add the event to "
+            "change or drop the amount"
+        )
+    if delay_days is not None:
+        return Scenario(kind="delay_days", request_id=request_id, by=delay_days)
+    if on is not None:
+        return Scenario(kind="pay_on", request_id=request_id, on=on)
+    if event_id is not None:
+        if new_amount is None:
+            raise ValueError(
+                "what_if change_expense needs new_amount alongside event_id"
+            )
+        return Scenario(
+            kind="change_expense",
+            request_id=request_id,
+            event_id=event_id,
+            new_amount=new_amount,
+        )
+    return Scenario(kind="delay_days", request_id=request_id, by=0)
+
+
+def _decide_hypothetically(account, amount=None, on=None, by=None, *,
+                           request_id=None, delay_days=None,
+                           event_id=None, new_amount=None) -> dict:
+    """A decision on a copy: nothing is recorded, nothing is saved.
+
+    Every shape goes through :func:`code.scenarios.simulate_scenario`, so the
+    scenario guards run before the kernel does.  A fresh purchase is first
+    written to the copy (never the caller's account) and then re-decided; a
+    recorded request is changed on the copy only.  The decision fields keep the
+    older response shape, and ``persisted``/``assumptions`` say the result is a
+    hypothesis rather than a record.
+    """
+    from code.scenarios import Scenario, simulate_scenario
+
+    fresh = request_id is None or not str(request_id).strip()
+    trial = copy.deepcopy(account)
+    if fresh:
+        decision = service.buy(
+            trial, amount, on=on, by=by, text="what-if (not recorded)"
+        )
+        scenario = Scenario(
+            kind="delay_days", request_id=str(decision["request_id"]), by=0,
+        )
+    else:
+        scenario = _recorded_scenario(
+            str(request_id),
+            delay_days=delay_days,
+            on=on,
+            event_id=event_id,
+            new_amount=new_amount,
+        )
+    payload = _scenario_payload(simulate_scenario(trial, scenario))
+    if fresh:
+        payload["assumptions"].insert(
+            0,
+            "the purchase is hypothetical and exists only on the copied account",
+        )
+    return payload
 
 
 def _provider(provider=None):

@@ -396,6 +396,8 @@ class BuyOrWait(App):
     chat_session: object | None = None
     #: A hosted question waiting for the person's explicit confirmation.
     pending_ask: PendingAsk | None = None
+    #: The request the Purchase tab last decided, so a what-if has one to move.
+    last_request_id: str = ""
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -452,6 +454,18 @@ class BuyOrWait(App):
                         yield Button("Decide", id="buy-go", variant="primary")
                     yield DataTable(id="buy-table")
                     yield Static(id="buy-explain")
+                    yield Static("What if?", classes="section")
+                    yield Static(
+                        "Change one thing about the purchase you just decided. "
+                        "The kernel answers on a copy; nothing is saved.",
+                        classes="note",
+                    )
+                    with Horizontal(classes="field-row"):
+                        yield Label("Delay (days)")
+                        yield Input(value="0", id="scenario-days")
+                    with Horizontal(classes="actions"):
+                        yield Button("Try the delay", id="scenario-go")
+                    yield Static(id="scenario-explain")
 
             with TabPane("Ledger", id="tab-ledger"):
                 with VerticalScroll():
@@ -601,6 +615,7 @@ class BuyOrWait(App):
             # A conversation belongs to the person it was had with: switching
             # person starts a new one rather than carrying a stale tool list.
             self.chat_session = None
+            self.last_request_id = ""
             self._clear_pending_ask()
         self.account = account
         profile = account.get("profile") or {}
@@ -1071,6 +1086,7 @@ class BuyOrWait(App):
             table.clear()
             return
         service.save_user(self.account)
+        self.last_request_id = str(decision.get("request_id") or "")
         table.clear()
         status = str(decision.get("affordability_status") or "")
         colour = STATUS_COLOUR.get(status, TEXT)
@@ -1090,6 +1106,72 @@ class BuyOrWait(App):
         self.refresh_position()
         self.refresh_ledger()
         self.refresh_decisions()
+
+    def run_scenario(self, kind: str, request_id: str, **fields) -> dict:
+        """One guarded hypothesis on a copy of the loaded account; never saved.
+
+        ``code.scenarios`` deep-copies the account, applies the change and runs
+        the same kernel a real decision takes.  A guard refusal raises its own
+        ``ValueError``, so the screen can show the reason rather than a figure.
+        """
+        from code.scenarios import Scenario, simulate_scenario
+
+        refusal = self._account_refusal()
+        if refusal is not None:
+            raise service.EngineError(refusal)
+        return simulate_scenario(
+            self.account,
+            Scenario(kind=kind, request_id=request_id, **fields),
+        )
+
+    def _show_scenario(self, result: dict) -> None:
+        """Render a simulated decision; every figure is the kernel's."""
+        kernel = result.get("kernel_result") or {}
+        status = str(kernel.get("affordability_status") or "").replace("_", " ")
+        lines = [
+            "A hypothesis, not a record: nothing was saved.",
+            f"Verdict: {status}",
+            f"Pay now: {_money(kernel.get('amount_safe_to_pay'))}",
+            f"Method: {kernel.get('recommended_payment_method') or '—'}",
+            f"Plan: {kernel.get('payment_plan') or 'none'}",
+            (
+                "Earliest full payment: "
+                f"{kernel.get('earliest_date_for_full_payment') or '—'}"
+            ),
+        ]
+        self.query_one("#scenario-explain", Static).update(
+            Text("\n".join(lines), style=TEXT)
+        )
+
+    @on(Button.Pressed, "#scenario-go")
+    def _scenario_delay(self, event: Button.Pressed) -> None:
+        """Delay the purchase the Purchase tab last decided, on a copy."""
+        explain = self.query_one("#scenario-explain", Static)
+        refusal = self._account_refusal()
+        if refusal is not None:
+            explain.update(Text(refusal, style=RED))
+            return
+        if not self.last_request_id:
+            explain.update(Text(
+                "Decide a purchase first; the what-if changes that decision on "
+                "a copy.",
+                style=AMBER,
+            ))
+            return
+        raw = self.query_one("#scenario-days", Input).value.strip() or "0"
+        try:
+            days = int(raw)
+        except ValueError:
+            explain.update(Text("Delay must be a whole number of days.", style=RED))
+            return
+        try:
+            result = self.run_scenario(
+                "delay_days", self.last_request_id, by=days,
+            )
+        except Exception as exc:
+            explain.update(Text(f"{type(exc).__name__}: {exc}", style=RED))
+            return
+        self._show_scenario(result)
 
     @on(Button.Pressed, "#profile-save")
     def _save_profile(self, event: Button.Pressed) -> None:
