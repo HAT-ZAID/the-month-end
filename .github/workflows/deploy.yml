@@ -1,0 +1,62 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-main
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: build the Lambda package
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Verify before shipping
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r deploy/requirements-api.txt
+          pytest -q tests/test_api_deploy.py tests/test_oracle_contract.py
+
+      - name: Build the package
+        run: |
+          set -euo pipefail
+          rm -rf package function.zip
+          mkdir -p package
+          pip install --target package --platform manylinux2014_x86_64 \
+            --python-version 3.11 --implementation cp --only-binary=:all: \
+            "pandas==2.3.2" "fastapi==0.162.0" "uvicorn==0.54.0" "mangum==0.19.0"
+          cp -r code deploy mock_dataset package/
+          rm -rf package/mock_dataset/media
+          mkdir -p package/data
+          cp data/image_amounts.json package/data/image_amounts.json
+          cd package && zip -qr ../function.zip . && cd ..
+          ls -lh function.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lambda-function
+          path: function.zip
+          retention-days: 14
+
+      # Deployment is manual on purpose: this account's SCP denies
+      # iam:CreateOpenIDConnectProvider, so GitHub cannot assume an AWS role
+      # without storing long-lived keys. The artefact above is the deployable
+      # unit; deploy it with the command in deploy/README.md.
+      - name: Deployment note
+        run: |
+          echo "Package built. Deploy with:"
+          echo "  aws s3 cp function.zip s3://month-end-api-316658412595/function.zip"
+          echo "  aws lambda update-function-code --function-name month-end-api \\"
+          echo "    --s3-bucket month-end-api-316658412595 --s3-key function.zip"

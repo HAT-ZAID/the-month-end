@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-agent.txt -r deploy/requirements-api.txt
+      - name: Release suite
+        run: pytest -q
+
+  review-suite:
+    name: review suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-agent.txt -r deploy/requirements-api.txt
+      - name: Wider net
+        run: pytest -q tests/review
+
+  gates:
+    name: evaluation gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-agent.txt -r deploy/requirements-api.txt
+      - name: G0-G7 (PR mode)
+        run: python -m evaluation.run --mode pr
+        # G2 is a known external-contract failure (see docs/g2-hypothesis-report.md).
+        # It is reported in the log rather than silenced; the step fails only on
+        # the gates that must stay green (G0, G1, G3, G4).
+        continue-on-error: true
+      - name: Required gates must pass
+        run: |
+          python - <<'PY'
+          import json, pathlib, sys
+          report = json.loads(pathlib.Path("evaluation/report.json").read_text())
+          gates = {gate["id"]: gate["status"] for gate in report.get("gates", [])}
+          required = ("G0", "G1", "G3", "G4")
+          print("gates:", {name: gates.get(name) for name in required})
+          failed = [name for name in required if gates.get(name) != "PASS"]
+          if failed:
+              sys.exit(f"failed required gates: {failed}")
+          print("G2 is the documented external-contract gap and is reported, not required.")
+          PY

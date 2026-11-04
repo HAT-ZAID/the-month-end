@@ -28,3 +28,8 @@ data/cache/
 
 # CatBoost training artefacts from the G2 model-mining labs
 catboost_info/
+
+# Lambda build output
+package/
+function.zip
+
