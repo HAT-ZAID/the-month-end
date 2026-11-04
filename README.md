@@ -294,7 +294,7 @@ Read [`docs/architecture.md`](docs/architecture.md) for the module map and
 
 ## Status
 
-- Deterministic core: stable, 672 tests green, 503 in the wider review suite.
+- Deterministic core: stable, 717 tests green, 503 in the wider review suite.
 - Interactive product: accounts, facts, decisions, verified chat, scenarios,
   provider consent and cancellations.
 - Known gaps and deferred work are tracked as issues: the G2 reference gap, the
