@@ -339,9 +339,10 @@ def position(account, as_of=None) -> dict:
     """The kernel's position summary for one account."""
     profile = dict(account.get("profile") or {})
     events = [dict(row) for row in (account.get("events") or [])]
+    fx_rows = [dict(row) for row in (account.get("fx") or [])]
     day = as_of or date.today().isoformat()
     result = kernel_position(
-        str(profile.get("user_id") or "me"), day, profile, events, [],
+        str(profile.get("user_id") or "me"), day, profile, events, fx_rows,
     )
     result["problems"] = acct.problems(account)
     return result
@@ -375,6 +376,7 @@ def decide(account, request_id) -> dict:
     request = requests[0]
     profile = dict(account.get("profile") or {})
     events = [dict(row) for row in (account.get("events") or [])]
+    fx_rows = [dict(row) for row in (account.get("fx") or [])]
     decision = solve_request(
         str(request.get("request_id")),
         str(profile.get("user_id") or "me"),
@@ -382,7 +384,7 @@ def decide(account, request_id) -> dict:
         str(request.get("requested_amount")),
         profile,
         events,
-        [],
+        fx_rows,
         _options_frame(account, request_id),
         messages_df=None,
         desired_completion_date=str(request.get("desired_completion_date") or "") or None,

@@ -83,6 +83,17 @@ OPTION_FIELDS = (
     "total_payable_amount",
 )
 
+#: One dated exchange rate, in the same direction the contract's CSV states it
+#: (``from_currency`` -> ``to_currency``).  A rate is not a user's guess at a
+#: market: it is the figure they recorded, and the kernel only converts with it
+#: when the pair and date match.
+FX_FIELDS = (
+    "rate_date",
+    "from_currency",
+    "to_currency",
+    "rate",
+)
+
 #: The vocabularies the kernel's ledger understands. These are the dataset's
 #: own values, so an account and a calibration row mean the same thing to the
 #: solver; a guess here is a silently wrong forecast.
@@ -220,7 +231,8 @@ def validate_account(account: dict) -> list[str]:
     blank value stays unknown, so only a value that is present and malformed is
     reported.  Duplicate event ids are refused because two rows sharing one id
     make an amendment ambiguous -- the ledger cannot tell which row a later
-    correction refers to.
+    correction refers to.  A rate row must be complete: a dated pair with a
+    finite, positive rate is the only shape the kernel can convert with.
     """
     if not isinstance(account, dict):
         return ["the account must be a JSON object"]
@@ -275,6 +287,31 @@ def validate_account(account: dict) -> list[str]:
         _check_date(
             problems, f"{label} first_payment_date", option.get("first_payment_date")
         )
+
+    for position, rate_row in enumerate(account.get("fx") or [], start=1):
+        if not isinstance(rate_row, dict):
+            problems.append(f"fx {position}: the record must be a JSON object")
+            continue
+        label = f"fx {position}"
+        # A rate row is only meaningful when it says which pair it prices and
+        # when.  A half-written row would never match a settlement date, so it
+        # is refused rather than stored as a rate that silently does nothing.
+        for name in FX_FIELDS:
+            if not _present(rate_row.get(name)):
+                problems.append(f"{label}: {name} is required for a rate row")
+        _check_date(problems, f"{label} rate_date", rate_row.get("rate_date"))
+        for name in ("from_currency", "to_currency"):
+            _check_currency(problems, f"{label} {name}", rate_row.get(name))
+        rate = rate_row.get("rate")
+        if _present(rate):
+            value = strict_decimal(rate)
+            if value is None:
+                problems.append(f"{label} rate: {str(rate)!r} is not a finite amount")
+            elif value <= 0:
+                problems.append(
+                    f"{label} rate: the rate must be greater than zero "
+                    f"({str(rate)!r})"
+                )
 
     return problems
 

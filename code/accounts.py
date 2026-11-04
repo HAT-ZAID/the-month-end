@@ -21,6 +21,7 @@ from pathlib import Path
 from code.account import (
     ACCOUNT_VERSION,
     EVENT_FIELDS,
+    FX_FIELDS,
     OPTION_FIELDS,
     PROFILE_FIELDS,
     REQUEST_FIELDS,
@@ -28,13 +29,14 @@ from code.account import (
     validate_account,
 )
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 #: Table name and id prefix for each repeated entity.
 _TABLES = {
     "events": (EVENT_FIELDS, "event_id"),
     "requests": (REQUEST_FIELDS, "request_id"),
     "options": (OPTION_FIELDS, "payment_option_id"),
+    "fx": (FX_FIELDS, "rate_date"),
 }
 
 
@@ -89,11 +91,47 @@ def _create_schema(connection: sqlite3.Connection) -> None:
         );
         """
     )
-    connection.execute(
-        "INSERT OR IGNORE INTO meta (name, value) VALUES ('schema_version', ?)",
-        (str(SCHEMA_VERSION),),
-    )
+    version = _stored_version(connection)
+    if version < SCHEMA_VERSION:
+        _migrate(connection, version)
+        connection.execute(
+            "INSERT INTO meta (name, value) VALUES ('schema_version', ?) "
+            "ON CONFLICT(name) DO UPDATE SET value = excluded.value",
+            (str(SCHEMA_VERSION),),
+        )
     connection.commit()
+
+
+def _stored_version(connection: sqlite3.Connection) -> int:
+    """The schema version this file records, or ``0`` for a brand-new file."""
+    row = connection.execute(
+        "SELECT value FROM meta WHERE name = 'schema_version'"
+    ).fetchone()
+    try:
+        return int(str(row[0])) if row is not None else 0
+    except (TypeError, ValueError):
+        return 0
+
+
+def _migrate(connection: sqlite3.Connection, from_version: int) -> None:
+    """Bring an older database up to ``SCHEMA_VERSION`` without losing a row.
+
+    Every step is additive and creates only what is missing: v2 adds the ``fx``
+    table, while profiles, events, requests and payment options are left exactly
+    as the older store wrote them.  Rates were not stored at all before v2, so
+    there is nothing to backfill; a reload of an old account simply reports no
+    rates rather than inventing them.
+    """
+    if from_version < 2:
+        connection.execute(
+            f"""
+            CREATE TABLE IF NOT EXISTS fx (
+                user_name TEXT NOT NULL,
+                {_column_list(FX_FIELDS)},
+                seq INTEGER
+            )
+            """
+        )
 
 
 def _now() -> str:
