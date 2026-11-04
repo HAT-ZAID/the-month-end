@@ -3,6 +3,8 @@ from copy import deepcopy
 from pathlib import Path
 import re
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
 from code.ocr import extract_amount_for_event, read_image_text
 from code.vision import VisionEvidence, validate_evidence_amount
 
@@ -77,13 +79,34 @@ def _read_outcome(read, image_path, event, corroborator=None) -> tuple[dict | No
     return extract_amount_for_event(text, currency, category, description), text, "tesseract", None
 
 
-def resolve_event_amounts(images_df, events, image_dir, reader=None, ocr_available=None, corroborator=None):
+def load_pinned_amounts(path=None) -> dict:
+    """Read the committed image-amount pin, or ``{}`` when it is absent.
+
+    The pin is what makes ``output.csv`` reproducible: image reading depends on
+    the installed backend, so the amounts it produced once are recorded and
+    reused instead of being re-derived on every machine.
+    """
+    import json
+
+    target = Path(path) if path is not None else REPO_ROOT / "data" / "image_amounts.json"
+    try:
+        data = json.loads(Path(target).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return {str(k): str(v) for k, v in data.items()} if isinstance(data, dict) else {}
+
+
+def resolve_event_amounts(images_df, events, image_dir, reader=None, ocr_available=None, corroborator=None, pinned=None):
     """Resolve blank event amounts from linked images without inventing values.
 
-    ``corroborator`` is an optional independent reader (the local Tesseract path).
-    It is consulted only when a vision backend claims an amount its own transcript
-    cannot confirm, and the claim still has to match its reading exactly.
+    ``pinned`` maps ``event_id`` to a previously resolved amount (see
+    :func:`load_pinned_amounts`); a pinned row is used as-is and needs no
+    reader.  ``corroborator`` is an optional independent reader (the local
+    Tesseract path).  It is consulted only when a vision backend claims an
+    amount its own transcript cannot confirm, and the claim still has to match
+    its reading exactly.
     """
+    pinned = pinned or {}
     resolved = deepcopy(events or [])
     event_ids = [str(e.get("event_id", "") or "").strip() for e in resolved]
     # One pass, not one per candidate id: counting inside the comprehension is
@@ -109,6 +132,11 @@ def resolve_event_amounts(images_df, events, image_dir, reader=None, ocr_availab
             continue
         event = by_event.get(event_id)
         if not event or not _blank_amount(event.get("amount", "")):
+            continue
+        pinned_amount = pinned.get(event_id)
+        if pinned_amount:
+            event["amount"] = str(pinned_amount)
+            event["amount_source"] = "pinned_evidence"
             continue
         candidates = []
         invalid_link = False

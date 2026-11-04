@@ -16,7 +16,7 @@ if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
     from code.solver import solve_request
     from code.ocr import configure_tesseract
-    from code.evidence import resolve_event_amounts
+    from code.evidence import load_pinned_amounts, resolve_event_amounts
     from code.explanations import generate_explanation
     from code.usage import new_usage, write_usage_report
     from code.vision import TesseractBackend, build_backend, read_evidence
@@ -25,7 +25,7 @@ if __package__ in (None, ""):
 else:
     from code.solver import solve_request
     from code.ocr import configure_tesseract
-    from code.evidence import resolve_event_amounts
+    from code.evidence import load_pinned_amounts, resolve_event_amounts
     from code.explanations import generate_explanation
     from code.usage import new_usage, write_usage_report
     from code.vision import TesseractBackend, build_backend, read_evidence
@@ -302,6 +302,7 @@ def run_pipeline(
             events,
             fixture_dir(root) / "media" / "images",
             ocr_available=ocr_path is not None,
+            pinned=load_pinned_amounts(),
         )
     else:
         # A vision claim is certified by a deterministic reading of the same
@@ -313,6 +314,7 @@ def run_pipeline(
             events,
             fixture_dir(root) / "media" / "images",
             reader=lambda image_path: read_evidence(image_path, vision_backend),
+            pinned=load_pinned_amounts(),
             corroborator=lambda image_path: read_evidence(image_path, TesseractBackend()),
         )
 
