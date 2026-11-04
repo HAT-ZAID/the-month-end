@@ -351,44 +351,46 @@ class UserPicker(ModalScreen):
 class BuyOrWait(App):
     """The application shell: seven views of one account, never of the fixture."""
 
-    CSS = f"""
-    Screen {{ background: #0b1220; color: {TEXT}; }}
-    Header {{ background: #0f172a; color: {BLUE}; }}
-    Footer {{ background: #0f172a; color: {MUTED}; }}
-    TabbedContent {{ height: 1fr; }}
-    TabPane {{ padding: 1 2; }}
-    .brand {{ color: {BLUE}; text-style: bold; padding-bottom: 1; }}
-    .section {{ color: {BLUE}; text-style: bold; padding-top: 1; }}
-    .panel-sub {{ color: {MUTED}; }}
-    .note {{ color: {MUTED}; text-style: italic; padding-top: 1; }}
-    .field-row {{ height: 3; }}
-    .field-row Label {{ width: 16; color: #94a3b8; content-align: left middle; }}
-    .field-row Input {{ width: 24; }}
-    .actions {{ height: 3; }}
-    Button {{ min-width: 14; }}
-    Select {{ width: 46; }}
-    .user-chip {{ width: 40; margin-bottom: 1; }}
-    DataTable {{ height: auto; max-height: 18; background: #0f172a; }}
-    #metrics {{ layout: grid; grid-size: 3 2; grid-gutter: 1 2; height: auto; }}
-    .metric {{ border: round #1f2a37; background: #111c2b; padding: 0 1; height: 5; }}
-    .metric-label {{ color: {MUTED}; width: 1fr; }}
-    .metric-value {{ text-style: bold; width: 1fr; content-align: right middle; }}
-    .metric-note {{ color: {MUTED}; width: 1fr; }}
-    #onboard {{ padding: 1 2; }}
-    #picker {{ background: #111c2b; border: round {BLUE}; padding: 1 2; width: 60; height: auto; }}
-    #pos-head {{ color: {BLUE}; text-style: bold; }}
-    #pos-sub {{ color: {MUTED}; padding-bottom: 1; }}
-    #pos-missing {{ color: {AMBER}; padding-bottom: 1; }}
-    #buy-result {{ padding-top: 1; }}
-    #buy-explain {{ color: #cbd5e1; padding-top: 1; }}
-    #chat-progress {{ color: {BLUE}; height: auto; padding-top: 1; }}
-    RichLog {{ background: #0f172a; border: round #1f2a37; }}
+    CSS = """
+    Screen { background: $background; color: $text; }
+    Header { background: $panel; color: $primary; }
+    Footer { background: $panel; color: $text-muted; }
+    Tabs { background: $panel; }
+    TabbedContent { height: 1fr; }
+    TabPane { padding: 0 1; }
+    .brand { color: $primary; text-style: bold; padding-bottom: 1; }
+    .section { color: $primary; text-style: bold; padding-top: 1; }
+    .panel-sub { color: $text-muted; }
+    .note { color: $text-muted; text-style: italic; padding-top: 1; }
+    .field-row { height: 3; }
+    .field-row Label { width: 16; color: $text-muted; content-align: left middle; }
+    .field-row Input { width: 24; }
+    .actions { height: 3; }
+    Button { min-width: 14; }
+    Select { width: 46; }
+    .user-chip { width: 40; margin-bottom: 1; }
+    DataTable { height: auto; max-height: 16; background: $surface; }
+    #metrics { layout: grid; grid-size: 3 2; grid-gutter: 0 1; height: auto; }
+    .metric { border: round $panel; background: $surface; padding: 0 1; height: 4; }
+    .metric-label { color: $text-muted; width: 1fr; }
+    .metric-value { text-style: bold; width: 1fr; content-align: right middle; }
+    .metric-note { color: $text-muted; width: 1fr; }
+    #onboard { padding: 1 2; }
+    #picker { background: $surface; border: round $primary; padding: 1 2; width: 60; height: auto; }
+    #pos-head { color: $primary; text-style: bold; }
+    #pos-sub { color: $text-muted; padding-bottom: 1; }
+    #pos-missing { color: $warning; padding-bottom: 1; }
+    #buy-result { padding-top: 1; }
+    #buy-explain { color: $text; padding-top: 1; }
+    #chat-progress { color: $primary; height: auto; padding-top: 1; }
+    RichLog { background: $surface; border: round $panel; }
     """
 
     BINDINGS = [
         ("ctrl+q", "quit", "Quit"),
         ("escape", "cancel_ask", "Cancel ask"),
         ("ctrl+f", "facts", "Facts used"),
+        ("ctrl+t", "cycle_theme", "Theme"),
     ]
 
     account: dict | None = None
@@ -987,6 +989,18 @@ class BuyOrWait(App):
         if remember:
             self.session_consent.add(self._consent_key(pending.provider, pending.model))
         return self.start_ask(pending.text, pending.provider, consent=True)
+
+    def action_cycle_theme(self) -> None:
+        """Cycle Textual's themes; the stylesheet reads only design tokens."""
+        names = list(getattr(self, "available_themes", ()) or ())
+        if not names:
+            return
+        try:
+            index = names.index(self.theme)
+        except (ValueError, AttributeError):
+            index = -1
+        self.theme = names[(index + 1) % len(names)]
+        self._chat_log(f"Theme: {self.theme}", MUTED)
 
     def action_facts(self) -> None:
         """Print the tools the last answer used, or say none has run yet."""
