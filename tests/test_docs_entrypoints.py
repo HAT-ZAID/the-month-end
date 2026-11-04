@@ -16,6 +16,7 @@ from tests.conftest import REPO_ROOT
 
 README = REPO_ROOT / "README.md"
 ARCHITECTURE = REPO_ROOT / "docs" / "architecture.md"
+HANDOVER = REPO_ROOT / "docs" / "handover-state.md"
 
 # Commands under ``python -m`` that are not repository modules.
 EXTERNAL_COMMANDS = frozenset({"pip", "pytest", "unittest", "venv"})
@@ -77,6 +78,16 @@ def test_architecture_names_the_same_entry_points():
         "docs/architecture.md does not name: "
         + ", ".join(f"python -m {name}" for name in missing)
     )
+
+
+def test_handover_does_not_promise_a_removed_forecast_flag():
+    # The flag and the corrected arithmetic were both removed. A handover that
+    # still tells the next maintainer to keep the correction behind it sends
+    # them looking for a switch that no longer exists.
+    flat = " ".join(_text(HANDOVER).split())
+    assert "behind its flag" not in flat
+    assert "correction remains removed" in flat
+    assert "keeps G1 at 0/0/0" in flat
 
 
 def test_readme_says_the_gate_leaves_output_csv_alone():

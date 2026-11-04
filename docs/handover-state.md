@@ -190,8 +190,8 @@ reference arithmetic is not in the repository.
   unreliable for accounting; Kilo only if all fail; no parallel model jobs.
 - Cloud models are non-local: fixtures only, never an account from
   `data/accounts.db`.
-- The release gate G1 is non-negotiable: the corrected forecast arithmetic stays
-  behind its flag until a safety margin is designed.
+- The release gate G1 is non-negotiable: the correction remains removed until a
+  safety-margin design keeps G1 at 0/0/0.
 
 ---
 
