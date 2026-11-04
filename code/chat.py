@@ -32,6 +32,8 @@ from __future__ import annotations
 
 import json
 import re
+import time
+from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 
 from code import service
@@ -183,6 +185,67 @@ SYSTEM_PROMPT = (
 
 class NoModel(RuntimeError):
     """No provider is configured, so there is nothing that can reason."""
+
+
+#: How long a conversation may sit idle before its exchange is discarded.
+SESSION_TTL_S = 30 * 60
+
+#: The most messages a session keeps: six questions and six answers.  The bound
+#: is the whole point of keeping the conversation in memory only.
+MAX_SESSION_MESSAGES = 12
+
+
+@dataclass
+class Session:
+    """One person's conversation, held in memory and never written to disk.
+
+    ``messages`` holds finished ``user``/``assistant`` turns only: a tool result
+    from an earlier turn is stale evidence, so it is never replayed.  A session
+    belongs to exactly one account; passing another one clears it before the new
+    turn is built.  ``expires_at`` is a :func:`time.monotonic` deadline, not a
+    wall clock, so a system clock change cannot extend it.
+    """
+
+    account_id: str = ""
+    messages: list[dict] = field(default_factory=list)
+    expires_at: float = 0.0
+
+
+def _account_id(account) -> str:
+    """The one identifier a session is bound to."""
+    return str(((account or {}).get("profile") or {}).get("user_id") or "")
+
+
+def _session_history(session, account) -> list[dict]:
+    """Bind ``session`` to ``account`` and return the exchange to replay.
+
+    An expired session, or one bound to another person, starts clean.  The
+    history is copied so a turn can never mutate the stored conversation while
+    the provider is still reading it.
+    """
+    if session is None:
+        return []
+    now = time.monotonic()
+    expired = bool(session.expires_at) and now >= float(session.expires_at)
+    if expired or (session.account_id and session.account_id != _account_id(account)):
+        session.messages.clear()
+    session.account_id = _account_id(account)
+    session.expires_at = now + SESSION_TTL_S
+    return [
+        {"role": str(message.get("role")), "content": str(message.get("content") or "")}
+        for message in session.messages
+        if isinstance(message, dict)
+        and message.get("role") in ("user", "assistant")
+    ]
+
+
+def _remember(session, question: str, reply: str) -> None:
+    """Append the finished exchange, trimming the oldest messages to the bound."""
+    if session is None:
+        return
+    session.messages.append({"role": "user", "content": str(question)})
+    session.messages.append({"role": "assistant", "content": str(reply)})
+    del session.messages[:-MAX_SESSION_MESSAGES]
 
 
 #: The answer shown when no kernel result exists in this turn to check against.
@@ -630,7 +693,8 @@ def _invalid_call_error(name: str) -> dict:
     )
 
 
-def ask(account, text: str, provider=None, *, max_tool_calls: int = 4) -> dict:
+def ask(account, text: str, provider=None, *, max_tool_calls: int = 4,
+        session: Session | None = None) -> dict:
     """Answer a question with tools, or say plainly that there is no model.
 
     Returns ``{"reply", "tool_calls", "model", "reason", "verified"}``.
@@ -644,6 +708,10 @@ def ask(account, text: str, provider=None, *, max_tool_calls: int = 4) -> dict:
     model turns.  A batch that asks for more than the remainder is trimmed: each
     overflow call still gets a tool error, so the conversation stays
     protocol-correct, and the run ends with ``reason="tool_budget"``.
+
+    ``session`` carries the previous exchange into this turn.  It is in-memory
+    only, bounded to :data:`MAX_SESSION_MESSAGES`, and cleared when another
+    account is passed; no figure from an earlier turn is ever re-verified here.
 
     Every call is validated against the published schema before dispatch.  An
     unknown tool, an undeclared field, a repeated call id, a non-object argument
@@ -680,6 +748,7 @@ def ask(account, text: str, provider=None, *, max_tool_calls: int = 4) -> dict:
 
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT.format(facts=_facts_text(account))},
+        *_session_history(session, account),
         {"role": "user", "content": str(text)},
     ]
     ran: list[str] = []
@@ -693,11 +762,13 @@ def ask(account, text: str, provider=None, *, max_tool_calls: int = 4) -> dict:
         try:
             message = bound.invoke(messages)
         except Exception as exc:
+            reply = (
+                "The model could not be reached, so I will not guess at your "
+                f"figures ({type(exc).__name__})."
+            )
+            _remember(session, text, reply)
             return {
-                "reply": (
-                    "The model could not be reached, so I will not guess at your "
-                    f"figures ({type(exc).__name__})."
-                ),
+                "reply": reply,
                 "tool_calls": ran,
                 "model": getattr(provider, "name", "provider"),
                 "reason": "provider_error",
@@ -707,6 +778,7 @@ def ask(account, text: str, provider=None, *, max_tool_calls: int = 4) -> dict:
         content = getattr(message, "content", "")
         if not calls:
             reply, verified = verify_reply(str(content or ""), observations)
+            _remember(session, text, reply)
             return {
                 "reply": reply,
                 "tool_calls": ran,
@@ -766,6 +838,7 @@ def ask(account, text: str, provider=None, *, max_tool_calls: int = 4) -> dict:
             observations.append(result)
             messages.append(_tool_message(call_id, result))
         if overflowed:
+            _remember(session, text, BUDGET_REPLY)
             return {
                 "reply": BUDGET_REPLY,
                 "tool_calls": ran,
@@ -777,6 +850,7 @@ def ask(account, text: str, provider=None, *, max_tool_calls: int = 4) -> dict:
             break
         provider.reserve_call()
 
+    _remember(session, text, BUDGET_REPLY)
     return {
         "reply": BUDGET_REPLY,
         "tool_calls": ran,
