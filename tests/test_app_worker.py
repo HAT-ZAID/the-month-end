@@ -189,8 +189,20 @@ def test_the_ask_handler_returns_before_the_provider_answers(db, monkeypatch):
     from code import models as model_registry
     from tools.app import BuyOrWait
 
-    _account("ana")
-    provider = FakeProvider(replies=["It is safe to spend."], delay=0.6)
+    account = _account("ana")
+    # The app only shows a reply the kernel can vouch for, so the script asks for
+    # one kernel observation first and then phrases it.  The figure comes from
+    # the kernel, never from this file.
+    position = service.position(account)
+    reply = (
+        f"Your ledger shows {position['max_safe_payment']} is the largest safe "
+        "payment today."
+    )
+    provider = FakeProvider(
+        tool_batches=[[{"name": "position", "args": {}, "id": "call_1"}]],
+        replies=[reply],
+        delay=0.6,
+    )
     monkeypatch.setattr(
         model_registry, "provider_for", lambda choice, env=None: provider
     )
@@ -216,8 +228,9 @@ def test_the_ask_handler_returns_before_the_provider_answers(db, monkeypatch):
 
             await worker.wait()
             await pilot.pause()
-            assert provider.calls == 1
-            assert "It is safe to spend." in _log_text(app)
+            # One turn asks for the kernel figure, the next one phrases it.
+            assert provider.calls == 2
+            assert reply in _log_text(app)
             assert _status_text(app) == ""
         return True
 
@@ -272,11 +285,23 @@ def test_a_second_ask_cancels_the_turn_it_replaces(db, monkeypatch):
     from code import models as model_registry
     from tools.app import BuyOrWait
 
-    _account("ana")
+    account = _account("ana")
+    # Both turns must be verifiable for the surviving one to be rendered: the
+    # script asks the kernel for a figure, then phrases it, exactly as above.
+    safe = service.position(account)["max_safe_payment"]
+    replies = [
+        f"Your ledger allows a {safe} payment today.",
+        f"You can safely pay {safe} from your ledger today.",
+    ]
     providers = []
 
     def _provider(choice, env=None):
-        provider = FakeProvider(replies=[f"answer {len(providers) + 1}"], delay=0.3)
+        index = len(providers)
+        provider = FakeProvider(
+            tool_batches=[[{"name": "position", "args": {}, "id": f"call_{index + 1}"}]],
+            replies=[replies[index]],
+            delay=0.3,
+        )
         providers.append(provider)
         return provider
 
@@ -302,7 +327,8 @@ def test_a_second_ask_cancels_the_turn_it_replaces(db, monkeypatch):
 
             await second.wait()
             await pilot.pause()
-            assert "answer 2" in _log_text(app)
+            assert replies[1] in _log_text(app)
+            assert replies[0] not in _log_text(app)
         return True
 
     assert asyncio.run(drive()) is True
