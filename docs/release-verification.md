@@ -6,7 +6,7 @@ Branch `release-curate`, range `b757162..HEAD`. Verified 2026-11-04.
 
 | Command | Result |
 |---|---|
-| `pytest -q` | **672 passed** |
+| `pytest -q` | **717 passed** |
 | `pytest -q tests/review` | **503 passed, 1 skipped** |
 
 Baseline before this branch was 366 default tests; the branch adds 306.
@@ -19,7 +19,7 @@ Baseline before this branch was 366 default tests; the branch adds 306.
 | G1 safety | PASS — 0 status upgrades, 0 safe overclaims, 0 unparsed |
 | G2 sample_quality | **FAIL** — full rows 3/25; amount 3/25; status 17/25; method 17/25; plan 16/25; earliest 16/25; spending 22/25 |
 | G3 determinism | PASS — 2 clean runs, machine columns byte-identical |
-| G4 provenance | PASS — commit `b71009b7`, output `1f35043f00ad`, usage `20f449802e05` |
+| G4 provenance | PASS - commit `0960e01`, output `0b0a1384de1c`, usage `20f449802e05` |
 | G5 archive | NOT_APPLICABLE in PR mode |
 | G6 security | NOT_APPLICABLE in PR mode (tree secret scan runs in G0) |
 | G7 agent robustness | NOT_APPLICABLE in PR mode |
@@ -29,8 +29,12 @@ G2 remains the known external-contract failure documented in
 in this repository, and no gold-row fitting was performed. Reported, not
 silenced, not re-baselined.
 
-`output.csv` is byte-identical to the pre-branch file:
-`1F35043F00ADDC8275D5879026FA83F6595A19712EE814AE89A194F353376486`.
+`output.csv` was regenerated once from the shipped kernel at the end of the
+branch: `1F35043F…376486` → `0B0A1384DE1C612CCBACA5A6392A0CDB3BC754DECF48DCE8E1C6CF8DE15AD366`.
+The old file predated the fail-closed oracle contract and the forecast change,
+so it no longer described the code. G1 stayed 0/0/0 and G3 stayed byte-identical
+after the regeneration. A machine without the local vision backend still cannot
+reproduce the file byte-for-byte; see issue #13.
 
 ## Appendix A adverse inputs (code review)
 
