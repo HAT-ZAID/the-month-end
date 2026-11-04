@@ -79,6 +79,29 @@ def _money(value) -> str:
     return service.money(value)
 
 
+def run_summary_line(summary: dict) -> str:
+    """One dim line describing a chat turn: what ran and whether it was grounded.
+
+    Derived only from ``chat.ask``'s ``run_summary`` (Task 22), itself derived
+    from :class:`code.chat.ChatRunState`: the line repeats no figure of its own
+    and never claims evidence the turn did not produce.
+    """
+    summary = summary or {}
+    tools = ", ".join(str(name) for name in (summary.get("tools") or [])) or "no tools"
+    parts = [f"tools: {tools}"]
+    parts.append(
+        "kernel result" if summary.get("kernel_result") else "no kernel result"
+    )
+    parts.append(
+        "evidence found" if summary.get("evidence_found") else "no evidence"
+    )
+    reason = summary.get("fallback_reason")
+    if reason:
+        parts.append(f"fallback: {reason}")
+    parts.append(f"{int(summary.get('elapsed_ms') or 0)} ms")
+    return " · ".join(parts)
+
+
 #: What "yes" looks like typed into the form's monthly-pay question.
 MONTHLY_ANSWERS = frozenset({"monthly", "yes", "y", "true"})
 
@@ -795,6 +818,9 @@ class BuyOrWait(App):
             for name in result.get("tool_calls") or []:
                 self._chat_log(f"  ran {name}()", MUTED)
             self._chat_log(str(result.get("reply") or "(no answer)"))
+            summary = result.get("run_summary")
+            if summary:
+                self._chat_log(run_summary_line(summary), MUTED)
             self._set_chat_progress("")
         elif event.state == WorkerState.CANCELLED:
             self._chat_log(
