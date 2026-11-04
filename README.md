@@ -468,18 +468,18 @@ These checks are in `code/oracle.py` and are pinned by
 `tests/test_oracle_contract.py`, including the periods where a finite `Decimal`
 overflows only after FX conversion or when a day's deltas are summed.
 
-### The forecast-correction switch
+### The deferred forecast corrections
 
-`BUY_WAIT_FORECAST_CORRECTIONS` is **off by default**. The corrected first-bucket
-arithmetic (charge only the unspent remainder of the request month, and prorate on
-the real month length excluding the request day) lowers the day-0 charge, which
-raises the amount declared safe: measured against the labelled rows it produced 2
-status upgrades and 15 safe overclaims, so it stays an opt-in experiment. The
-shipped default keeps the conservative charge and G1 at **0 status upgrades / 0
-safe overclaims / 0 unparsed amounts**. The incomplete-request-month rule is
-G1-neutral and always on. The switch is read per call, not at import, so a future
-release can flip it without a code change — but not until the G1 conflict in
-`docs/architecture.md` is resolved.
+The corrected first-bucket arithmetic (charge only the unspent remainder of the
+request month, and prorate on the real month length excluding the request day)
+lowered the day-0 charge, which raises the amount declared safe: measured against
+the labelled rows it produced 2 status upgrades and 15 safe overclaims. It was
+**removed from the code**, not left behind a default-off switch, because an
+environment variable inside the shipped decision path made `output.csv` bytes
+depend on the shell. The shipped conservative charge keeps G1 at **0 status
+upgrades / 0 safe overclaims / 0 unparsed amounts**. The incomplete-request-month
+rule is G1-neutral and ships; the corrected arithmetic is deferred until the G1
+conflict in `docs/architecture.md` is resolved.
 
 ## Current limitations
 

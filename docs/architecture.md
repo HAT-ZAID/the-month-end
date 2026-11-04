@@ -57,7 +57,7 @@ mock_dataset/*.csv + media/images
 | `code/ocr.py` | Tesseract probe and text extraction; `OCR_UNAVAILABLE` instead of invented figures |
 | `code/vision.py` | Qwen3-VL, Docling and Tesseract behind one local image interface, with a second-witness check for model-proposed amounts |
 | `code/recurrence.py` | Recurrence only with ≥3 observations and a low-variance gate |
-| `code/forecast.py` | 90-day projection policy: recurring commitments, monthly essential budget, confirmed income; the corrected first-bucket arithmetic is opt-in behind `BUY_WAIT_FORECAST_CORRECTIONS` |
+| `code/forecast.py` | 90-day projection policy: recurring commitments, monthly essential budget, confirmed income; the corrected first-bucket arithmetic was removed and deferred |
 | `code/oracle.py` | Daily 91-point ledger, pending-debit reservation, minimum-balance floor, safe amount and earliest date; fails closed on any row it cannot value |
 | `code/options.py` | Parses and filters seller payment options against user preferences |
 | `code/changes.py` | Exhaustive 1–3 action spending-change search, re-validated by the oracle |
@@ -193,18 +193,19 @@ solver turns that into a conservative row whose explanation names the reason.
 refuses a non-finite forecast before any candidate is ranked, and `code/service.py`
 refuses a position over an unknown balance instead of reporting zero.
 
-## The forecast-correction switch
+## The deferred forecast corrections
 
-`code/forecast.py` parses `BUY_WAIT_FORECAST_CORRECTIONS` per call, and it is
-**off by default**. The corrected rules (charge only the unspent remainder of the
-request month; prorate on the real month length excluding the request day) lower
-the day-0 charge and therefore raise the safe amount. Measured against the
-labelled rows they produced 2 status upgrades and 15 safe overclaims, so they stay
-opt-in: the shipped default keeps G1 at **0 status upgrades / 0 safe overclaims /
-0 unparsed amounts**. The third rule — the incomplete request month is not a
-budget month — is G1-neutral and always on. Enabling the flag also changes the
-proration pins, so it is a product/experiment switch, not a test override, and it
-must not become the release default until the G1 conflict is resolved.
+`code/forecast.py` ships the conservative first-bucket charge. The corrected
+rules (charge only the unspent remainder of the request month; prorate on the
+real month length excluding the request day) lower the day-0 charge and
+therefore raise the safe amount. Measured against the labelled rows they
+produced 2 status upgrades and 15 safe overclaims, so they were **removed from
+the code** and deferred, not left behind a default-off environment switch: a
+switch inside the shipped decision path made `output.csv` bytes depend on the
+shell. The shipped arithmetic keeps G1 at **0 status upgrades / 0 safe overclaims
+/ 0 unparsed amounts**. The third rule — the incomplete request month is not a
+budget month — is G1-neutral and ships. The corrected arithmetic must not return
+until a safety-margin design resolves the G1 conflict.
 
 ## Invariants
 

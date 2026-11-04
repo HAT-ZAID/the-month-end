@@ -42,7 +42,7 @@ change is the next one), grouped by area:
 | Chat | `code/chat.py` chooses among six kernel-backed tools and returns an honest `NoModel` when no provider is configured |
 | Models | `code/models.py` discovers what this machine can run; loopback URLs are parsed, documented provider env keys are read, and cloud entries are labelled |
 | Safety | Oracle fails closed on unknown direction/status/date, signed-negative amount, invalid reserve/balance, and FX/accumulation overflow; solver refuses a non-finite forecast; service refuses a position over an unknown balance |
-| Forecast | Incomplete request month excluded (always on); MTD and real-month proration behind `BUY_WAIT_FORECAST_CORRECTIONS` (default off); salary projected on its calendar payday |
+| Forecast | Incomplete request month excluded (always on); the MTD and real-month corrected arithmetic was removed and deferred; salary projected on its calendar payday |
 | Scenarios | `code/scenarios.py`: deep-copy `pay_on` / `delay_days` / `change_expense`, kernel re-decide, `persisted: False` |
 | G2 investigation | `tools/g2_probe.py`, `tools/g2_model_mining.py`, `tools/g2_transfer_study.py`; findings in `docs/g2-hypothesis-report.md` and `docs/g2-root-cause-plan.md` |
 | Onboarding | A blank balance or reserve stays unknown; nothing defaults to zero |
@@ -111,15 +111,16 @@ sum overflowing the projection.
 
 ### Forecast
 
-`BUY_WAIT_FORECAST_CORRECTIONS` is **off by default** and parsed per call. The
-corrected first-bucket arithmetic (charge the unspent remainder; prorate on the
-real month length excluding the request day) lowers the day-0 charge and raises
-the safe amount; measured against the labelled rows it produced 2 status upgrades
-and 15 safe overclaims. The default keeps G1 at **0 status upgrades / 0 safe
-overclaims / 0 unparsed amounts**. The incomplete-request-month rule is always on
-because it measured G1-neutral. Do not enable the flag in a release before a
-safety-margin design resolves that conflict, and do not treat it as a test-time
-override: the proration pins assert the default.
+The corrected first-bucket arithmetic (charge the unspent remainder; prorate on
+the real month length excluding the request day) lowers the day-0 charge and
+raises the safe amount; measured against the labelled rows it produced 2 status
+upgrades and 15 safe overclaims. It was **removed from the code** and deferred,
+not left behind a default-off environment switch, because a switch inside the
+shipped decision path made `output.csv` bytes depend on the shell. The shipped
+arithmetic keeps G1 at **0 status upgrades / 0 safe overclaims / 0 unparsed
+amounts**. The incomplete-request-month rule is always on because it measured
+G1-neutral. Do not restore the corrected arithmetic before a safety-margin
+design resolves that conflict.
 
 ### Scenarios
 

@@ -64,9 +64,9 @@ Operations by finding:
   recorded honestly (process isolation deferred).
 - **CR-11** — search attempted / backend healthy / evidence found are separate.
 - **CR-12** — untrusted-data block; injection tests; scope unchanged by text.
-- **CR-13** — partial-month exclusion on by default; MTD and proration
-  corrections behind `BUY_WAIT_FORECAST_CORRECTIONS` (default off) because
-  enabling them measured 2 status upgrades and 15 safe overclaims.
+- **CR-13** — partial-month exclusion ships; the MTD and proration corrections
+  were removed from the code and deferred, because enabling them measured 2
+  status upgrades and 15 safe overclaims.
 - **CR-14** — blank onboarding and `solver.position` stay unknown.
 - **CR-15/16** — provider registry reads documented env keys; loopback is parsed
   and checked by address; Kilo is labelled free.
@@ -82,8 +82,10 @@ Operations by finding:
 
 ## Known limitations carried into release
 
-1. `BUY_WAIT_FORECAST_CORRECTIONS` must stay off until a safety-margin design
-   resolves its G1 conflict.
+1. The corrected first-bucket arithmetic (month-to-date credit and real-month
+   proration) was removed from `code/forecast.py` and deferred, not merely
+   defaulted off, until a safety-margin design resolves its G1 conflict. Only
+   the G1-neutral partial-month exclusion ships.
 2. Provider calls are bounded by transport deadline, not killed; a timed-out call
    may finish in the background and is recorded as unconfirmed.
 3. G2 is FAIL by external contract; the target was not re-baselined.
