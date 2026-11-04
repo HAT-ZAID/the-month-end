@@ -739,6 +739,12 @@ class OpenAICompatibleProvider(ChatProvider):
                 base_url=self.base_url,
                 api_key=self._api_key,
                 temperature=0,
+                # The transport deadline is per attempt, and the SDK defaults
+                # to two retries: a retry started near the outer deadline
+                # would outlive it, keeping the prompt, the socket and the key
+                # in flight after the loop has given up.  The orchestrator
+                # owns retries, so the deadline stays authoritative.
+                max_retries=0,
                 http_client=self._http_client(),
             )
         except ProviderUnavailable:

@@ -451,6 +451,25 @@ def test_a_paid_provider_refuses_a_plaintext_remote_endpoint(created_models):
     assert created_models == []
 
 
+def test_every_openai_compatible_client_disables_sdk_retries(created_models):
+    """The transport deadline is per attempt, so a retry may outlive it.
+
+    ``ChatOpenAI`` defaults to two SDK-level retries.  With the agent loop's
+    deadline wrapped around one turn, a retry started near the deadline keeps
+    the prompt, the socket and the key in flight after the loop has given up.
+    The orchestrator owns retries, so every OpenAI-compatible client is built
+    with ``max_retries=0``.
+    """
+    openrouter = OpenRouterProvider(
+        "openrouter/model", env={"BUY_WAIT_LLM_API_KEY": "placeholder-key"}
+    )
+    for provider in (openrouter, KiloProvider(env=_env()), PaidProvider(env=_paid_env())):
+        assert provider.chat_model() is not None
+
+    assert len(created_models) == 3
+    assert [model.kwargs["max_retries"] for model in created_models] == [0, 0, 0]
+
+
 def test_the_http_client_never_follows_a_redirect(created_models):
     """A 307 keeps the body, so a redirect could resend the key in cleartext."""
     provider, _reason = build_provider({PROVIDER_ENV: "paid", **_paid_env()})
