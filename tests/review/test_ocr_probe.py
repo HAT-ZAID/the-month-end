@@ -65,7 +65,16 @@ def test_resolve_tesseract_accepts_drive_discovered_candidate(tmp_path, monkeypa
     assert resolve_tesseract_path() == exe
 
 
+import sys
+
+import pytest
+
+
 def test_uninstall_string_parser_handles_quotes_and_arguments():
+    if sys.platform != "win32":
+        pytest.skip(
+            "a Windows uninstall string (`D:\\...`) only resolves to a real path on Windows"
+        )
     assert _install_dir_from_uninstall('"D:\\Tesseract_OCR\\tesseract-uninstall.exe" /S') == Path("D:/Tesseract_OCR")
     assert _install_dir_from_uninstall("D:\\Tesseract_OCR\\tesseract-uninstall.exe /S") == Path("D:/Tesseract_OCR")
 

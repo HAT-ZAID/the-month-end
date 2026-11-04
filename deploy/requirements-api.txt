@@ -2,3 +2,5 @@
 fastapi==0.162.0
 uvicorn[standard]==0.54.0
 mangum==0.19.0
+# starlette's TestClient (used by tests/test_api_deploy.py) requires it.
+httpx2
