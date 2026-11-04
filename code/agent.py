@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 import re
 import threading
@@ -38,6 +39,7 @@ from code.providers import (
     DecisionProvider,
     NullProvider,
     ProviderUnavailable,
+    apply_transport_timeout,
     build_provider,
     request_id_from_context,
 )
@@ -526,14 +528,63 @@ def _chat_model(provider):
     return getter()
 
 
+#: How long to watch a timed-out worker unwind before calling the turn
+#: unconfirmed.  A transport that honoured the deadline it was given ends within
+#: this window; an in-process call that ignored it does not.
+TIMEOUT_UNWIND_GRACE_S = 0.05
+
+
+class ProviderTimeout(TimeoutError):
+    """The wrapper stopped waiting for a provider turn.
+
+    ``cancellation_confirmed`` is the part a caller must respect: ``True`` means
+    the worker was seen to finish, so nothing is still running; ``False`` means
+    only the join expired and the turn may still be in flight.  A caller must
+    not start a retry while it is ``False``.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        limit_s: float,
+        elapsed_s: float,
+        cancellation_confirmed: bool,
+        transport_timeout_s: float | None,
+    ):
+        super().__init__(message)
+        self.limit_s = float(limit_s)
+        self.elapsed_s = float(elapsed_s)
+        self.cancellation_confirmed = bool(cancellation_confirmed)
+        self.transport_timeout_s = transport_timeout_s
+
+
 def _invoke_with_timeout(bound, messages, timeout_s):
-    """One chat turn, bounded by ``timeout_s`` (a daemon thread, no leaks)."""
+    """One chat turn, bounded by ``timeout_s``.
+
+    Before the turn is sent, the provider's HTTP transport is lowered to the
+    remaining deadline (see :func:`code.providers.apply_transport_timeout`), so
+    a slow endpoint cannot keep a socket and the prompt alive for the SDK's
+    600 s default after the loop gave up.
+
+    The wait itself is still a daemon thread plus ``join``.  Python cannot kill
+    a thread, so this is **not** a cancellation: process isolation (a worker
+    process the parent can terminate) is out of scope for this layer.  When the
+    join expires the turn is reported with ``cancellation_confirmed = False``
+    unless the worker is seen to exit during a short unwind grace; a caller must
+    not retry a turn that is not confirmed dead.
+    """
     try:
         limit = float(timeout_s)
     except (TypeError, ValueError):
         limit = 0.0
+    if not math.isfinite(limit):
+        # A NaN/inf deadline must not disable the bound.
+        limit = DEFAULT_TIMEOUT_S
     if limit <= 0:
         return bound.invoke(messages)
+
+    transport_timeout = apply_transport_timeout(bound, limit)
 
     box: dict = {}
 
@@ -544,10 +595,27 @@ def _invoke_with_timeout(bound, messages, timeout_s):
             box["error"] = exc
 
     worker = threading.Thread(target=run, name="buy-wait-agent-turn", daemon=True)
+    started = time.monotonic()
     worker.start()
     worker.join(limit)
     if worker.is_alive():
-        raise TimeoutError(f"provider did not answer within {limit:g}s")
+        # "The join expired" is not "the model stopped".  Give the transport a
+        # short window to unwind, then say honestly which one happened.
+        worker.join(TIMEOUT_UNWIND_GRACE_S)
+        elapsed = time.monotonic() - started
+        confirmed = not worker.is_alive()
+        detail = (
+            "the call ended during the unwind grace"
+            if confirmed
+            else "the call may still be running (no process isolation)"
+        )
+        raise ProviderTimeout(
+            f"provider did not answer within {limit:g}s; {detail}",
+            limit_s=limit,
+            elapsed_s=elapsed,
+            cancellation_confirmed=confirmed,
+            transport_timeout_s=transport_timeout,
+        )
     error = box.get("error")
     if error is not None:
         raise error
@@ -1007,9 +1075,20 @@ def run_agent_loop(
         started = time.perf_counter()
         try:
             reply = _invoke_with_timeout(bound, messages, timeout_s)
-        except TimeoutError as exc:
+        except ProviderTimeout as exc:
             if enabled:
-                trace.record("provider_failure", {"error": f"timeout: {exc}"})
+                trace.record(
+                    "provider_failure",
+                    {
+                        "error": f"timeout: {exc}",
+                        "deadline_s": round(exc.limit_s, 3),
+                        "elapsed_s": round(exc.elapsed_s, 3),
+                        "transport_timeout_s": exc.transport_timeout_s,
+                        "cancellation_confirmed": exc.cancellation_confirmed,
+                    },
+                )
+            # An unconfirmed call may still be running: the loop must not start
+            # a retry after it.  Returning the kernel row here is that guard.
             return fallback(f"provider timeout: {exc}")
         except Exception as exc:
             if enabled:
@@ -1647,6 +1726,7 @@ __all__ = [
     "MAX_PROVIDER_CALLS",
     "MAX_TOOL_CALLS",
     "PROMPT_VERSION",
+    "ProviderTimeout",
     "REQUIRED_STEPS",
     "SUBSTRATE_PROMPT_VERSION",
     "TOOL_SCHEMAS",

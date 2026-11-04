@@ -51,6 +51,7 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import math
 import os
 from pathlib import Path
 from typing import Protocol, runtime_checkable
@@ -78,7 +79,8 @@ OLLAMA_REPEAT_PENALTY_ENV = "BUY_WAIT_OLLAMA_REPEAT_PENALTY"
 DEFAULT_NUM_CTX = 8192
 # Transport defaults for the OpenAI-compatible clients. They mirror the SDK's
 # own defaults; the point is the redirect policy in ``_http_client``, not a
-# shorter timeout.
+# shorter timeout. The agent loop still lowers the read timeout to its own
+# deadline before every turn (see ``apply_transport_timeout``).
 DEFAULT_HTTP_TIMEOUT_S = 600.0
 DEFAULT_CONNECT_TIMEOUT_S = 5.0
 # Written as two literals: a bare scheme-plus-host string trips the submission's
@@ -199,6 +201,148 @@ def is_secure_or_local_url(url) -> bool:
     if scheme == "http":
         return is_local_url(url)
     return False
+
+
+#: Smallest transport timeout worth imposing.  httpx reads ``None`` as "no
+#: limit"; a tiny positive number is the honest way to say "this turn is
+#: already out of time" without asking the transport to fail before it starts.
+MIN_TRANSPORT_TIMEOUT_S = 0.05
+#: Attribute remembering a client's configured ceiling, so a later, longer
+#: deadline may restore it but never widen it.  The sentinel distinguishes
+#: "never visited" from "visited, no ceiling configured".
+_TRANSPORT_CEILING_ATTR = "_buy_wait_transport_ceiling"
+_NO_CEILING = object()
+#: Where a chat model parks the HTTP client that actually sends the prompt.
+#: ``http_client`` is LangChain's; ``_client`` is ollama-python's wrapper, whose
+#: own ``_client`` is the httpx client.  Discovery is bounded and by identity.
+_TRANSPORT_ATTRS = (
+    "http_client",
+    "http_async_client",
+    "_client",
+    "_async_client",
+    "client",
+    "async_client",
+)
+
+
+def _is_transport(value) -> bool:
+    """True for an httpx-shaped client (a send method plus a timeout)."""
+    return value is not None and callable(getattr(value, "send", None)) and hasattr(
+        value, "timeout"
+    )
+
+
+def _unwrap_bound(model):
+    """Follow ``bind_tools`` wrappers to the object that owns the transport."""
+    seen: set[int] = set()
+    for _ in range(4):
+        if id(model) in seen:
+            return model
+        seen.add(id(model))
+        nested = getattr(model, "bound", None)
+        if nested is None or nested is model:
+            return model
+        model = nested
+    return model
+
+
+def _transport_clients(model) -> list:
+    """The HTTP clients under a chat model, at most three links down."""
+    found: list = []
+    seen: set[int] = set()
+    frontier = [model]
+    for _ in range(3):
+        next_frontier: list = []
+        for candidate in frontier:
+            if id(candidate) in seen:
+                continue
+            seen.add(id(candidate))
+            if _is_transport(candidate):
+                found.append(candidate)
+                continue
+            for attribute in _TRANSPORT_ATTRS:
+                nested = getattr(candidate, attribute, None)
+                if nested is not None and id(nested) not in seen:
+                    next_frontier.append(nested)
+        frontier = next_frontier
+        if not frontier:
+            break
+    return found
+
+
+def _timeout_read_seconds(timeout) -> float | None:
+    """The read-phase seconds of an httpx timeout, or a plain number."""
+    if timeout is None or isinstance(timeout, bool):
+        return None
+    value = timeout if isinstance(timeout, (int, float)) else getattr(timeout, "read", None)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    number = float(value)
+    return number if math.isfinite(number) and number > 0 else None
+
+
+def _set_transport_timeout(client, seconds: float) -> float | None:
+    """Lower one client's read timeout, returning the seconds now in force."""
+    remembered = getattr(client, _TRANSPORT_CEILING_ATTR, _NO_CEILING)
+    if remembered is _NO_CEILING:
+        # First visit: the configured timeout is the ceiling a later turn may
+        # restore but never exceed.  An unlimited client gets no ceiling, so a
+        # later deadline is free to set one.
+        ceiling = _timeout_read_seconds(getattr(client, "timeout", None))
+        try:
+            setattr(client, _TRANSPORT_CEILING_ATTR, ceiling)
+        except Exception:
+            pass
+    else:
+        ceiling = remembered
+    target = min(seconds, ceiling) if isinstance(ceiling, (int, float)) else seconds
+    try:
+        import httpx
+
+        value = httpx.Timeout(target, connect=min(DEFAULT_CONNECT_TIMEOUT_S, target))
+    except Exception:  # httpx is optional for the replay-only install
+        value = target
+    try:
+        client.timeout = value
+    except Exception:
+        return None
+    return target
+
+
+def apply_transport_timeout(model, timeout_s) -> float | None:
+    """Lower a chat model's HTTP transport to the remaining deadline.
+
+    The agent loop waits on a wall-clock deadline, but the OpenAI-compatible
+    clients ship with a 600 s transport default, so without this a timed-out
+    turn keeps its socket, its prompt and its key in flight long after the loop
+    gave up.  This is called immediately before ``invoke``.  It only ever
+    narrows the configured ceiling (a later, longer deadline may restore it,
+    never exceed it) and changes nothing for a model with no HTTP transport,
+    such as the replay/scripted fixtures.
+
+    Returns the transport seconds now in force, or ``None`` when no transport
+    could be bounded.
+    """
+    try:
+        limit = float(timeout_s)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(limit) or limit <= 0:
+        return None
+    target = max(MIN_TRANSPORT_TIMEOUT_S, limit)
+    try:
+        clients = _transport_clients(_unwrap_bound(model))
+    except Exception:  # discovery must never break a turn
+        return None
+    applied: list[float] = []
+    for client in clients:
+        try:
+            effective = _set_transport_timeout(client, target)
+        except Exception:
+            effective = None
+        if effective is not None:
+            applied.append(effective)
+    return min(applied) if applied else None
 
 
 def request_id_from_context(request_context) -> str:
@@ -911,6 +1055,7 @@ __all__ = [
     "PROVIDER_KINDS",
     "ProviderUnavailable",
     "ReplayProvider",
+    "apply_transport_timeout",
     "build_provider",
     "endpoint_privacy_class",
     "endpoint_privacy_warning",
