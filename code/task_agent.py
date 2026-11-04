@@ -305,6 +305,11 @@ def _negates_an_action(clause: str) -> bool:
 
 def _classify_clause(clause: str) -> str:
     """Pick the verb of one clause. Order matters: specific beats generic."""
+    # A leading why-word owns the clause even when the words after it name an
+    # action: "why stop that event?" asks for the reason, it does not stop it.
+    # This check must stay ahead of every mutation verb.
+    if _EXPLAIN_START.match(clause):
+        return "explain"
     if _UNDO.search(clause):
         return "undo"
     if (
@@ -319,8 +324,6 @@ def _classify_clause(clause: str) -> str:
         and not _negated(clause, _STOP)
     ):
         return "apply"
-    if _EXPLAIN_START.match(clause):
-        return "explain"
     if _CHANGES.search(clause):
         return "changes"
     if _EXPLAIN.search(clause):

@@ -91,6 +91,27 @@ def test_the_why_question_is_answered_and_never_lists_changes():
     assert "baseline safe" not in step.detail
 
 
+def test_a_leading_why_question_about_an_action_is_an_explanation_not_a_mutation():
+    (spec,) = parse_instruction("Why stop event_9 for request_1?")
+    assert spec.kind == "explain"
+
+    workspace = StubWorkspace()
+    result = run_task("Why stop event_9 for request_1?", workspace=workspace)
+    (step,) = result.steps
+    assert step.kind == "explain"
+    assert step.status == STATUS_OK
+    assert result.actions_applied == []
+    assert result.changed == []
+    assert workspace.session.overrides == {}
+
+
+def test_the_imperative_form_of_the_same_action_still_routes_to_apply():
+    (spec,) = parse_instruction("stop event_9 for request_1")
+    assert spec.kind == "apply"
+    assert spec.params["event_id"] == "event_9"
+    assert spec.params["request_id"] == "request_1"
+
+
 # --- a negated verb is never an instruction to mutate ----------------------
 
 
