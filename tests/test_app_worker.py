@@ -130,9 +130,17 @@ def test_decide_with_two_people_and_no_selection_reports_choose_an_account(db):
             await pilot.pause()
             app.query_one("#buy-amount").value = "500"
             app.query_one("#buy-go").press()
-            await pilot.pause()
+            # A press posts a message; the handler runs a turn later than the
+            # call.  Wait for the rendered answer instead of sampling the panel
+            # on the next tick, or the assertion fails against an empty widget
+            # that is merely still on its way.
+            shown = ""
+            for _ in range(20):
+                await pilot.pause()
+                shown = str(app.query_one("#buy-explain").render())
+                if shown.strip():
+                    break
 
-            shown = str(app.query_one("#buy-explain").render())
             assert "choose an account" in shown, shown
             assert app.account is None
         return True
