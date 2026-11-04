@@ -1,0 +1,30 @@
+log.txt
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+code.zip
+.ua/
+.superpowers/
+.opencode/
+.env
+.env.*
+!.env.example
+evaluation/report.json
+evaluation/report.md
+traces/
+# Local generated state: SQLite store, its journal files, the OCR text cache and
+# any local vector-index directory a retriever might create.
+data/*.db
+data/*.db-*
+data/*.sqlite
+data/*.sqlite-*
+data/index/
+data/vector_index/
+data/ocr_text.json
+# Local OCR/VLM result cache: safe to delete, rebuilt on demand.
+data/cache/
+
+
+# CatBoost training artefacts from the G2 model-mining labs
+catboost_info/

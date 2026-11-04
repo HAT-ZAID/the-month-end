@@ -1,0 +1,47 @@
+[
+  {
+    "request_id": "request_26",
+    "machine_diffs": [],
+    "explanation_changed": false,
+    "rationale_source": "kernel",
+    "fallback_reason": null,
+    "provider_calls": 8,
+    "tool_calls": 8,
+    "retrieval_backend": "fallback",
+    "seconds": 193.391,
+    "input_tokens": 28456,
+    "output_tokens": 4085,
+    "trace_error": null,
+    "loop_error": null
+  },
+  {
+    "request_id": "request_27",
+    "machine_diffs": [],
+    "explanation_changed": true,
+    "rationale_source": "candidate",
+    "fallback_reason": null,
+    "provider_calls": 5,
+    "tool_calls": 5,
+    "retrieval_backend": "fts",
+    "seconds": 89.797,
+    "input_tokens": 13802,
+    "output_tokens": 2348,
+    "trace_error": null,
+    "loop_error": null
+  },
+  {
+    "request_id": "request_28",
+    "machine_diffs": [],
+    "explanation_changed": true,
+    "rationale_source": "candidate",
+    "fallback_reason": null,
+    "provider_calls": 9,
+    "tool_calls": 9,
+    "retrieval_backend": "fts",
+    "seconds": 245.735,
+    "input_tokens": 40162,
+    "output_tokens": 5703,
+    "trace_error": null,
+    "loop_error": null
+  }
+]

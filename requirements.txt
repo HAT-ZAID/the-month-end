@@ -1,0 +1,24 @@
+# Base runtime and test dependencies for the deterministic Buy or Wait? path.
+#
+#     python -m pip install -r requirements.txt
+#     python -m pytest tests -q
+#
+# The deterministic pipeline (code/main.py, evaluation/run.py) and the TUI need
+# only pandas and rich.  The OCR stack (pytesseract + Pillow) is optional: without
+# it, images linked to a request are not read and affected rows fail closed with
+# an OCR_UNAVAILABLE warning instead of inventing an amount.  A Tesseract binary
+# is also required at runtime for OCR (set TESSERACT_CMD when it is not on PATH).
+#
+# The optional agent layer (LangChain, local Ollama / OpenRouter / Kilo) lives in
+# requirements-agent.txt and is not needed for offline use.
+pandas>=2.2
+rich>=13.0
+pytest>=8.0
+
+# The modern interface (tools/app.py). Optional: without it, tools/tui.py still
+# runs the Rich screens, and every kernel path is unaffected.
+textual>=0.86
+
+# Optional OCR stack: install these two plus a Tesseract binary to read images.
+pytesseract>=0.3.10
+Pillow>=10.0

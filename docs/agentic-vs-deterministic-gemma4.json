@@ -1,0 +1,47 @@
+[
+  {
+    "request_id": "request_26",
+    "machine_diffs": [],
+    "explanation_changed": false,
+    "rationale_source": "kernel",
+    "fallback_reason": "propose_decision failed twice: candidate rejected: missing fields: amount_safe_to_pay, confidence, rationale, request_id",
+    "provider_calls": 5,
+    "tool_calls": 5,
+    "retrieval_backend": "fallback",
+    "seconds": 91.813,
+    "input_tokens": 8895,
+    "output_tokens": 2572,
+    "trace_error": null,
+    "loop_error": null
+  },
+  {
+    "request_id": "request_27",
+    "machine_diffs": [],
+    "explanation_changed": false,
+    "rationale_source": "kernel",
+    "fallback_reason": "propose_decision failed twice: candidate rejected: missing fields: amount_safe_to_pay, confidence, rationale, request_id",
+    "provider_calls": 4,
+    "tool_calls": 4,
+    "retrieval_backend": "fts",
+    "seconds": 80.984,
+    "input_tokens": 9023,
+    "output_tokens": 2236,
+    "trace_error": null,
+    "loop_error": null
+  },
+  {
+    "request_id": "request_28",
+    "machine_diffs": [],
+    "explanation_changed": false,
+    "rationale_source": "kernel",
+    "fallback_reason": "model returned neither a tool call nor a valid JSON candidate",
+    "provider_calls": 5,
+    "tool_calls": 3,
+    "retrieval_backend": "fts",
+    "seconds": 103.719,
+    "input_tokens": 12606,
+    "output_tokens": 2784,
+    "trace_error": null,
+    "loop_error": null
+  }
+]

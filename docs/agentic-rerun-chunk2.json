@@ -1,0 +1,35 @@
+{
+  "budget": {
+    "note": "shipped defaults; --max-turns/--max-tool-calls did not reach the runner before the fix",
+    "provider_calls": 6,
+    "tool_calls": 6
+  },
+  "not_run": [
+    {
+      "reason": "--offset was applied to the reported slice, not to the run length, so the loop never reached this request; fixed (agent_limit=offset+limit) and verified with a fail-fast provider run",
+      "request_id": "request_29"
+    },
+    {
+      "reason": "--offset was applied to the reported slice, not to the run length, so the loop never reached this request; fixed (agent_limit=offset+limit) and verified with a fail-fast provider run",
+      "request_id": "request_30"
+    }
+  ],
+  "provider": "ollama:llama3.2:3b",
+  "rows": [
+    {
+      "explanation_changed": false,
+      "fallback_reason": "propose_decision failed twice: candidate rejected: missing fields: amount_safe_to_pay, confidence, evidence_sufficient, rationale, request_id; unexpected fields: payment_method",
+      "input_tokens": 13973,
+      "machine_diffs": [],
+      "output_tokens": 580,
+      "provider_calls": 6,
+      "rationale_source": "kernel",
+      "request_id": "request_28",
+      "retrieval_backend": "fts",
+      "seconds": 454.094,
+      "tool_calls": 6,
+      "trace_error": null
+    }
+  ],
+  "timeout_s": 600
+}

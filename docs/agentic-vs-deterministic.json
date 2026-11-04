@@ -1,0 +1,72 @@
+[
+  {
+    "request_id": "request_26",
+    "machine_diffs": [],
+    "explanation_changed": false,
+    "rationale_source": "kernel",
+    "fallback_reason": "propose_decision failed twice: candidate rejected: missing fields: amount_safe_to_pay, confidence, rationale, request_id; unexpected fields: spending_changes",
+    "provider_calls": 5,
+    "tool_calls": 6,
+    "retrieval_backend": "fts",
+    "seconds": 80.297,
+    "input_tokens": 8629,
+    "output_tokens": 393,
+    "trace_error": null
+  },
+  {
+    "request_id": "request_27",
+    "machine_diffs": [],
+    "explanation_changed": false,
+    "rationale_source": "kernel",
+    "fallback_reason": "provider timeout: provider did not answer within 180s",
+    "provider_calls": 1,
+    "tool_calls": 0,
+    "retrieval_backend": null,
+    "seconds": 180.438,
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "trace_error": null
+  },
+  {
+    "request_id": "request_28",
+    "machine_diffs": [],
+    "explanation_changed": false,
+    "rationale_source": "kernel",
+    "fallback_reason": "provider timeout: provider did not answer within 180s",
+    "provider_calls": 1,
+    "tool_calls": 0,
+    "retrieval_backend": null,
+    "seconds": 180.625,
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "trace_error": null
+  },
+  {
+    "request_id": "request_29",
+    "machine_diffs": [],
+    "explanation_changed": false,
+    "rationale_source": "kernel",
+    "fallback_reason": "provider timeout: provider did not answer within 180s",
+    "provider_calls": 1,
+    "tool_calls": 0,
+    "retrieval_backend": null,
+    "seconds": 180.704,
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "trace_error": null
+  },
+  {
+    "request_id": "request_30",
+    "machine_diffs": [],
+    "explanation_changed": false,
+    "rationale_source": "kernel",
+    "fallback_reason": "provider timeout: provider did not answer within 180s",
+    "provider_calls": 1,
+    "tool_calls": 0,
+    "retrieval_backend": null,
+    "seconds": 180.734,
+    "input_tokens": 0,
+    "output_tokens": 0,
+    "trace_error": null
+  }
+]

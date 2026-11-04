@@ -1,0 +1,634 @@
+{
+  "rows": [
+    {
+      "request_id": "request_01",
+      "ok": true,
+      "error": null,
+      "usage": {
+        "input_tokens": 1463,
+        "output_tokens": 228,
+        "cost": 0,
+        "billing_source": "free"
+      },
+      "latency_ms": 1171,
+      "kernel": {
+        "status": "not_affordable",
+        "method": "not_recommended"
+      },
+      "status_pred": "not_affordable",
+      "status_prob": 0.54,
+      "status_match": true,
+      "method_pred": "wait",
+      "method_prob": 0.57,
+      "method_match": false,
+      "decision_safety_noul": 0.65,
+      "evidence_score": 0.43,
+      "tokens": "in=1463 out=228"
+    },
+    {
+      "request_id": "request_02",
+      "ok": true,
+      "error": null,
+      "usage": {
+        "input_tokens": 1409,
+        "output_tokens": 228,
+        "cost": 0,
+        "billing_source": "free"
+      },
+      "latency_ms": 1203,
+      "kernel": {
+        "status": "not_affordable",
+        "method": "not_recommended"
+      },
+      "status_pred": "not_affordable",
+      "status_prob": 0.61,
+      "status_match": true,
+      "method_pred": "wait",
+      "method_prob": 0.65,
+      "method_match": false,
+      "decision_safety_noul": 0.53,
+      "evidence_score": 0.4,
+      "tokens": "in=1409 out=228"
+    },
+    {
+      "request_id": "request_03",
+      "ok": true,
+      "error": null,
+      "usage": {
+        "input_tokens": 1402,
+        "output_tokens": 228,
+        "cost": 0,
+        "billing_source": "free"
+      },
+      "latency_ms": 1140,
+      "kernel": {
+        "status": "not_affordable",
+        "method": "not_recommended"
+      },
+      "status_pred": "not_affordable",
+      "status_prob": 0.61,
+      "status_match": true,
+      "method_pred": "not_recommended",
+      "method_prob": 0.62,
+      "method_match": true,
+      "decision_safety_noul": 0.57,
+      "evidence_score": 0.35,
+      "tokens": "in=1402 out=228"
+    },
+    {
+      "request_id": "request_04",
+      "ok": true,
+      "error": null,
+      "usage": {
+        "input_tokens": 1248,
+        "output_tokens": 228,
+        "cost": 0,
+        "billing_source": "free"
+      },
+      "latency_ms": 1108,
+      "kernel": {
+        "status": "not_affordable",
+        "method": "not_recommended"
+      },
+      "status_pred": "not_affordable",
+      "status_prob": 0.71,
+      "status_match": true,
+      "method_pred": "not_recommended",
+      "method_prob": 0.78,
+      "method_match": true,
+      "decision_safety_noul": 0.19,
+      "evidence_score": 0.33,
+      "tokens": "in=1248 out=228"
+    },
+    {
+      "request_id": "request_05",
+      "ok": true,
+      "error": null,
+      "usage": {
+        "input_tokens": 1334,
+        "output_tokens": 228,
+        "cost": 0,
+        "billing_source": "free"
+      },
+      "latency_ms": 1203,
+      "kernel": {
+        "status": "not_affordable",
+        "method": "not_recommended"
+      },
+      "status_pred": "not_affordable",
+      "status_prob": 0.94,
+      "status_match": true,
+      "method_pred": "not_recommended",
+      "method_prob": 0.94,
+      "method_match": true,
+      "decision_safety_noul": 0.1,
+      "evidence_score": 0.56,
+      "tokens": "in=1334 out=228"
+    },
+    {
+      "request_id": "request_06",
+      "ok": true,
+      "error": null,
+      "usage": {
+        "input_tokens": 1366,
+        "output_tokens": 228,
+        "cost": 0,
+        "billing_source": "free"
+      },
+      "latency_ms": 1203,
+      "kernel": {
+        "status": "affordable_later",
+        "method": "wait"
+      },
+      "status_pred": "affordable_later",
+      "status_prob": 0.85,
+      "status_match": true,
+      "method_pred": "wait",
+      "method_prob": 0.81,
+      "method_match": true,
+      "decision_safety_noul": 0.81,
+      "evidence_score": 0.41,
+      "tokens": "in=1366 out=228"
+    },
+    {
+      "request_id": "request_07",
+      "ok": true,
+      "error": null,
+      "usage": {
+        "input_tokens": 1422,
+        "output_tokens": 228,
+        "cost": 0,
+        "billing_source": "free"
+      },
+      "latency_ms": 1187,
+      "kernel": {
+        "status": "affordable_with_plan",
+        "method": "installments"
+      },
+      "status_pred": "affordable_with_plan",
+      "status_prob": 0.91,
+      "status_match": true,
+      "method_pred": "installments",
+      "method_prob": 0.84,
+      "method_match": true,
+      "decision_safety_noul": 0.9,
+      "evidence_score": 0.54,
+      "tokens": "in=1422 out=228"
+    },
+    {
+      "request_id": "request_08",
+      "ok": true,
+      "error": null,
+      "usage": {
+        "input_tokens": 1212,
+        "output_tokens": 228,
+        "cost": 0,
+        "billing_source": "free"
+      },
+      "latency_ms": 1141,
+      "kernel": {
+        "status": "not_affordable",
+        "method": "not_recommended"
+      },
+      "status_pred": "not_affordable",
+      "status_prob": 0.92,
+      "status_match": true,
+      "method_pred": "not_recommended",
+      "method_prob": 0.91,
+      "method_match": true,
+      "decision_safety_noul": 0.3,
+      "evidence_score": 0.43,
+      "tokens": "in=1212 out=228"
+    },
+    {
+      "request_id": "request_09",
+      "ok": true,
+      "error": null,
+      "usage": {
+        "input_tokens": 1346,
+        "output_tokens": 228,
+        "cost": 0,
+        "billing_source": "free"
+      },
+      "latency_ms": 1187,
+      "kernel": {
+        "status": "affordable_now",
+        "method": "full_payment"
+      },
+      "status_pred": "affordable_now",
+      "status_prob": 0.96,
+      "status_match": true,
+      "method_pred": "full_payment",
+      "method_prob": 0.95,
+      "method_match": true,
+      "decision_safety_noul": 0.95,
+      "evidence_score": 0.74,
+      "tokens": "in=1346 out=228"
+    },
+    {
+      "request_id": "request_10",
+      "ok": true,
+      "error": null,
+      "usage": {
+        "input_tokens": 1236,
+        "output_tokens": 228,
+        "cost": 0,
+        "billing_source": "free"
+      },
+      "latency_ms": 1155,
+      "kernel": {
+        "status": "not_affordable",
+        "method": "not_recommended"
+      },
+      "status_pred": "not_affordable",
+      "status_prob": 0.62,
+      "status_match": true,
+      "method_pred": "not_recommended",
+      "method_prob": 0.68,
+      "method_match": true,
+      "decision_safety_noul": 0.19,
+      "evidence_score": 0.32,
+      "tokens": "in=1236 out=228"
+    },
+    {
+      "request_id": "request_11",
+      "ok": true,
+      "error": null,
+      "usage": {
+        "input_tokens": 1546,
+        "output_tokens": 228,
+        "cost": 0,
+        "billing_source": "free"
+      },
+      "latency_ms": 1187,
+      "kernel": {
+        "status": "affordable_later",
+        "method": "wait"
+      },
+      "status_pred": "affordable_later",
+      "status_prob": 0.86,
+      "status_match": true,
+      "method_pred": "wait",
+      "method_prob": 0.77,
+      "method_match": true,
+      "decision_safety_noul": 0.86,
+      "evidence_score": 0.47,
+      "tokens": "in=1546 out=228"
+    },
+    {
+      "request_id": "request_12",
+      "ok": true,
+      "error": null,
+      "usage": {
+        "input_tokens": 1426,
+        "output_tokens": 228,
+        "cost": 0,
+        "billing_source": "free"
+      },
+      "latency_ms": 1171,
+      "kernel": {
+        "status": "affordable_with_plan",
+        "method": "installments"
+      },
+      "status_pred": "affordable_with_plan",
+      "status_prob": 0.88,
+      "status_match": true,
+      "method_pred": "installments",
+      "method_prob": 0.64,
+      "method_match": true,
+      "decision_safety_noul": 0.92,
+      "evidence_score": 0.55,
+      "tokens": "in=1426 out=228"
+    },
+    {
+      "request_id": "request_13",
+      "ok": true,
+      "error": null,
+      "usage": {
+        "input_tokens": 1323,
+        "output_tokens": 228,
+        "cost": 0,
+        "billing_source": "free"
+      },
+      "latency_ms": 1125,
+      "kernel": {
+        "status": "not_affordable",
+        "method": "not_recommended"
+      },
+      "status_pred": "not_affordable",
+      "status_prob": 0.81,
+      "status_match": true,
+      "method_pred": "not_recommended",
+      "method_prob": 0.78,
+      "method_match": true,
+      "decision_safety_noul": 0.72,
+      "evidence_score": 0.5,
+      "tokens": "in=1323 out=228"
+    },
+    {
+      "request_id": "request_14",
+      "ok": true,
+      "error": null,
+      "usage": {
+        "input_tokens": 1232,
+        "output_tokens": 228,
+        "cost": 0,
+        "billing_source": "free"
+      },
+      "latency_ms": 1171,
+      "kernel": {
+        "status": "not_affordable",
+        "method": "not_recommended"
+      },
+      "status_pred": "not_affordable",
+      "status_prob": 0.93,
+      "status_match": true,
+      "method_pred": "not_recommended",
+      "method_prob": 0.91,
+      "method_match": true,
+      "decision_safety_noul": 0.68,
+      "evidence_score": 0.41,
+      "tokens": "in=1232 out=228"
+    },
+    {
+      "request_id": "request_15",
+      "ok": true,
+      "error": null,
+      "usage": {
+        "input_tokens": 1322,
+        "output_tokens": 228,
+        "cost": 0,
+        "billing_source": "free"
+      },
+      "latency_ms": 1218,
+      "kernel": {
+        "status": "not_affordable",
+        "method": "not_recommended"
+      },
+      "status_pred": "not_affordable",
+      "status_prob": 0.97,
+      "status_match": true,
+      "method_pred": "not_recommended",
+      "method_prob": 0.96,
+      "method_match": true,
+      "decision_safety_noul": 0.12,
+      "evidence_score": 0.48,
+      "tokens": "in=1322 out=228"
+    },
+    {
+      "request_id": "request_16",
+      "ok": true,
+      "error": null,
+      "usage": {
+        "input_tokens": 1372,
+        "output_tokens": 228,
+        "cost": 0,
+        "billing_source": "free"
+      },
+      "latency_ms": 1250,
+      "kernel": {
+        "status": "affordable_now",
+        "method": "full_payment"
+      },
+      "status_pred": "affordable_now",
+      "status_prob": 0.91,
+      "status_match": true,
+      "method_pred": "full_payment",
+      "method_prob": 0.91,
+      "method_match": true,
+      "decision_safety_noul": 0.87,
+      "evidence_score": 0.63,
+      "tokens": "in=1372 out=228"
+    },
+    {
+      "request_id": "request_17",
+      "ok": true,
+      "error": null,
+      "usage": {
+        "input_tokens": 1453,
+        "output_tokens": 228,
+        "cost": 0,
+        "billing_source": "free"
+      },
+      "latency_ms": 1265,
+      "kernel": {
+        "status": "affordable_with_plan",
+        "method": "installments"
+      },
+      "status_pred": "affordable_with_plan",
+      "status_prob": 0.88,
+      "status_match": true,
+      "method_pred": "installments",
+      "method_prob": 0.75,
+      "method_match": true,
+      "decision_safety_noul": 0.87,
+      "evidence_score": 0.53,
+      "tokens": "in=1453 out=228"
+    },
+    {
+      "request_id": "request_18",
+      "ok": true,
+      "error": null,
+      "usage": {
+        "input_tokens": 1246,
+        "output_tokens": 228,
+        "cost": 0,
+        "billing_source": "free"
+      },
+      "latency_ms": 1202,
+      "kernel": {
+        "status": "affordable_later",
+        "method": "wait"
+      },
+      "status_pred": "affordable_later",
+      "status_prob": 0.75,
+      "status_match": true,
+      "method_pred": "wait",
+      "method_prob": 0.75,
+      "method_match": true,
+      "decision_safety_noul": 0.52,
+      "evidence_score": 0.31,
+      "tokens": "in=1246 out=228"
+    },
+    {
+      "request_id": "request_19",
+      "ok": true,
+      "error": null,
+      "usage": {
+        "input_tokens": 1412,
+        "output_tokens": 228,
+        "cost": 0,
+        "billing_source": "free"
+      },
+      "latency_ms": 1140,
+      "kernel": {
+        "status": "affordable_with_plan",
+        "method": "partial_payment"
+      },
+      "status_pred": "affordable_with_plan",
+      "status_prob": 0.88,
+      "status_match": true,
+      "method_pred": "partial_payment",
+      "method_prob": 0.83,
+      "method_match": true,
+      "decision_safety_noul": 0.87,
+      "evidence_score": 0.46,
+      "tokens": "in=1412 out=228"
+    },
+    {
+      "request_id": "request_20",
+      "ok": true,
+      "error": null,
+      "usage": {
+        "input_tokens": 1225,
+        "output_tokens": 228,
+        "cost": 0,
+        "billing_source": "free"
+      },
+      "latency_ms": 1234,
+      "kernel": {
+        "status": "not_affordable",
+        "method": "not_recommended"
+      },
+      "status_pred": "not_affordable",
+      "status_prob": 0.96,
+      "status_match": true,
+      "method_pred": "not_recommended",
+      "method_prob": 0.94,
+      "method_match": true,
+      "decision_safety_noul": 0.5,
+      "evidence_score": 0.58,
+      "tokens": "in=1225 out=228"
+    },
+    {
+      "request_id": "request_21",
+      "ok": true,
+      "error": null,
+      "usage": {
+        "input_tokens": 1469,
+        "output_tokens": 228,
+        "cost": 0,
+        "billing_source": "free"
+      },
+      "latency_ms": 1109,
+      "kernel": {
+        "status": "not_affordable",
+        "method": "not_recommended"
+      },
+      "status_pred": "not_affordable",
+      "status_prob": 0.8,
+      "status_match": true,
+      "method_pred": "not_recommended",
+      "method_prob": 0.83,
+      "method_match": true,
+      "decision_safety_noul": 0.55,
+      "evidence_score": 0.49,
+      "tokens": "in=1469 out=228"
+    },
+    {
+      "request_id": "request_22",
+      "ok": true,
+      "error": null,
+      "usage": {
+        "input_tokens": 1327,
+        "output_tokens": 228,
+        "cost": 0,
+        "billing_source": "free"
+      },
+      "latency_ms": 1375,
+      "kernel": {
+        "status": "not_affordable",
+        "method": "not_recommended"
+      },
+      "status_pred": "not_affordable",
+      "status_prob": 0.71,
+      "status_match": true,
+      "method_pred": "not_recommended",
+      "method_prob": 0.68,
+      "method_match": true,
+      "decision_safety_noul": 0.59,
+      "evidence_score": 0.4,
+      "tokens": "in=1327 out=228"
+    },
+    {
+      "request_id": "request_23",
+      "ok": true,
+      "error": null,
+      "usage": {
+        "input_tokens": 1349,
+        "output_tokens": 228,
+        "cost": 0,
+        "billing_source": "free"
+      },
+      "latency_ms": 1155,
+      "kernel": {
+        "status": "not_affordable",
+        "method": "not_recommended"
+      },
+      "status_pred": "not_affordable",
+      "status_prob": 0.83,
+      "status_match": true,
+      "method_pred": "not_recommended",
+      "method_prob": 0.87,
+      "method_match": true,
+      "decision_safety_noul": 0.2,
+      "evidence_score": 0.37,
+      "tokens": "in=1349 out=228"
+    },
+    {
+      "request_id": "request_24",
+      "ok": true,
+      "error": null,
+      "usage": {
+        "input_tokens": 1219,
+        "output_tokens": 228,
+        "cost": 0,
+        "billing_source": "free"
+      },
+      "latency_ms": 1171,
+      "kernel": {
+        "status": "not_affordable",
+        "method": "not_recommended"
+      },
+      "status_pred": "not_affordable",
+      "status_prob": 0.93,
+      "status_match": true,
+      "method_pred": "not_recommended",
+      "method_prob": 0.93,
+      "method_match": true,
+      "decision_safety_noul": 0.32,
+      "evidence_score": 0.42,
+      "tokens": "in=1219 out=228"
+    },
+    {
+      "request_id": "request_25",
+      "ok": true,
+      "error": null,
+      "usage": {
+        "input_tokens": 1372,
+        "output_tokens": 228,
+        "cost": 0,
+        "billing_source": "free"
+      },
+      "latency_ms": 1157,
+      "kernel": {
+        "status": "not_affordable",
+        "method": "not_recommended"
+      },
+      "status_pred": "not_affordable",
+      "status_prob": 0.89,
+      "status_match": true,
+      "method_pred": "not_recommended",
+      "method_prob": 0.81,
+      "method_match": true,
+      "decision_safety_noul": 0.44,
+      "evidence_score": 0.43,
+      "tokens": "in=1372 out=228"
+    }
+  ],
+  "meta": {
+    "base_url": "https://opencode.ai/inference/systemone/v1/systemone",
+    "model": "jev-1.13-free",
+    "dry_run": false
+  }
+}
