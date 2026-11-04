@@ -18,7 +18,6 @@ import ipaddress
 import json
 import os
 import urllib.error
-import urllib.request
 from urllib.parse import urlsplit
 
 from code.providers import (
@@ -30,6 +29,7 @@ from code.providers import (
     PAID_API_KEY_ENV,
     PROVIDER_ENV,
     OpenRouterProvider,
+    no_proxy_opener,
 )
 
 #: Loopback only. A model list is not worth a packet leaving the machine.
@@ -88,10 +88,17 @@ def is_loopback(url) -> bool:
 
 NO_MODEL = "none"
 
+#: The transport for discovery probes.  Named so a test can replace it without
+#: opening a socket.  ``urllib`` reads ``HTTP_PROXY``/``HTTPS_PROXY`` by
+#: default; discovery is loopback-only, and every provider client is built with
+#: ``trust_env=False``, so the menu must not be the one request that leaves
+#: through a proxy the user never configured for this product.
+_PROBE_OPENER = no_proxy_opener()
+
 
 def _get_json(url: str, timeout: float = 1.5) -> dict | None:
     try:
-        with urllib.request.urlopen(url, timeout=timeout) as response:
+        with _PROBE_OPENER.open(url, timeout=timeout) as response:
             if response.status != 200:
                 return None
             return json.loads(response.read().decode("utf-8"))

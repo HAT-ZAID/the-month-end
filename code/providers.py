@@ -54,6 +54,7 @@ import inspect
 import json
 import math
 import os
+import urllib.request
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 from urllib.parse import urlsplit
@@ -949,15 +950,39 @@ _REMOTE_MODEL_KINDS = (
 )
 
 
+def no_proxy_opener():
+    """An opener whose proxy table is empty, so no env proxy receives a probe.
+
+    ``urllib`` reads ``HTTP_PROXY``/``HTTPS_PROXY`` from the environment by
+    default.  Every provider HTTP client is built with ``trust_env=False``
+    (commit 164ad64); model discovery follows the same policy, because the
+    probe is loopback-only and a shell variable is not a deliberate choice to
+    route this product's requests anywhere.
+
+    An empty table installs no scheme methods, and ``build_opener`` therefore
+    drops the default, environment-reading ``ProxyHandler`` rather than
+    registering a route through one.
+    """
+    return urllib.request.build_opener(urllib.request.ProxyHandler({}))
+
+
+#: The empty handler that makes the bypass explicit.  Kept named so a test can
+#: assert the policy without opening a socket.
+_PROBE_PROXY = urllib.request.ProxyHandler({})
+
+#: The transport for the ``/api/tags`` probe.  Indirected through this name so a
+#: test can replace it without opening a socket.
+_PROBE_OPENER = no_proxy_opener()
+
+
 def _ollama_tags(base_url: str, timeout: float) -> list[str] | None:
     """Model names served by the Ollama daemon, or ``None`` when unreachable."""
     if not is_secure_or_local_url(base_url):
         return None
-    import json
-    from urllib.request import urlopen
-
     try:
-        with urlopen(base_url.rstrip("/") + "/api/tags", timeout=timeout) as response:
+        with _PROBE_OPENER.open(
+            base_url.rstrip("/") + "/api/tags", timeout=timeout
+        ) as response:
             payload = json.loads(response.read().decode("utf-8"))
     except Exception:
         return None
@@ -1152,6 +1177,7 @@ __all__ = [
     "is_loopback_host",
     "is_secure_or_local_url",
     "load_fixtures",
+    "no_proxy_opener",
     "privacy_warning",
     "redact_url",
     "request_id_from_context",
