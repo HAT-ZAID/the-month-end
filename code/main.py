@@ -96,17 +96,24 @@ def _money_action(text: str) -> str:
     return "|".join(parts)
 
 
-def _checked_explanation(text, row, extra_numbers=()) -> str:
-    """The generated prose, or the row's own text when it cannot be supported.
+def _checked_explanation(text, row, extra_numbers=(), fallback_text=None) -> str:
+    """The generated prose, or the kernel text when it cannot be supported.
 
     ``enforce_decision`` gates the candidate path; this is the other writer into
     ``decision_explanation``, and it had no claim check at all, so a configured
     provider could put an unsupported figure in the required column.
+
+    ``fallback_text`` is the sentence captured before a candidate's prose
+    replaced the row. On the agent path ``row["decision_explanation"]`` is that
+    same rejected prose, so reading the fallback from the row makes the guard a
+    no-op; a caller that holds the kernel text passes it here instead.
     """
     from code.claims import cites_every_action, states_the_decision, verify_claims
 
     prose = str(text or "").strip()
-    fallback = str(row.get("decision_explanation") or "").strip()
+    fallback = str(
+        row.get("decision_explanation") if fallback_text is None else fallback_text
+    ).strip()
     if not prose:
         return fallback
     report = verify_claims(prose, row, extra_numbers=extra_numbers)
@@ -416,6 +423,11 @@ def run_pipeline(
                 installment_safety="strict",  # pin strict leg safety for production runs
             )
 
+        # The kernel sentence has to be captured before the agent pass: an
+        # outcome row can carry the candidate's own prose, and falling back to
+        # that row would hand back the very text the claim check rejects.
+        kernel_explanation = str(res.get("decision_explanation") or "")
+
         # Optional agent pass on top of the kernel row. The verifier always
         # returns kernel values, so the row is identical to the plain path
         # unless a valid, agreeing candidate supplied its own rationale. Any
@@ -522,10 +534,9 @@ def run_pipeline(
             "_usage": usage,
         })
         template_text = str(explanation or "")
-        # The kernel's own sentence, captured before either writer touches the
-        # row: falling back to the row handed in would hand back the very prose
-        # that was just rejected.
-        kernel_text = str(res.get("decision_explanation") or template_text)
+        # The kernel's own sentence, captured before either writer touched the
+        # row; the template is the fallback when the solver supplied none.
+        fallback_text = kernel_explanation or template_text
         explanation = _preferred_explanation(explanation, res, agent_outcome)
         explanation = _checked_explanation(
             explanation,
@@ -540,7 +551,7 @@ def run_pipeline(
                 "spending_changes_needed": _money_action(
                     res["spending_changes_needed"]
                 ),
-                "decision_explanation": kernel_text,
+                "decision_explanation": fallback_text,
                 "requested_amount": req["requested_amount"],
                 "minimum_balance": profile.get("minimum_balance_to_keep"),
             },
@@ -548,6 +559,7 @@ def run_pipeline(
                 req["requested_amount"],
                 profile.get("minimum_balance_to_keep"),
             ),
+            fallback_text=fallback_text,
         )
         output_row = {
             "request_id": res["request_id"],

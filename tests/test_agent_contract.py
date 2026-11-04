@@ -429,6 +429,40 @@ def test_agent_failure_preserves_kernel_row_and_still_writes_output(
         assert written.loc[0, column] == plain.loc[0, column]
 
 
+def test_a_rejected_candidate_rationale_falls_back_to_the_kernel_sentence(
+    tmp_path, monkeypatch
+):
+    """The fallback must be the kernel text, not the row the agent replaced.
+
+    A candidate rationale can carry a figure the CSV cannot represent
+    (``110423.7425`` serialises as ``110423.74``). Reading the fallback from the
+    row handed in returns that same rejected sentence, so the guard is a no-op.
+    """
+    import code.agent as agent_mod
+    from code.main import run_pipeline
+
+    _write_tiny_dataset(tmp_path)
+    plain, _ = run_pipeline(repo_root=tmp_path, write_output=False, write_usage=False)
+    kernel_sentence = plain.loc[0, "decision_explanation"]
+    assert kernel_sentence
+
+    def candidate(payload, *, kernel_result, **kwargs):
+        row = dict(kernel_result)
+        row["decision_explanation"] = "You can safely pay 110423.7425 today."
+        return {"row": row, "verification": {"rationale_source": "candidate"}}
+
+    monkeypatch.setattr(agent_mod, "run_agent_once", candidate)
+    output, _ = run_pipeline(
+        repo_root=tmp_path,
+        write_output=False,
+        write_usage=False,
+        agent_request_ids=["request_demo"],
+    )
+
+    assert output.loc[0, "decision_explanation"] == kernel_sentence
+    assert "110423.7425" not in output.loc[0, "decision_explanation"]
+
+
 def test_trace_write_failure_keeps_final_row():
     outcome = run_agent_once(
         {"request_id": "request_demo"},
