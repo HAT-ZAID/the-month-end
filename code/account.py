@@ -159,7 +159,15 @@ def load_account(path=None, repo_root=None) -> dict | None:
 
 
 def save_account(account: dict, path=None, repo_root=None) -> Path:
-    """Write the account, creating its directory. Returns where it went."""
+    """Write the account, creating its directory. Returns where it went.
+
+    A malformed account is refused before anything is written, on the same
+    terms as ``code.accounts.save``: one validator decides what is storable, so
+    a fact the store would reject cannot reach disk through this path instead.
+    """
+    errors = validate_account(account)
+    if errors:
+        raise ValueError("; ".join(errors))
     target = Path(path) if path is not None else default_path(repo_root)
     target.parent.mkdir(parents=True, exist_ok=True)
     payload = {**account, "version": ACCOUNT_VERSION}

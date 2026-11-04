@@ -149,3 +149,79 @@ def test_save_joins_every_problem_into_one_error(db):
     message = str(caught.value)
     assert "amount" in message and "currency" in message
     assert "; " in message, "the errors must be joined with '; '"
+
+
+# --------------------------------------------------------- the JSON save gate
+#
+# ``code.account.save_account`` is the other persistence path: one JSON file,
+# used by the TUI and the task agent.  It writes the same contract a store save
+# does, so it must ask the same validator first.  An account the validator
+# refuses may not reach disk through either door.
+
+
+def test_the_json_save_refuses_an_unknown_direction(tmp_path):
+    account = _account()
+    account["events"][0]["direction"] = "sideways"
+    target = tmp_path / "account.json"
+    with pytest.raises(ValueError) as caught:
+        acct.save_account(account, path=target)
+    assert "direction" in str(caught.value)
+    assert not target.exists(), "a refused account was written anyway"
+
+
+@pytest.mark.parametrize("value", ["NaN", "Infinity", "-Infinity"])
+def test_the_json_save_refuses_a_non_finite_amount(tmp_path, value):
+    account = _account()
+    account["events"][0]["amount"] = value
+    target = tmp_path / "account.json"
+    with pytest.raises(ValueError) as caught:
+        acct.save_account(account, path=target)
+    message = str(caught.value)
+    assert "amount" in message and "finite" in message
+    assert not target.exists(), "a refused account was written anyway"
+
+
+def test_the_json_save_joins_every_problem_into_one_error(tmp_path):
+    account = _account()
+    account["events"][0]["amount"] = "-5"
+    account["events"][0]["currency"] = "GBP"
+    target = tmp_path / "account.json"
+    with pytest.raises(ValueError) as caught:
+        acct.save_account(account, path=target)
+    message = str(caught.value)
+    assert "amount" in message and "currency" in message
+    assert "; " in message, "the errors must be joined with '; '"
+    assert not target.exists()
+
+
+def test_a_refused_json_save_leaves_the_previous_file_untouched(tmp_path):
+    """``open('w')`` truncates, so the validator has to run before the write."""
+    target = tmp_path / "account.json"
+    acct.save_account(_account(), path=target)
+    before = target.read_bytes()
+
+    account = _account()
+    account["events"][0]["amount"] = "Infinity"
+    with pytest.raises(ValueError):
+        acct.save_account(account, path=target)
+
+    assert target.read_bytes() == before
+
+
+def test_a_valid_account_still_saves_and_reloads_through_the_json_path(tmp_path):
+    target = tmp_path / "nested" / "account.json"
+    assert acct.save_account(_account(), path=target) == target
+    reloaded = acct.load_account(path=target)
+    assert reloaded is not None
+    assert reloaded["version"] == acct.ACCOUNT_VERSION
+    assert reloaded["profile"]["home_currency"] == "ZAR"
+    assert [event["amount"] for event in reloaded["events"]] == ["8000"]
+
+
+def test_an_unanswered_account_still_saves_through_the_json_path(tmp_path):
+    """A blank value is unknown, not malformed: onboarding must still persist."""
+    target = tmp_path / "account.json"
+    acct.save_account(acct.blank_account(user_id="ana"), path=target)
+    reloaded = acct.load_account(path=target)
+    assert reloaded["profile"]["user_id"] == "ana"
+    assert reloaded["events"] == []
