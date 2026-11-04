@@ -220,6 +220,11 @@ MAX_SESSION_MESSAGES = 12
 #: The most of one tool result the facts control will show, in characters.
 MAX_RESULT_SUMMARY_CHARS = 240
 
+#: The most characters of one tool result the model is sent.  A result is never
+#: sliced to fit: half a JSON value is not JSON, so a model that receives one
+#: cannot tell a truncated number from a complete one.
+MAX_TOOL_RESULT_CHARS = 4000
+
 
 @dataclass
 class Session:
@@ -845,8 +850,109 @@ def _tool_message(call_id, result: dict) -> dict:
     return {
         "role": "tool",
         "tool_call_id": str(call_id),
-        "content": json.dumps(result, default=str)[:4000],
+        "content": _bounded_tool_content(result),
     }
+
+
+def _json_text(value) -> str:
+    """The one serialization a tool reply is built from."""
+    return json.dumps(value, default=str)
+
+
+def _list_payload(payload) -> tuple[str, list | None]:
+    """The longest list a payload carries, and the key that held it.
+
+    A tool result is normally a dict with one list (``{"events": [...]}``), but
+    a bare list is accepted too.  The longest list is the one worth bounding;
+    ties keep the first field, so the choice is deterministic.
+    """
+    if isinstance(payload, (list, tuple)):
+        return "", list(payload)
+    if isinstance(payload, dict):
+        lists = [
+            (str(key), value)
+            for key, value in payload.items()
+            if isinstance(value, (list, tuple))
+        ]
+        if lists:
+            key, value = max(lists, key=lambda pair: len(pair[1]))
+            return key, list(value)
+    return "", None
+
+
+def _context_fields(payload, field: str) -> dict:
+    """The dict fields beside the bounded list, kept so the reply has context."""
+    if not isinstance(payload, dict):
+        return {}
+    return {str(key): value for key, value in payload.items() if str(key) != field}
+
+
+def _preview_envelope(text: str) -> dict:
+    """The last-resort envelope: a bounded string, never an invalid value.
+
+    Used when no list prefix fits, or when the payload carries no list at all.
+    The preview is a JSON string, so a quote, a brace or a newline inside it is
+    escaped rather than closing the envelope early.
+    """
+    low, high = 0, len(text)
+    best = 0
+    while low <= high:
+        middle = (low + high) // 2
+        candidate = {
+            "truncated": True,
+            "preview": text[:middle],
+            "reason": "oversized",
+        }
+        if len(_json_text(candidate)) <= MAX_TOOL_RESULT_CHARS:
+            best = middle
+            low = middle + 1
+        else:
+            high = middle - 1
+    return {"truncated": True, "preview": text[:best], "reason": "oversized"}
+
+
+def _overflow_envelope(payload, text: str) -> dict:
+    """A whole-value envelope for a result too large for one tool message.
+
+    A list payload keeps as many complete items as fit and reports the counts;
+    anything else keeps a bounded preview.  Either way the envelope is built
+    before encoding and is valid JSON by construction.
+    """
+    field, items = _list_payload(payload)
+    if items is not None:
+        def envelope_for(count: int) -> dict:
+            bounded = _context_fields(payload, field)
+            bounded.update({
+                "truncated": True,
+                "returned_count": count,
+                "total_count": len(items),
+                "items": items[:count],
+                "has_more": count < len(items),
+            })
+            if field:
+                bounded["field"] = field
+            return bounded
+
+        low, high = 0, len(items)
+        best = -1
+        while low <= high:
+            middle = (low + high) // 2
+            if len(_json_text(envelope_for(middle))) <= MAX_TOOL_RESULT_CHARS:
+                best = middle
+                low = middle + 1
+            else:
+                high = middle - 1
+        if best >= 0:
+            return envelope_for(best)
+    return _preview_envelope(text)
+
+
+def _bounded_tool_content(result) -> str:
+    """A JSON tool reply that is never a cut in the middle of a value."""
+    text = _json_text(result)
+    if len(text) <= MAX_TOOL_RESULT_CHARS:
+        return text
+    return _json_text(_overflow_envelope(result, text))
 
 
 def _budget_error(limit: int) -> dict:
