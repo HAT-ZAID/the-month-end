@@ -4,7 +4,9 @@
 person's account and lets the model choose which one to run.  Every number a tool
 returns comes from :mod:`code.service`, which takes it from
 :func:`code.solver.position` or :func:`code.solver.solve_request` — so a sentence
-the model writes can cite a kernel figure, and it cannot invent one.
+the model writes can cite a kernel figure.  A reply is shown only when every
+figure in it appears in this turn's tool results; with no result to check
+against, the answer is a plain refusal rather than a plausible estimate.
 
 When no provider is configured the function says so.  It does not fall back to a
 rule table and present the result as a conversation: an honest "I have no model"
@@ -18,6 +20,8 @@ session.
 from __future__ import annotations
 
 import json
+import re
+from decimal import Decimal, InvalidOperation
 
 from code import service
 
@@ -110,6 +114,102 @@ class NoModel(RuntimeError):
     """No provider is configured, so there is nothing that can reason."""
 
 
+#: The answer shown when no kernel result exists in this turn to check against.
+UNVERIFIED_REPLY = "I could not verify that against your ledger."
+
+#: Every run of digits in a reply: one figure, however it is grouped.
+_FIGURE = re.compile(r"\d[\d,]*(?:\.\d+)?")
+
+
+def _figures(text) -> list[tuple[str, Decimal]]:
+    """The digit runs in ``text``, each with the number it writes."""
+    found: list[tuple[str, Decimal]] = []
+    for match in _FIGURE.finditer(str(text or "")):
+        token = match.group(0)
+        try:
+            found.append((token, Decimal(token.replace(",", ""))))
+        except (InvalidOperation, ValueError):
+            continue
+    return found
+
+
+def _tool_error(result) -> bool:
+    """True for the fail-closed dict ``dispatch`` puts in place of a result."""
+    return isinstance(result, dict) and set(result) == {"error"}
+
+
+def _kernel_observations(observations) -> list[dict]:
+    """Only successful kernel results: an error message is not a figure source."""
+    return [
+        item
+        for item in (observations or [])
+        if isinstance(item, dict) and not _tool_error(item)
+    ]
+
+
+def _observed_figures(observations) -> set[Decimal]:
+    """Every number the serialized tool results reproduce."""
+    figures: set[Decimal] = set()
+    for observation in observations:
+        serialized = json.dumps(observation, default=str, sort_keys=True)
+        figures.update(value for _token, value in _figures(serialized))
+    return figures
+
+
+def _render_value(value) -> str | None:
+    """One observation field as words; ``None`` when it carries nothing."""
+    if value is None or value == "":
+        return None
+    if isinstance(value, (list, tuple)):
+        if not value:
+            return "none recorded"
+        if all(isinstance(item, (str, int, float, Decimal)) for item in value):
+            return ", ".join(str(item) for item in value)
+        return f"{len(value)} recorded"
+    if isinstance(value, dict):
+        return json.dumps(value, default=str, sort_keys=True)
+    return str(value)
+
+
+def _summary(observations) -> str:
+    """A deterministic sentence rendered only from the tool results themselves."""
+    parts: list[str] = []
+    for observation in observations:
+        fields = []
+        for key, value in observation.items():
+            rendered = _render_value(value)
+            if rendered is None:
+                continue
+            fields.append(f"{key.replace('_', ' ')} {rendered}")
+        if fields:
+            parts.append("; ".join(fields))
+    if not parts:
+        return "The ledger returned no figure I can quote."
+    return "From your ledger: " + " | ".join(parts)
+
+
+def verify_reply(text: str, observations: list[dict]) -> tuple[str, bool]:
+    """Check a model reply against the tool results produced in the same turn.
+
+    Returns ``(reply, verified)``.  No kernel observation means nothing can be
+    checked, so the reply is a plain refusal.  Otherwise every digit run in the
+    prose has to be reproduced by the serialized observations; a reply that
+    cites anything else is replaced by :func:`_summary` of what the tools
+    actually returned.  The replacement is built from those results, so its
+    figures are grounded by construction.
+    """
+    checked = _kernel_observations(observations)
+    prose = str(text or "").strip()
+    if not checked:
+        return UNVERIFIED_REPLY, False
+    if not prose:
+        return _summary(checked), False
+    supported = _observed_figures(checked)
+    if any(value not in supported for _token, value in _figures(prose)):
+        return _summary(checked), False
+    return prose, True
+
+
 def _facts_text(account) -> str:
     profile = account.get("profile") or {}
     lines = [
@@ -196,8 +296,12 @@ def _provider(provider=None):
 def ask(account, text: str, provider=None, *, max_tool_calls: int = 4) -> dict:
     """Answer a question with tools, or say plainly that there is no model.
 
-    Returns ``{"reply", "tool_calls", "model", "reason"}``.  ``tool_calls`` is
-    the ordered list of names that actually ran, so a caller can show them.
+    Returns ``{"reply", "tool_calls", "model", "reason", "verified"}``.
+    ``tool_calls`` is the ordered list of names that actually ran, so a caller can
+    show them.  ``verified`` is true only when the text the model wrote is
+    grounded in a tool result from this turn; an answer with no kernel result is
+    a refusal, and a figure no tool returned replaces the prose with a summary
+    of the results.
     """
     provider = _provider(provider)
     if provider is None:
@@ -213,16 +317,26 @@ def ask(account, text: str, provider=None, *, max_tool_calls: int = 4) -> dict:
     if not provider.reserve_call():
         raise NoModel("this run has spent its model call budget")
 
+    binder = getattr(model, "bind_tools", None)
+    if not callable(binder):
+        raise NoModel(
+            "the configured model cannot bind tools, so an answer from it could "
+            "not be checked against the ledger"
+        )
     try:
-        bound = model.bind_tools(TOOL_SCHEMAS) if hasattr(model, "bind_tools") else model
-    except Exception:
-        bound = model
+        bound = binder(TOOL_SCHEMAS)
+    except Exception as exc:
+        raise NoModel(
+            "the configured model cannot bind tools, so an answer from it could "
+            f"not be checked against the ledger ({type(exc).__name__}: {exc})"
+        ) from None
 
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT.format(facts=_facts_text(account))},
         {"role": "user", "content": str(text)},
     ]
     ran: list[str] = []
+    observations: list[dict] = []
 
     for _ in range(max(1, int(max_tool_calls))):
         try:
@@ -236,15 +350,18 @@ def ask(account, text: str, provider=None, *, max_tool_calls: int = 4) -> dict:
                 "tool_calls": ran,
                 "model": getattr(provider, "name", "provider"),
                 "reason": "provider_error",
+                "verified": False,
             }
         calls = list(getattr(message, "tool_calls", None) or [])
         content = getattr(message, "content", "")
         if not calls:
+            reply, verified = verify_reply(str(content or ""), observations)
             return {
-                "reply": str(content or "").strip(),
+                "reply": reply,
                 "tool_calls": ran,
                 "model": getattr(provider, "name", "provider"),
-                "reason": "answered",
+                "reason": "answered" if verified else "unverified",
+                "verified": verified,
             }
         messages.append(_assistant_message(content, calls))
         for call in calls:
@@ -255,6 +372,7 @@ def ask(account, text: str, provider=None, *, max_tool_calls: int = 4) -> dict:
             except Exception as exc:
                 result = {"error": f"{type(exc).__name__}: {exc}"}
             ran.append(name)
+            observations.append(result)
             messages.append({
                 "role": "tool",
                 "tool_call_id": str((call or {}).get("id") or name),
@@ -272,6 +390,7 @@ def ask(account, text: str, provider=None, *, max_tool_calls: int = 4) -> dict:
         "tool_calls": ran,
         "model": getattr(provider, "name", "provider"),
         "reason": "budget",
+        "verified": False,
     }
 
 
