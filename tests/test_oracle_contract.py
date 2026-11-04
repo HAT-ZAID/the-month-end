@@ -36,6 +36,18 @@ def test_invalid_reserve_fails_closed():
         assert result["fail_closed"] is True
         assert result["fail_closed_reason"] == "RESERVE_INVALID"
 
+def test_a_negative_reserve_fails_closed_instead_of_raising_the_safe_amount():
+    # balance 10000, floor -1000, request 20000: subtracting a negative reserve
+    # used to declare 11000 safe. A negative reserve is invalid, not a bonus.
+    result = solve_safe_amount(
+        "u1", "2026-01-01", "20000",
+        _profile(minimum_balance_to_keep="-1000"), [], [], set(),
+    )
+    assert result["fail_closed"] is True
+    assert result["fail_closed_reason"] == "RESERVE_INVALID"
+    assert result["safe_amount"] == Decimal("0")
+
+
 def test_active_event_without_date_fails_closed():
     result = solve_safe_amount("u1", "2026-01-01", "7000", _profile(),
                                [_event(settlement_date="", event_date="")], [], set())

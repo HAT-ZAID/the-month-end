@@ -194,7 +194,9 @@ def solve_safe_amount(
     profile_fail_reasons: list[str] = []
     if start_bal is None:
         profile_fail_reasons.append("BALANCE_INVALID")
-    if min_bal is None:
+    # A negative reserve is not a smaller floor: subtracting it would *raise*
+    # the amount declared safe.  It is invalid on the same path as a blank one.
+    if min_bal is None or min_bal < 0:
         profile_fail_reasons.append("RESERVE_INVALID")
 
     home_ccy = profile.get("home_currency", "USD")

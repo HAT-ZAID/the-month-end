@@ -6,10 +6,10 @@ Branch `release-curate`, range `b757162..HEAD`. Verified 2026-11-04.
 
 | Command | Result |
 |---|---|
-| `pytest -q` | **644 passed** |
-| `pytest -q tests/review` | **499 passed, 1 skipped** |
+| `pytest -q` | **657 passed** |
+| `pytest -q tests/review` | **503 passed, 1 skipped** |
 
-Baseline before this branch was 366 default tests; the branch adds 278.
+Baseline before this branch was 366 default tests; the branch adds 291.
 
 ## Evaluation gates (`python -m evaluation.run --mode pr`)
 
@@ -40,9 +40,10 @@ silenced or re-baselined.
 | `direction="debit"`, `amount="-9000"` | `safe=0`, `fail_closed=True`, `AMOUNT_INVALID` |
 | `minimum_balance_to_keep="garbage"` | `safe=0`, `fail_closed=True`, `RESERVE_INVALID` |
 | `minimum_balance_to_keep="NaN"` | `safe=0`, `fail_closed=True`, `RESERVE_INVALID` |
+| `minimum_balance_to_keep="-1000"` | `safe=0`, `fail_closed=True`, `RESERVE_INVALID` |
 | active settled debit with no usable date | `safe=0`, `fail_closed=True`, `DATE_UNKNOWN` |
 
-All five produce zero safe amount and a named fail-closed reason; none raises.
+All six produce zero safe amount and a named fail-closed reason; none raises.
 
 ## What shipped
 
