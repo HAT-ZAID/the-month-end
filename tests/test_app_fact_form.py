@@ -21,8 +21,10 @@ from an assertion written to match the implementation.
 from __future__ import annotations
 
 import asyncio
+import time
 
 import pytest
+from textual.css.query import NoMatches
 
 import code.accounts as store
 from code import service
@@ -33,6 +35,33 @@ from code.forecast import (
 
 #: The expense categories the forecast projects forward, from its own vocabulary.
 PROJECTED = frozenset(FORECASTABLE_EXPENSE_CATEGORIES - DISCRETIONARY_CATEGORIES)
+
+#: How long a rendered effect may take to appear before the test gives up.
+DEADLINE_SECONDS = 5.0
+
+
+def _render(app, selector: str) -> str:
+    """The current render of ``selector``, or "" while it is not mounted yet."""
+    try:
+        widget = app.query_one(selector)
+    except NoMatches:
+        return ""
+    return str(widget.render())
+
+
+async def _wait_for(pilot, effect, *, timeout: float = DEADLINE_SECONDS) -> None:
+    """Poll until ``effect()`` holds, or the deadline expires.
+
+    ``pilot.pause()`` waits for CPU idle, not for a ``Button.Pressed`` posted by
+    ``press()`` to be dispatched: the message queue can still be holding it when
+    the pause returns, so reading straight after one pause sees the screen
+    before its handler ran.  Wait for the rendered effect -- the same text the
+    assertion checks -- instead of one tick.  A deadline means a genuine
+    regression still fails rather than hanging.
+    """
+    deadline = time.monotonic() + timeout
+    while not effect() and time.monotonic() < deadline:
+        await pilot.pause()
 
 
 @pytest.fixture()
@@ -133,7 +162,9 @@ def test_a_bill_with_no_category_is_refused_through_the_screen(db, monkeypatch):
             app.query_one("#fact-amount").value = "800"
             app.query_one("#fact-category").value = ""
             app.query_one("#fact-add").press()
-            await pilot.pause()
+            await _wait_for(
+                pilot, lambda: "category" in _render(app, "#fact-status").lower()
+            )
 
             assert app.account is not None
             assert app.account["events"] == [], "a refused bill was recorded anyway"
@@ -183,7 +214,10 @@ def test_the_screen_records_monthly_income_as_a_salary(db):
             app.query_one("#fact-text").value = "payroll"
             app.query_one("#fact-recurrence").value = "yes"
             app.query_one("#fact-add").press()
-            await pilot.pause()
+            await _wait_for(
+                pilot,
+                lambda: app.account is not None and len(app.account["events"]) == 1,
+            )
 
             assert app.account is not None
             assert len(app.account["events"]) == 1
@@ -210,7 +244,10 @@ def test_the_screen_records_a_named_bill_on_its_category(db):
             app.query_one("#fact-date").value = "2026-01-01"
             app.query_one("#fact-category").value = "rent"
             app.query_one("#fact-add").press()
-            await pilot.pause()
+            await _wait_for(
+                pilot,
+                lambda: app.account is not None and len(app.account["events"]) == 1,
+            )
 
             assert app.account is not None
             assert len(app.account["events"]) == 1

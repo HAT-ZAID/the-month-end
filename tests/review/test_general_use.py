@@ -13,14 +13,44 @@ from __future__ import annotations
 
 import asyncio
 import sys
+import time
 from datetime import date
 
 import pytest
+from textual.css.query import NoMatches
 
 import code.accounts as store
 from code import account as acct
 from code import service
 from code.solver import position as kernel_position
+
+#: How long a rendered effect may take to appear before the test gives up.
+DEADLINE_SECONDS = 5.0
+
+
+def _render(app, selector: str) -> str:
+    """The current render of ``selector``, or "" while it is not mounted yet."""
+    try:
+        widget = app.query_one(selector)
+    except NoMatches:
+        return ""
+    return str(widget.render())
+
+
+async def _wait_for(pilot, effect, *, timeout: float = DEADLINE_SECONDS) -> None:
+    """Poll until ``effect()`` holds, or the deadline expires.
+
+    ``pilot.pause()`` waits for CPU idle, not for a ``Button.Pressed`` posted by
+    ``press()`` to be dispatched: the message queue can still be holding it when
+    the pause returns, so reading straight after one pause sees the screen
+    before its handler ran.  Wait for the rendered effect -- the same text the
+    assertion checks -- instead of one tick.  A deadline means a genuine
+    regression still fails rather than hanging.
+    """
+    deadline = time.monotonic() + timeout
+    while not effect() and time.monotonic() < deadline:
+        await pilot.pause()
+
 
 PROFILE = {
     "user_id": "ana",
@@ -255,7 +285,7 @@ def test_every_tab_renders_and_a_purchase_goes_through_the_screen(db):
             # Buy through the screen, not through the service.
             app.query_one("#buy-amount").value = "500"
             app.query_one("#buy-go").press()
-            await pilot.pause()
+            await _wait_for(pilot, lambda: bool(_render(app, "#buy-explain").strip()))
             explain = app.query_one("#buy-explain")
             assert str(explain.render()).strip(), "the decision explanation rendered empty"
             assert app.account["requests"], "the purchase was not recorded"
@@ -263,7 +293,7 @@ def test_every_tab_renders_and_a_purchase_goes_through_the_screen(db):
             app.query_one("#fact-kind").value = "income"
             app.query_one("#fact-amount").value = "1000"
             app.query_one("#fact-add").press()
-            await pilot.pause()
+            await _wait_for(pilot, lambda: len(app.account["events"]) == 2)
             assert len(app.account["events"]) == 2
         return True
 
