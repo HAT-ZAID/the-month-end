@@ -538,6 +538,13 @@ def _pieces(text: str):
         position += len(piece) + 1
 
 
+def _scoped_to_required_action(prose: str, match, changes) -> bool:
+    """True when the denial's clause names the action it is "other" than."""
+    if changes in {"", "none"}:
+        return True
+    return cites_every_action(_clause_at(prose, match.start(), match.end()), changes)
+
+
 def _scope_excuse(prose: str, match, changes) -> bool:
     """True when the denial at ``match`` is qualified to mean "nothing beyond"."""
     clause_start = _clause_start(prose, match.start())
@@ -572,13 +579,17 @@ def _scope_excuse(prose: str, match, changes) -> bool:
                 return False
 
     if _SCOPE_QUANTIFIER.search(_segment_at(prose, match.start(), match.end())):
-        # The quantifier sits beside the denial it qualifies.
-        return True
+        # The quantifier sits beside the denial it qualifies. It excuses the
+        # denial only when the clause names the action it is "other" than;
+        # "no other changes are needed" alone denies the required stop.
+        return _scoped_to_required_action(prose, match, changes)
     # A preposed qualifier scopes what follows it, so it has to come before this
     # denial. The match itself is included: "apart from stopping the event,
     # nothing changes" matches as far as "nothing", so the qualifier sits inside
     # it.
-    return preposed is not None
+    if preposed is None:
+        return False
+    return _scoped_to_required_action(prose, match, changes)
 
 
 def _clause_at(text: str, start: int, end: int) -> str:

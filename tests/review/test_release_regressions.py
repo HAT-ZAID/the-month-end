@@ -896,3 +896,21 @@ def test_a_count_prefix_at_the_very_start_of_the_text_is_recognised():
     report = verify_claims("3 of 5 samples.", _row())
     assert report["ok"] is True
     assert [item for item in report["unsupported"] if item["kind"] == "amount"] == []
+
+
+def test_a_scoped_denial_must_name_the_action_it_is_other_than():
+    row = _row(spending_changes_needed="stop:event_9")
+    # "No other changes" only means "beyond the required action" when the
+    # sentence names that action; otherwise it denies the stop itself.
+    assert verify_claims("No other changes are needed.", row)["ok"] is False
+    # A causal conjunction and a self-denying qualifier scope nothing.
+    assert verify_claims(
+        "No spending changes are needed because no other changes are needed.", row
+    )["ok"] is False
+    assert verify_claims(
+        "Apart from stopping event_9, you don't need to stop event_9.", row
+    )["ok"] is False
+    # The genuine form names the action the qualifier is "apart from".
+    assert verify_claims(
+        "Apart from stopping event_9, no other changes are needed.", row
+    )["ok"] is True
