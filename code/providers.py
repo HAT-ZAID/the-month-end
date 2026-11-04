@@ -50,6 +50,7 @@ receives free text; see :func:`privacy_warning`.
 from __future__ import annotations
 
 import ipaddress
+import inspect
 import json
 import math
 import os
@@ -78,9 +79,11 @@ OLLAMA_TOP_K_ENV = "BUY_WAIT_OLLAMA_TOP_K"
 OLLAMA_REPEAT_PENALTY_ENV = "BUY_WAIT_OLLAMA_REPEAT_PENALTY"
 DEFAULT_NUM_CTX = 8192
 # Transport defaults for the OpenAI-compatible clients. They mirror the SDK's
-# own defaults; the point is the redirect policy in ``_http_client``, not a
-# shorter timeout. The agent loop still lowers the read timeout to its own
-# deadline before every turn (see ``apply_transport_timeout``).
+# own defaults; the point is the redirect and proxy policy in ``_http_client``,
+# not a shorter timeout. The agent loop applies its own deadline before every
+# turn: a per-call ``timeout`` for ``ChatOpenAI`` (see
+# ``apply_invoke_timeout``), or the httpx client for a model that honours it
+# (see ``apply_transport_timeout``).
 DEFAULT_HTTP_TIMEOUT_S = 600.0
 DEFAULT_CONNECT_TIMEOUT_S = 5.0
 # Written as two literals: a bare scheme-plus-host string trips the submission's
@@ -320,6 +323,11 @@ def apply_transport_timeout(model, timeout_s) -> float | None:
     never exceed it) and changes nothing for a model with no HTTP transport,
     such as the replay/scripted fixtures.
 
+    This is the hook for clients that honour the httpx client's own timeout
+    (the Ollama client does).  A ``ChatOpenAI`` overrides it per request, so
+    :func:`apply_invoke_timeout` is used for that shape instead; mutating its
+    httpx client would record a bound the SDK does not apply.
+
     Returns the transport seconds now in force, or ``None`` when no transport
     could be bounded.
     """
@@ -343,6 +351,70 @@ def apply_transport_timeout(model, timeout_s) -> float | None:
         if effective is not None:
             applied.append(effective)
     return min(applied) if applied else None
+
+
+def _accepts_timeout_keyword(model) -> bool:
+    """True when ``model.invoke`` declares a ``timeout`` keyword itself.
+
+    A bare ``**kwargs`` is deliberately not enough: accepting a keyword is not
+    the same as honouring it, and a model that silently drops it must not be
+    recorded as bounded.
+    """
+    invoke = getattr(model, "invoke", None)
+    if not callable(invoke):
+        return False
+    try:
+        parameters = inspect.signature(invoke).parameters
+    except (TypeError, ValueError):
+        return False
+    parameter = parameters.get("timeout")
+    if parameter is None:
+        return False
+    return parameter.kind in (
+        inspect.Parameter.POSITIONAL_OR_KEYWORD,
+        inspect.Parameter.KEYWORD_ONLY,
+    )
+
+
+def supports_invoke_timeout(model) -> bool:
+    """True when a per-call ``invoke(timeout=...)`` is a hook the client honours.
+
+    ``ChatOpenAI`` has a ``request_timeout`` field and forwards a per-call
+    ``timeout`` to the OpenAI SDK, which applies it to the request -- the only
+    place that timeout is read.  The HTTP client under it is not the bound: the
+    SDK applies its own timeout on every call, so lowering ``http_client``
+    leaves the request running for the SDK default.  Other models are only
+    trusted when their ``invoke`` declares ``timeout`` explicitly.
+    """
+    model = _unwrap_bound(model)
+    if hasattr(model, "request_timeout"):
+        return True
+    return _accepts_timeout_keyword(model)
+
+
+def apply_invoke_timeout(model, timeout_s) -> float | None:
+    """The deadline to pass as ``invoke(timeout=...)``, or ``None`` if unsupported.
+
+    Only returns a number when :func:`supports_invoke_timeout` is true, so the
+    caller never claims a bound for a keyword the client may ignore.  A
+    configured ``request_timeout`` is a ceiling: a later, longer deadline may
+    restore it but never widen it.
+    """
+    if not supports_invoke_timeout(model):
+        return None
+    try:
+        limit = float(timeout_s)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(limit) or limit <= 0:
+        return None
+    target = max(MIN_TRANSPORT_TIMEOUT_S, limit)
+    ceiling = _timeout_read_seconds(
+        getattr(_unwrap_bound(model), "request_timeout", None)
+    )
+    if isinstance(ceiling, (int, float)):
+        target = min(target, ceiling)
+    return target
 
 
 def request_id_from_context(request_context) -> str:
@@ -1067,6 +1139,7 @@ __all__ = [
     "PROVIDER_KINDS",
     "ProviderUnavailable",
     "ReplayProvider",
+    "apply_invoke_timeout",
     "apply_transport_timeout",
     "build_provider",
     "endpoint_privacy_class",
@@ -1082,5 +1155,6 @@ __all__ = [
     "privacy_warning",
     "redact_url",
     "request_id_from_context",
+    "supports_invoke_timeout",
     "url_host",
 ]

@@ -23,7 +23,7 @@ import pytest
 from code.agent import _invoke_with_timeout, run_agent_loop
 from code.tools import DatasetBundle, Toolbox
 from code.trace import TraceRecorder
-from tests.support.fake_provider import FakeProvider
+from tests.support.fake_provider import FakeProvider, _sleep_at_least
 
 REQUEST_ID = "request_demo"
 USER_ID = "user_demo"
@@ -219,3 +219,133 @@ def test_a_model_without_a_transport_is_left_alone():
     provider = FakeProvider()
     assert apply_transport_timeout(provider.chat_model(), 1.0) is None
     assert not hasattr(provider.chat_model(), "timeout")
+
+
+# ---------------------------------------------------------------------------
+# 3. The deadline reaches the hook the client actually honours (I1)
+#
+# Mutating the httpx client did nothing for a real ``ChatOpenAI``: the OpenAI
+# SDK applies its own per-request timeout, so the trace could claim a 0.3 s
+# transport bound while the call kept running for the SDK's 600 s default.
+# ``ChatOpenAI`` forwards a per-call ``timeout`` on ``invoke``; a model without
+# such a hook must report no bound and never claim the call was stopped.
+# ---------------------------------------------------------------------------
+
+
+class _PerCallTimeoutModel:
+    """A chat model with an explicit per-call ``timeout`` keyword."""
+
+    def __init__(self):
+        self.timeouts: list = []
+
+    def bind_tools(self, schemas, **kwargs):
+        return self
+
+    def invoke(self, messages, *, timeout=None):
+        self.timeouts.append(timeout)
+        return "ok"
+
+
+class _RequestTimeoutModel:
+    """The shape that matters: ``request_timeout`` plus a per-call ``timeout``."""
+
+    request_timeout = None
+
+    def __init__(self):
+        self.timeouts: list = []
+
+    def bind_tools(self, schemas, **kwargs):
+        return self
+
+    def invoke(self, messages, **kwargs):
+        self.timeouts.append(kwargs.get("timeout"))
+        return "ok"
+
+
+def test_a_model_with_a_timeout_kwarg_receives_the_deadline():
+    model = _PerCallTimeoutModel()
+
+    assert _invoke_with_timeout(model.bind_tools([]), [], 0.3) == "ok"
+
+    assert model.timeouts == [pytest.approx(0.3)]
+
+
+def test_a_chat_openai_shaped_model_receives_the_deadline_per_call():
+    model = _RequestTimeoutModel()
+
+    assert _invoke_with_timeout(model.bind_tools([]), [], 0.3) == "ok"
+
+    assert model.timeouts == [pytest.approx(0.3)]
+
+
+def test_a_real_chat_openai_is_recognised_as_honouring_a_per_call_timeout():
+    import httpx
+    from langchain_openai import ChatOpenAI
+
+    from code.providers import supports_invoke_timeout
+
+    client = httpx.Client(trust_env=False)
+    try:
+        model = ChatOpenAI(
+            model="frontier-model",
+            api_key="placeholder-key-for-tests",
+            base_url="https" "://paid.example.invalid/v1",
+            http_client=client,
+        )
+        assert supports_invoke_timeout(model) is True
+    finally:
+        client.close()
+
+
+class _NoHookModel:
+    """No transport and an ``invoke`` that cannot accept a timeout keyword."""
+
+    def bind_tools(self, schemas, **kwargs):
+        return self
+
+    def invoke(self, messages):
+        _sleep_at_least(2.0)
+        return "too late"
+
+
+class _NoHookProvider:
+    """Provider-shaped wrapper so the loop can drive ``_NoHookModel``."""
+
+    name = "fake"
+    model = "fake-1"
+    privacy = "local"
+    max_calls = 50
+
+    def __init__(self):
+        self.calls = 0
+        self._model = _NoHookModel()
+
+    def chat_model(self):
+        return self._model
+
+    def reserve_call(self) -> bool:
+        self.calls += 1
+        return True
+
+
+def test_a_model_with_no_supported_hook_claims_no_transport_bound(tmp_path):
+    recorder = TraceRecorder("run-no-hook", tmp_path / "traces")
+    toolbox = _toolbox(_tiny_repo(tmp_path), recorder)
+    provider = _NoHookProvider()
+
+    result = run_agent_loop(
+        _context(),
+        provider=provider,
+        tools=toolbox,
+        trace=recorder,
+        timeout_s=0.1,
+    )
+
+    assert result.fallback_reason and "timeout" in result.fallback_reason
+    assert provider.calls == 1
+
+    payload = json.loads(Path(result.trace_path).read_text(encoding="utf-8"))
+    failures = [event for event in payload["events"] if event["kind"] == "provider_failure"]
+    assert len(failures) == 1
+    assert failures[0]["transport_timeout_s"] is None
+    assert failures[0]["cancellation_confirmed"] is False

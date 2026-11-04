@@ -41,6 +41,7 @@ from code.providers import (
     DecisionProvider,
     NullProvider,
     ProviderUnavailable,
+    apply_invoke_timeout,
     apply_transport_timeout,
     build_provider,
     request_id_from_context,
@@ -569,10 +570,12 @@ class ProviderTimeout(TimeoutError):
 def _invoke_with_timeout(bound, messages, timeout_s):
     """One chat turn, bounded by ``timeout_s``.
 
-    Before the turn is sent, the provider's HTTP transport is lowered to the
-    remaining deadline (see :func:`code.providers.apply_transport_timeout`), so
-    a slow endpoint cannot keep a socket and the prompt alive for the SDK's
-    600 s default after the loop gave up.
+    Before the turn is sent, the deadline is handed to the one hook the client
+    honours.  A ``ChatOpenAI`` applies its own per-request timeout and ignores
+    the httpx client underneath it, so it receives ``timeout=`` on ``invoke``;
+    a client that honours its httpx client (the Ollama one does) has that
+    lowered instead.  ``transport_timeout_s`` in the trace is that effective
+    bound, and stays ``None`` when no hook exists rather than claiming one.
 
     The wait itself is still a daemon thread plus ``join``.  Python cannot kill
     a thread, so this is **not** a cancellation: process isolation (a worker
@@ -591,13 +594,22 @@ def _invoke_with_timeout(bound, messages, timeout_s):
     if limit <= 0:
         return bound.invoke(messages)
 
-    transport_timeout = apply_transport_timeout(bound, limit)
+    per_call_timeout = apply_invoke_timeout(bound, limit)
+    transport_timeout = (
+        apply_transport_timeout(bound, limit) if per_call_timeout is None else None
+    )
+    effective_timeout = (
+        per_call_timeout if per_call_timeout is not None else transport_timeout
+    )
+    invoke_kwargs = (
+        {"timeout": per_call_timeout} if per_call_timeout is not None else {}
+    )
 
     box: dict = {}
 
     def run():
         try:
-            box["value"] = bound.invoke(messages)
+            box["value"] = bound.invoke(messages, **invoke_kwargs)
         except BaseException as exc:  # surfaced on the calling thread
             box["error"] = exc
 
@@ -621,7 +633,7 @@ def _invoke_with_timeout(bound, messages, timeout_s):
             limit_s=limit,
             elapsed_s=elapsed,
             cancellation_confirmed=confirmed,
-            transport_timeout_s=transport_timeout,
+            transport_timeout_s=effective_timeout,
         )
     error = box.get("error")
     if error is not None:
