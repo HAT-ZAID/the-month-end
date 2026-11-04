@@ -25,3 +25,6 @@ data/ocr_text.json
 # Local OCR/VLM result cache: safe to delete, rebuilt on demand.
 data/cache/
 
+
+# CatBoost training artefacts from the G2 model-mining labs
+catboost_info/
