@@ -52,3 +52,52 @@ def test_a_token_locks_the_api(monkeypatch):
     client = TestClient(app)
     assert client.get("/health").status_code == 401
     assert client.get("/health", headers={"Authorization": "Bearer s3cret"}).status_code == 200
+
+
+def test_explain_accepts_prose_that_only_repeats_kernel_figures(monkeypatch):
+    from deploy import api as api_mod
+
+    monkeypatch.setattr(
+        api_mod,
+        "_explain",
+        lambda row: ("Your safe amount is 21843.925 and the decision is not_affordable.", "kilo/test"),
+    )
+    client = TestClient(app)
+    body = client.get("/explain/request_01").json()
+    assert body["explainer"] == "kilo-free"
+    assert "21843.925" in body["explanation"]
+
+
+def test_explain_rejects_a_figure_the_kernel_never_produced(monkeypatch):
+    from deploy import api as api_mod
+
+    monkeypatch.setattr(
+        api_mod,
+        "_explain",
+        lambda row: ("You can safely pay 99999 today.", "kilo/test"),
+    )
+    client = TestClient(app)
+    body = client.get("/explain/request_01").json()
+    assert body["explainer"] is None
+    assert "99999" not in body["explanation"]
+    assert body["explanation"] == body["decision_explanation"]
+    assert body["rejected_figures"] == ["99999"]
+
+
+def test_explain_reports_an_unavailable_model(monkeypatch):
+    from deploy import api as api_mod
+
+    def boom(row):
+        raise TimeoutError("slow")
+
+    monkeypatch.setattr(api_mod, "_explain", boom)
+    client = TestClient(app)
+    response = client.get("/explain/request_01")
+    assert response.status_code == 503
+    assert "unavailable" in response.json()["detail"]
+
+
+def test_explain_needs_the_token(monkeypatch):
+    monkeypatch.setenv("BUY_WAIT_API_TOKEN", "s3cret")
+    client = TestClient(app)
+    assert client.get("/explain/request_01").status_code == 401

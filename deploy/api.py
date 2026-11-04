@@ -15,7 +15,10 @@ Set ``BUY_WAIT_API_TOKEN`` to require ``Authorization: Bearer <token>``.
 """
 from __future__ import annotations
 
+import json
 import os
+import re
+import urllib.request
 from decimal import Decimal
 from pathlib import Path
 
@@ -132,6 +135,77 @@ class EvaluateRequest(BaseModel):
     floor: str = Field(..., description="minimum balance to keep, as a decimal string")
     amount: str = Field(..., description="the payment being considered")
     date: str = Field(..., description="ISO date the payment would happen")
+
+
+#: The Kilo gateway serves a free pool with no key required. It may log prompts
+#: and route to providers that train on them, so only kernel output is sent.
+KILO_URL = os.environ.get("BUY_WAIT_KILO_URL") or "https://api.kilo.ai/api/gateway/chat/completions"
+KILO_MODEL = os.environ.get("BUY_WAIT_KILO_MODEL") or "nvidia/nemotron-3-ultra-550b-a55b:free"
+EXPLAIN_TIMEOUT_S = 20.0
+
+
+def _figures(text: str) -> set[str]:
+    """Every number in a sentence, normalised for comparison."""
+    found = set()
+    for token in re.findall(r"-?\d[\d,]*(?:\.\d+)?", str(text or "")):
+        found.add(token.replace(",", "").rstrip("."))
+    return found
+
+
+def _explain(row: dict) -> tuple[str, str]:
+    """Ask the free Kilo pool to say the kernel's answer in words.
+
+    The prompt contains only the decision, never an account row, and the reply
+    is accepted only when every figure in it already appears in the decision.
+    """
+    prompt = (
+        "Rewrite this financial decision in two plain sentences for the person "
+        "who asked. Do not invent any number, date or status that is not in the "
+        "JSON. Do not give financial advice beyond it.\n\n"
+        + json.dumps(row, ensure_ascii=False)
+    )
+    body = json.dumps(
+        {
+            "model": KILO_MODEL,
+            "messages": [{"role": "user", "content": prompt}],
+            "max_tokens": 220,
+            "temperature": 0.2,
+            "stream": False,
+        }
+    ).encode("utf-8")
+    request = urllib.request.Request(
+        KILO_URL, data=body, headers={"Content-Type": "application/json"}
+    )
+    with urllib.request.urlopen(request, timeout=EXPLAIN_TIMEOUT_S) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    choices = payload.get("choices") or [{}]
+    message = (choices[0] or {}).get("message") or {}
+    return str(message.get("content") or "").strip(), str(payload.get("model") or "")
+
+
+@app.get("/explain/{request_id}")
+def explain(request_id: str, authorization: str | None = Header(default=None)) -> dict:
+    _authorise(authorization)
+    row = sample_decision(request_id, authorization=authorization)
+    allowed = _figures(" ".join(str(v) for v in row.values()))
+    try:
+        prose, model = _explain(row)
+    except Exception as exc:  # network, timeout, malformed body
+        raise HTTPException(status_code=503, detail=f"explainer unavailable: {type(exc).__name__}") from None
+    if not prose:
+        return {**row, "explanation": row["decision_explanation"], "explainer": None, "explainer_model": None}
+    unsupported = _figures(prose) - allowed
+    if unsupported:
+        # Never show a figure the kernel did not produce.
+        return {
+            **row,
+            "explanation": row["decision_explanation"],
+            "explainer": None,
+            "explainer_model": model,
+            "rejected_figures": sorted(unsupported),
+        }
+    return {**row, "explanation": prose, "explainer": "kilo-free", "explainer_model": model}
+
 
 
 @app.post("/evaluate")

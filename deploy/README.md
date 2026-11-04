@@ -24,6 +24,15 @@ aws lambda get-function-configuration \
 | GET | `/sample` | the 25 calibration request ids |
 | GET | `/sample/{id}` | that request solved live by the kernel |
 | POST | `/evaluate` | `{balance, floor, amount, date}` → largest safe payment |
+| GET | `/explain/{id}` | kernel decision + a plain-language rewrite |
+
+`/explain` calls Kilo's free gateway (`https://api.kilo.ai/api/gateway`,
+`nvidia/nemotron-3-ultra-550b-a55b:free`) which needs **no API key** and allows
+200 requests/hour per IP. The prompt contains only the kernel decision, never an
+account row, and the reply is discarded unless every figure in it already appears
+in that decision — so the model cannot introduce a number. Kilo's free pool may
+log prompts and route to providers that train on them; that is why only kernel
+output is sent. Set `BUY_WAIT_KILO_URL` / `BUY_WAIT_KILO_MODEL` to override.
 
 ```bash
 curl -H "Authorization: Bearer $TOKEN" \

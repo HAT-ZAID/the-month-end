@@ -294,19 +294,34 @@ Read [`docs/architecture.md`](docs/architecture.md) for the module map and
 
 ## Running it in the cloud
 
-The deterministic kernel is deployed as a Lambda function URL in
-`ap-southeast-2`, packaged by CI and capped by a $10/month budget:
+The deterministic kernel is deployed on **AWS** as a Lambda function URL in
+`ap-southeast-2` (account `316658412595`), packaged by CI and capped by a
+**$10/month budget** (`month-end-monthly-10`):
 
 ```
 https://73rb5yi7skfyh5y2ivmkay2ivi0pvihx.lambda-url.ap-southeast-2.on.aws
 ```
 
-Every route needs a bearer token, which lives in the function's environment and
-never in this repo. `GET /health`, `GET /sample`, `GET /sample/{id}` and
-`POST /evaluate` are live. The agent loop is deliberately not deployed: a public
-chat endpoint would be a paid model call per request with no authentication
-beyond that token, so the conversational layer stays client-side where your own
-key lives.
+Every route needs a bearer token held in the function's environment, never in
+this repo: `GET /health`, `GET /sample`, `GET /sample/{id}`, `POST /evaluate`,
+and `GET /explain/{id}` (kernel decision, then a plain-language rewrite from
+Kilo's free pool — no API key — accepted only if every figure it uses already
+appears in the decision).
+
+Lambda was chosen over Fargate because Fargate idles at roughly $11/month plus a
+public IP, and an ALB alone is about $16/month — both would break the budget.
+Lambda scales to zero and fits the free tier.
+
+CI (`.github/workflows/ci.yml`) runs the release suite, the review suite and the
+evaluation gates; it fails only on the gates that must stay green (G0, G1, G3,
+G4), with G2 reported as the documented external gap. CD
+(`.github/workflows/deploy.yml`) builds the Linux package and publishes it;
+the final `aws lambda update-function-code` is a documented one-liner because
+the account's SCP denies `iam:CreateOpenIDConnectProvider`, so GitHub cannot
+assume a role without long-lived keys.
+
+The agent loop runs client-side: a public chat endpoint would be a model call
+per request behind nothing but that token.
 
 ## Status
 
