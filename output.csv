@@ -1,251 +1,251 @@
 request_id,amount_safe_to_pay,affordability_status,recommended_payment_method,payment_plan,earliest_date_for_full_payment,spending_changes_needed,decision_explanation
-request_26,15656000,affordable_now,full_payment,2025-08-03:15656000,2025-08-03,none,Recommended full_payment; up to 15656000 is safe under the forecast while preserving the minimum balance of 24768300.
-request_27,6670,affordable_now,full_payment,2026-07-05:6670,2026-07-05,none,Recommended full_payment; up to 6670 is safe under the forecast while preserving the minimum balance of 20500.
-request_28,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 1100.
-request_29,14827.52,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 14827.52 is safe under the forecast while preserving the minimum balance of 28300.
-request_30,775.2,affordable_with_plan,installments,2026-04-06:268.74|2026-05-06:268.74|2026-06-05:268.74,2026-04-06,none,Recommended installments; up to 775.2 is safe under the forecast while preserving the minimum balance of 900.
-request_31,642986.74,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 642986.74 is safe under the forecast while preserving the minimum balance of 16588900.
-request_32,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 35700.
-request_33,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 102100.
-request_34,110423.74,affordable_with_plan,full_payment,2024-12-04:129400,,stop:event_3085,Recommended full_payment; up to 110423.74 is safe under the forecast while preserving the minimum balance of 138500.
-request_35,115063.03,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 115063.03 is safe under the forecast while preserving the minimum balance of 106400.
-request_36,201.24,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 201.24 is safe under the forecast while preserving the minimum balance of 2400.
-request_37,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 17056200.
-request_38,88.46,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 88.46 is safe under the forecast while preserving the minimum balance of 400.
-request_39,62335.28,affordable_later,wait,2026-05-15:208600,2026-05-15,none,Recommended wait; up to 62335.28 is safe under the forecast while preserving the minimum balance of 213400.
-request_40,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 1500.
-request_41,764866.24,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 764866.24 is safe under the forecast while preserving the minimum balance of 25366600.
-request_42,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 113100.
-request_43,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 21398000.
-request_44,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 82900.
-request_45,1808595.37,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 1808595.37 is safe under the forecast while preserving the minimum balance of 11149800.
-request_46,32036.45,affordable_with_plan,partial_payment,2024-12-03:32036.45|2024-12-15:17413.55,2024-12-15,none,Recommended partial_payment; up to 32036.45 is safe under the forecast while preserving the minimum balance of 84000.
-request_47,5149358.94,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 5149358.94 is safe under the forecast while preserving the minimum balance of 30049000.
-request_48,45700,affordable_now,full_payment,2026-07-25:45700,2026-07-25,none,Recommended full_payment; up to 45700 is safe under the forecast while preserving the minimum balance of 71300.
-request_49,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 20275700.
-request_50,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 99700.
-request_51,89426.74,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 89426.74 is safe under the forecast while preserving the minimum balance of 7811000.
-request_52,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 41500.
-request_53,0,affordable_with_plan,installments,2025-11-21:589.06|2025-12-19:589.06|2026-01-16:589.06,2025-12-14,none,Recommended installments; up to 0 is safe under the forecast while preserving the minimum balance of 2100.
-request_54,734.47,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 734.47 is safe under the forecast while preserving the minimum balance of 37000.
-request_55,75154.44,affordable_with_plan,installments,2026-06-11:75781.33|2026-07-12:75781.33|2026-08-12:75781.33,2026-07-14,stop:event_5101,Recommended installments; up to 75154.44 is safe under the forecast while preserving the minimum balance of 124300.
-request_56,407.89,affordable_with_plan,partial_payment,2025-02-03:407.89|2025-02-15:473.67,2025-02-15,none,Recommended partial_payment; up to 407.89 is safe under the forecast while preserving the minimum balance of 2100.
-request_57,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 42700.
-request_58,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 14433900.
-request_59,140600,affordable_with_plan,installments,2025-05-07:48741.33|2025-06-04:48741.33|2025-07-02:48741.33,2025-05-04,none,Recommended installments; up to 140600 is safe under the forecast while preserving the minimum balance of 132600.
-request_60,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 400.
-request_61,29062,affordable_with_plan,installments,2024-03-17:10074.83|2024-04-17:10074.83|2024-05-18:10074.83,2024-03-03,none,Recommended installments; up to 29062 is safe under the forecast while preserving the minimum balance of 36700.
-request_62,404.23,affordable_now,full_payment,2025-08-05:404.23,2025-08-05,none,Recommended full_payment; up to 404.23 is safe under the forecast while preserving the minimum balance of 1300.
-request_63,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 153500.
-request_64,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 36100.
-request_65,4074.65,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 4074.65 is safe under the forecast while preserving the minimum balance of 15500.
-request_66,22200,affordable_now,full_payment,2026-04-03:22200,2026-04-03,none,Recommended full_payment; up to 22200 is safe under the forecast while preserving the minimum balance of 80700.
-request_67,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 1200.
-request_68,414.78,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 414.78 is safe under the forecast while preserving the minimum balance of 1500.
-request_69,183.83,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 183.83 is safe under the forecast while preserving the minimum balance of 700.
-request_70,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 115000.
-request_71,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 8884800.
-request_72,6749.25,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 6749.25 is safe under the forecast while preserving the minimum balance of 12200.
-request_73,71400,affordable_now,full_payment,2023-01-20:71400,2023-01-20,none,Recommended full_payment; up to 71400 is safe under the forecast while preserving the minimum balance of 103200.
-request_74,5010,affordable_now,full_payment,2025-08-04:5010,2025-08-04,none,Recommended full_payment; up to 5010 is safe under the forecast while preserving the minimum balance of 21900.
-request_75,26482.18,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 26482.18 is safe under the forecast while preserving the minimum balance of 39000.
-request_76,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 1800.
-request_77,45450.88,affordable_later,wait,2025-11-14:60700,2025-11-14,none,Recommended wait; up to 45450.88 is safe under the forecast while preserving the minimum balance of 82200.
-request_78,43594.15,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 43594.15 is safe under the forecast while preserving the minimum balance of 55200.
-request_79,290.19,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 290.19 is safe under the forecast while preserving the minimum balance of 1000.
-request_80,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 121300.
-request_81,1518.64,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 1518.64 is safe under the forecast while preserving the minimum balance of 1600.
-request_82,66.54,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 66.54 is safe under the forecast while preserving the minimum balance of 1100.
-request_83,2374.22,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 2374.22 is safe under the forecast while preserving the minimum balance of 37800.
-request_84,401.05,affordable_later,wait,2026-05-14:95400,2026-05-14,none,Recommended wait; up to 401.05 is safe under the forecast while preserving the minimum balance of 91300.
-request_85,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 6396300.
-request_86,46300,affordable_now,full_payment,2025-08-03:46300,2025-08-03,none,Recommended full_payment; up to 46300 is safe under the forecast while preserving the minimum balance of 84900.
-request_87,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 185900.
-request_88,2479.23,affordable_with_plan,installments,2024-06-14:9045.23|2024-07-15:9045.23|2024-08-15:9045.23,2024-07-14,none,Recommended installments; up to 2479.23 is safe under the forecast while preserving the minimum balance of 25800.
-request_89,5656089.36,affordable_with_plan,installments,2025-11-18:4768746.67|2025-12-16:4768746.67|2026-01-13:4768746.67,2025-12-15,none,Recommended installments; up to 5656089.36 is safe under the forecast while preserving the minimum balance of 12534700.
-request_90,2560,affordable_now,full_payment,2026-07-06:2560,2026-07-06,none,Recommended full_payment; up to 2560 is safe under the forecast while preserving the minimum balance of 7600.
-request_91,374.53,affordable_later,wait,2024-10-14:1927.2,2024-10-14,stop:event_8482,Recommended wait; up to 374.53 is safe under the forecast while preserving the minimum balance of 2100.
-request_92,27777.44,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 27777.44 is safe under the forecast while preserving the minimum balance of 28100.
-request_93,917.5,affordable_later,wait,2026-04-14:1729.2,2026-04-14,none,Recommended wait; up to 917.5 is safe under the forecast while preserving the minimum balance of 1900.
-request_94,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 600.
-request_95,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 145500.
-request_96,41935.03,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 41935.03 is safe under the forecast while preserving the minimum balance of 56500.
-request_97,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 29700.
-request_98,0,affordable_later,wait,2025-09-13:27148,2025-09-13,none,Recommended wait; up to 0 is safe under the forecast while preserving the minimum balance of 30000.
-request_99,14876.3,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 14876.3 is safe under the forecast while preserving the minimum balance of 49100.
-request_100,10703.29,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 10703.29 is safe under the forecast while preserving the minimum balance of 32500.
-request_101,0,not_affordable,not_recommended,none,,none,"Not recommended because financial evidence for event_9421 remains unresolved, so safety cannot be verified while preserving the minimum balance."
-request_102,1716,affordable_with_plan,installments,2026-04-05:594.88|2026-05-05:594.88|2026-06-04:594.88,2026-04-05,none,Recommended installments; up to 1716 is safe under the forecast while preserving the minimum balance of 900.
-request_103,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 125500.
-request_104,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 24700.
-request_105,20337.18,affordable_later,wait,2026-06-14:53500,2026-06-14,none,Recommended wait; up to 20337.18 is safe under the forecast while preserving the minimum balance of 73900.
-request_106,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 1200.
-request_107,835.3,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 835.3 is safe under the forecast while preserving the minimum balance of 1600.
-request_108,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 24100.
-request_109,0,affordable_with_plan,installments,2024-03-18:645.98|2024-04-18:645.98|2024-05-19:645.98,,stop:event_10081|stop:event_10080,Recommended installments; up to 0 is safe under the forecast while preserving the minimum balance of 1700.
-request_110,22352,affordable_with_plan,installments,2025-08-06:7748.69|2025-09-03:7748.69|2025-10-01:7748.69,2025-08-06,none,Recommended installments; up to 22352 is safe under the forecast while preserving the minimum balance of 11200.
-request_111,16625000,affordable_now,full_payment,2026-04-03:16625000,2026-04-03,none,Recommended full_payment; up to 16625000 is safe under the forecast while preserving the minimum balance of 23022800.
-request_112,129.23,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 129.23 is safe under the forecast while preserving the minimum balance of 500.
-request_113,365.96,affordable_later,wait,2026-09-14:36500,2026-09-14,none,Recommended wait; up to 365.96 is safe under the forecast while preserving the minimum balance of 82300.
-request_114,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 113400.
-request_115,7118.11,affordable_later,wait,2024-10-14:80500,2024-10-14,stop:event_10665,Recommended wait; up to 7118.11 is safe under the forecast while preserving the minimum balance of 38800.
-request_116,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 80300.
-request_117,735.06,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 735.06 is safe under the forecast while preserving the minimum balance of 1000.
-request_118,468.19,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 468.19 is safe under the forecast while preserving the minimum balance of 600.
-request_119,50748.69,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 50748.69 is safe under the forecast while preserving the minimum balance of 151200.
-request_120,0,affordable_later,wait,2026-04-14:7714000,2026-04-14,none,Recommended wait; up to 0 is safe under the forecast while preserving the minimum balance of 20050300.
-request_121,201.63,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 201.63 is safe under the forecast while preserving the minimum balance of 800.
-request_122,20558000,affordable_with_plan,installments,2025-08-05:7126773.33|2025-09-02:7126773.33|2025-09-30:7126773.33,2025-08-05,none,Recommended installments; up to 20558000 is safe under the forecast while preserving the minimum balance of 12588500.
-request_123,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 18091200.
-request_124,767.58,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 767.58 is safe under the forecast while preserving the minimum balance of 1600.
-request_125,3019.05,affordable_later,wait,2025-11-14:6468,2025-11-14,none,Recommended wait; up to 3019.05 is safe under the forecast while preserving the minimum balance of 11300.
-request_126,138292.52,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 138292.52 is safe under the forecast while preserving the minimum balance of 129700.
-request_127,0,affordable_later,wait,2024-10-12:23980,2024-10-12,none,Recommended wait; up to 0 is safe under the forecast while preserving the minimum balance of 41000.
-request_128,20604.55,affordable_later,wait,2025-02-14:25168,2025-02-14,none,Recommended wait; up to 20604.55 is safe under the forecast while preserving the minimum balance of 42600.
-request_129,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 800.
-request_130,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 1400.
-request_131,1313.82,affordable_with_plan,installments,2025-05-06:643.14|2025-06-03:643.14|2025-07-01:643.14,2025-05-24,none,Recommended installments; up to 1313.82 is safe under the forecast while preserving the minimum balance of 1100.
-request_132,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 1100.
-request_133,6490872.33,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 6490872.33 is safe under the forecast while preserving the minimum balance of 9986200.
-request_134,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 15902500.
-request_135,211.56,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 211.56 is safe under the forecast while preserving the minimum balance of 500.
-request_136,197.99,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 197.99 is safe under the forecast while preserving the minimum balance of 1100.
-request_137,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 71800.
-request_138,85.37,affordable_with_plan,partial_payment,2026-04-07:85.37|2026-04-14:1171.57,2026-04-14,none,Recommended partial_payment; up to 85.37 is safe under the forecast while preserving the minimum balance of 2300.
-request_139,1130.18,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 1130.18 is safe under the forecast while preserving the minimum balance of 1500.
-request_140,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 21600.
-request_141,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 67300.
-request_142,1263.6,affordable_now,full_payment,2024-12-05:1263.6,2024-12-05,none,Recommended full_payment; up to 1263.6 is safe under the forecast while preserving the minimum balance of 1700.
-request_143,157.87,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 157.87 is safe under the forecast while preserving the minimum balance of 11300.
-request_144,30.71,affordable_later,wait,2026-07-15:233.34,2026-07-15,none,Recommended wait; up to 30.71 is safe under the forecast while preserving the minimum balance of 600.
-request_145,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 155400.
-request_146,3359.99,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 3359.99 is safe under the forecast while preserving the minimum balance of 108600.
-request_147,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 900.
-request_148,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 20000.
-request_149,9394.05,affordable_with_plan,installments,2025-11-18:12706.03|2025-12-16:12706.03|2026-01-13:12706.03,2025-12-15,none,Recommended installments; up to 9394.05 is safe under the forecast while preserving the minimum balance of 42100.
-request_150,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 700.
-request_151,26999000,affordable_now,full_payment,2024-09-03:26999000,2024-09-03,none,Recommended full_payment; up to 26999000 is safe under the forecast while preserving the minimum balance of 31633600.
-request_152,7899.2,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 7899.2 is safe under the forecast while preserving the minimum balance of 11900.
-request_153,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 1400.
-request_154,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 1300.
-request_155,112500,affordable_now,full_payment,2025-05-06:112500,2025-05-06,none,Recommended full_payment; up to 112500 is safe under the forecast while preserving the minimum balance of 56300.
-request_156,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 26900.
-request_157,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 15714100.
-request_158,242600,affordable_with_plan,installments,2025-08-07:84101.33|2025-09-04:84101.33|2025-10-02:84101.33,2025-08-07,none,Recommended installments; up to 242600 is safe under the forecast while preserving the minimum balance of 131400.
-request_159,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 8700.
-request_160,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 1200.
-request_161,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 23010400.
-request_162,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 24161100.
-request_163,6943705.47,affordable_with_plan,installments,2024-09-10:6692053.33|2024-10-11:6692053.33|2024-11-11:6692053.33,2024-09-14,none,Recommended installments; up to 6943705.47 is safe under the forecast while preserving the minimum balance of 26728700.
-request_164,14688497.06,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 14688497.06 is safe under the forecast while preserving the minimum balance of 29550500.
-request_165,80600,affordable_now,full_payment,2026-04-06:80600,2026-04-06,none,Recommended full_payment; up to 80600 is safe under the forecast while preserving the minimum balance of 95000.
-request_166,2907.6,affordable_with_plan,installments,2024-12-03:1007.97|2025-01-03:1007.97|2025-02-03:1007.97,2024-12-03,none,Recommended installments; up to 2907.6 is safe under the forecast while preserving the minimum balance of 1700.
-request_167,40704.47,affordable_later,wait,2025-05-24:43802,2025-05-24,none,Recommended wait; up to 40704.47 is safe under the forecast while preserving the minimum balance of 31200.
-request_168,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 114400.
-request_169,39485.34,affordable_later,wait,2024-03-17:41976,2024-03-17,none,Recommended wait; up to 39485.34 is safe under the forecast while preserving the minimum balance of 18700.
-request_170,22914722.84,affordable_with_plan,installments,2025-08-06:12804480|2025-09-03:12804480|2025-10-01:12804480,2025-08-14,none,Recommended installments; up to 22914722.84 is safe under the forecast while preserving the minimum balance of 24715800.
-request_171,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 500.
-request_172,1742.13,affordable_with_plan,partial_payment,2024-06-05:1742.13|2024-06-14:8457.87,2024-06-14,none,Recommended partial_payment; up to 1742.13 is safe under the forecast while preserving the minimum balance of 27200.
-request_173,25889.91,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 25889.91 is safe under the forecast while preserving the minimum balance of 79100.
-request_174,1146.2,affordable_with_plan,installments,2026-04-04:397.35|2026-05-04:397.35|2026-06-03:397.35,2026-04-04,none,Recommended installments; up to 1146.2 is safe under the forecast while preserving the minimum balance of 700.
-request_175,2015.68,affordable_later,wait,2024-09-14:2346.3,2024-09-14,none,Recommended wait; up to 2015.68 is safe under the forecast while preserving the minimum balance of 1700.
-request_176,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 600.
-request_177,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 1300.
-request_178,2938.1,affordable_with_plan,installments,2024-12-07:1018.54|2025-01-07:1018.54|2025-02-07:1018.54,2024-12-07,none,Recommended installments; up to 2938.1 is safe under the forecast while preserving the minimum balance of 1400.
-request_179,4807857.06,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 4807857.06 is safe under the forecast while preserving the minimum balance of 41430800.
-request_180,58254.58,affordable_with_plan,partial_payment,2026-07-06:58254.58|2026-07-15:8245.42,2026-07-15,none,Recommended partial_payment; up to 58254.58 is safe under the forecast while preserving the minimum balance of 37300.
-request_181,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 2000.
-request_182,65714,affordable_now,full_payment,2025-08-05:65714,2025-08-05,none,Recommended full_payment; up to 65714 is safe under the forecast while preserving the minimum balance of 31100.
-request_183,17619567.94,affordable_with_plan,installments,2026-04-10:9313546.67|2026-05-10:9313546.67|2026-06-09:9313546.67,2026-05-14,none,Recommended installments; up to 17619567.94 is safe under the forecast while preserving the minimum balance of 11878300.
-request_184,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 110800.
-request_185,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 1300.
-request_186,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 22000.
-request_187,5298.04,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 5298.04 is safe under the forecast while preserving the minimum balance of 128300.
-request_188,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 900.
-request_189,488.4,affordable_now,full_payment,2026-07-04:488.4,2026-07-04,none,Recommended full_payment; up to 488.4 is safe under the forecast while preserving the minimum balance of 400.
-request_190,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 1600.
-request_191,664.4,affordable_now,full_payment,2025-05-03:664.4,2025-05-03,none,Recommended full_payment; up to 664.4 is safe under the forecast while preserving the minimum balance of 500.
-request_192,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 1000.
-request_193,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 1000.
-request_194,8169.95,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 8169.95 is safe under the forecast while preserving the minimum balance of 113600.
-request_195,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 700.
-request_196,675.61,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 675.61 is safe under the forecast while preserving the minimum balance of 500.
-request_197,26570551.47,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 26570551.47 is safe under the forecast while preserving the minimum balance of 26245900.
-request_198,185800,affordable_now,full_payment,2026-07-07:185800,2026-07-07,none,Recommended full_payment; up to 185800 is safe under the forecast while preserving the minimum balance of 124300.
-request_199,23674000,affordable_with_plan,installments,2024-09-07:8206986.67|2024-10-08:8206986.67|2024-11-08:8206986.67,2024-09-04,none,Recommended installments; up to 23674000 is safe under the forecast while preserving the minimum balance of 25359500.
-request_200,21717000,affordable_now,full_payment,2025-02-06:21717000,2025-02-06,none,Recommended full_payment; up to 21717000 is safe under the forecast while preserving the minimum balance of 20114600.
-request_201,23997000,affordable_now,full_payment,2026-04-03:23997000,2026-04-03,none,Recommended full_payment; up to 23997000 is safe under the forecast while preserving the minimum balance of 17304500.
-request_202,45430.35,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 45430.35 is safe under the forecast while preserving the minimum balance of 147800.
-request_203,1442.1,affordable_with_plan,installments,2025-05-10:499.93|2025-06-07:499.93|2025-07-05:499.93,2025-05-07,none,Recommended installments; up to 1442.1 is safe under the forecast while preserving the minimum balance of 1400.
-request_204,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 1300.
-request_205,6217209.81,affordable_later,wait,2024-03-15:10621000,2024-03-15,none,Recommended wait; up to 6217209.81 is safe under the forecast while preserving the minimum balance of 13994300.
-request_206,1404.7,affordable_with_plan,installments,2025-08-03:486.96|2025-08-31:486.96|2025-09-28:486.96,2025-08-03,none,Recommended installments; up to 1404.7 is safe under the forecast while preserving the minimum balance of 900.
-request_207,4229.55,affordable_later,wait,2026-07-15:11830,2026-07-15,none,Recommended wait; up to 4229.55 is safe under the forecast while preserving the minimum balance of 13600.
-request_208,0,affordable_later,wait,2024-06-14:4413000,2024-06-14,none,Recommended wait; up to 0 is safe under the forecast while preserving the minimum balance of 10470700.
-request_209,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 18400.
-request_210,169.72,affordable_with_plan,partial_payment,2026-04-06:169.72|2026-04-14:1190.3,2026-04-14,none,Recommended partial_payment; up to 169.72 is safe under the forecast while preserving the minimum balance of 2000.
-request_211,84.15,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 84.15 is safe under the forecast while preserving the minimum balance of 1500.
-request_212,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 29579800.
-request_213,2596.86,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 2596.86 is safe under the forecast while preserving the minimum balance of 2100.
-request_214,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 174900.
-request_215,29986,affordable_with_plan,installments,2025-05-09:10395.15|2025-06-06:10395.15|2025-07-04:10395.15,2025-05-06,none,Recommended installments; up to 29986 is safe under the forecast while preserving the minimum balance of 15700.
-request_216,260.55,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 260.55 is safe under the forecast while preserving the minimum balance of 1800.
-request_217,9878.72,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 9878.72 is safe under the forecast while preserving the minimum balance of 26800.
-request_218,20633149.23,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 20633149.23 is safe under the forecast while preserving the minimum balance of 34477200.
-request_219,607.7,affordable_with_plan,installments,2026-04-07:580.01|2026-05-07:580.01|2026-06-06:580.01,2026-05-14,none,Recommended installments; up to 607.7 is safe under the forecast while preserving the minimum balance of 1100.
-request_220,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 1100.
-request_221,109800,affordable_now,full_payment,2025-11-03:109800,2025-11-03,none,Recommended full_payment; up to 109800 is safe under the forecast while preserving the minimum balance of 81500.
-request_222,34078,affordable_now,full_payment,2026-01-05:34078,2026-01-05,none,Recommended full_payment; up to 34078 is safe under the forecast while preserving the minimum balance of 27300.
-request_223,832.43,affordable_later,wait,2024-09-15:898.7,2024-09-15,none,Recommended wait; up to 832.43 is safe under the forecast while preserving the minimum balance of 800.
-request_224,3816233.18,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 3816233.18 is safe under the forecast while preserving the minimum balance of 22187600.
-request_225,4440484.58,affordable_with_plan,installments,2026-07-20:7647120|2026-08-19:7647120|2026-09-18:7647120,2026-08-14,none,Recommended installments; up to 4440484.58 is safe under the forecast while preserving the minimum balance of 17670700.
-request_226,157000,affordable_now,full_payment,2024-12-03:157000,2024-12-03,none,Recommended full_payment; up to 157000 is safe under the forecast while preserving the minimum balance of 209400.
-request_227,5082.68,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 5082.68 is safe under the forecast while preserving the minimum balance of 62900.
-request_228,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 26191200.
-request_229,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 1000.
-request_230,769.28,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 769.28 is safe under the forecast while preserving the minimum balance of 2000.
-request_231,23154.65,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 23154.65 is safe under the forecast while preserving the minimum balance of 24300.
-request_232,65.25,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 65.25 is safe under the forecast while preserving the minimum balance of 2400.
-request_233,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 10365700.
-request_234,172.23,affordable_later,wait,2026-08-14:1213.3,2026-08-14,none,Recommended wait; up to 172.23 is safe under the forecast while preserving the minimum balance of 700.
-request_235,881.31,affordable_later,wait,2024-09-14:967.2,2024-09-14,none,Recommended wait; up to 881.31 is safe under the forecast while preserving the minimum balance of 700.
-request_236,3642647.96,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 3642647.96 is safe under the forecast while preserving the minimum balance of 16768600.
-request_237,23826000,affordable_now,full_payment,2026-04-05:23826000,2026-04-05,none,Recommended full_payment; up to 23826000 is safe under the forecast while preserving the minimum balance of 22431500.
-request_238,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 700.
-request_239,613.86,affordable_later,wait,2025-05-15:642,2025-05-15,none,Recommended wait; up to 613.86 is safe under the forecast while preserving the minimum balance of 600.
-request_240,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 52800.
-request_241,21052000,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 21052000 is safe under the forecast while preserving the minimum balance of 19252000.
-request_242,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 600.
-request_243,17468,affordable_now,full_payment,2026-07-07:17468,2026-07-07,none,Recommended full_payment; up to 17468 is safe under the forecast while preserving the minimum balance of 19900.
-request_244,42978.7,affordable_later,wait,2024-06-15:49918,2024-06-15,none,Recommended wait; up to 42978.7 is safe under the forecast while preserving the minimum balance of 45900.
-request_245,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 94600.
-request_246,64086,affordable_with_plan,installments,2026-04-03:22216.48|2026-05-03:22216.48|2026-06-02:22216.48,2026-04-03,none,Recommended installments; up to 64086 is safe under the forecast while preserving the minimum balance of 39300.
-request_247,572.99,affordable_later,wait,2024-10-14:1059.3,2024-10-14,none,Recommended wait; up to 572.99 is safe under the forecast while preserving the minimum balance of 1300.
-request_248,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 1300.
-request_249,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 600.
-request_250,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 35300.
-request_251,671.54,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 671.54 is safe under the forecast while preserving the minimum balance of 1300.
-request_252,2598942.99,affordable_later,wait,2026-08-14:28082000,2026-08-14,none,Recommended wait; up to 2598942.99 is safe under the forecast while preserving the minimum balance of 15152200.
-request_253,520.94,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 520.94 is safe under the forecast while preserving the minimum balance of 2300.
-request_254,493.6,affordable_later,wait,2025-09-13:3535.2,2025-09-13,stop:event_23348,Recommended wait; up to 493.6 is safe under the forecast while preserving the minimum balance of 2500.
-request_255,3345000,affordable_now,full_payment,2026-04-06:3345000,2026-04-06,none,Recommended full_payment; up to 3345000 is safe under the forecast while preserving the minimum balance of 9813900.
-request_256,91704.68,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 91704.68 is safe under the forecast while preserving the minimum balance of 168600.
-request_257,0,affordable_later,wait,2025-12-15:1352.4,2025-12-15,none,Recommended wait; up to 0 is safe under the forecast while preserving the minimum balance of 1600.
-request_258,1018.37,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 1018.37 is safe under the forecast while preserving the minimum balance of 500.
-request_259,260.36,affordable_later,wait,2024-10-14:935,2024-10-14,none,Recommended wait; up to 260.36 is safe under the forecast while preserving the minimum balance of 600.
-request_260,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 20727700.
-request_261,1830.4,affordable_now,full_payment,2026-07-03:1830.4,2026-07-03,none,Recommended full_payment; up to 1830.4 is safe under the forecast while preserving the minimum balance of 1500.
-request_262,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 31018500.
-request_263,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 24100.
-request_264,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 59500.
-request_265,45970,affordable_now,full_payment,2024-03-06:45970,2024-03-06,none,Recommended full_payment; up to 45970 is safe under the forecast while preserving the minimum balance of 189700.
-request_266,797.39,affordable_with_plan,installments,2025-08-03:324.13|2025-08-31:324.13|2025-09-28:324.13,2025-08-14,none,Recommended installments; up to 797.39 is safe under the forecast while preserving the minimum balance of 900.
-request_267,940.82,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 940.82 is safe under the forecast while preserving the minimum balance of 1500.
-request_268,704.92,affordable_with_plan,installments,2024-06-14:841.22|2024-07-15:841.22|2024-08-15:841.22,2024-07-14,none,Recommended installments; up to 704.92 is safe under the forecast while preserving the minimum balance of 1400.
-request_269,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 23100.
-request_270,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 1400.
-request_271,24279.73,affordable_later,wait,2024-10-14:91300,2024-10-14,none,Recommended wait; up to 24279.73 is safe under the forecast while preserving the minimum balance of 58200.
-request_272,5016498.44,affordable_with_plan,installments,2025-02-12:4709466.67|2025-03-12:4709466.67|2025-04-09:4709466.67,2025-03-16,none,Recommended installments; up to 5016498.44 is safe under the forecast while preserving the minimum balance of 7508600.
-request_273,0,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 0 is safe under the forecast while preserving the minimum balance of 18774600.
-request_274,1608.5,not_affordable,not_recommended,none,,none,Recommended not_recommended; up to 1608.5 is safe under the forecast while preserving the minimum balance of 1800.
-request_275,12972316.69,affordable_later,wait,2025-05-16:15884000,2025-05-16,none,Recommended wait; up to 12972316.69 is safe under the forecast while preserving the minimum balance of 12760100.
+request_26,15656000,affordable_now,full_payment,2025-08-03:15656000,2025-08-03,none,Recommended full_payment (affordable_now).
+request_27,6670,affordable_now,full_payment,2026-07-05:6670,2026-07-05,none,Recommended full_payment (affordable_now).
+request_28,0,affordable_later,wait,2024-08-15:1302.4,2024-08-15,none,Recommended wait (affordable_later).
+request_29,14827.52,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2025-11-23. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_30,775.2,affordable_with_plan,installments,2026-04-06:268.74|2026-05-06:268.74|2026-06-05:268.74,2026-04-06,none,Recommended installments (affordable_with_plan).
+request_31,642986.74,affordable_later,wait,2024-11-15:18164000,2024-11-15,none,Recommended wait (affordable_later).
+request_32,0,affordable_later,wait,2025-04-15:40018,2025-04-15,stop:event_2863,Recommended wait (affordable_later) after permitted spending changes (stop:event_2863).
+request_33,0,affordable_later,wait,2026-03-15:118000,2026-03-15,none,Recommended wait (affordable_later).
+request_34,110423.74,affordable_with_plan,full_payment,2024-12-04:129400,,stop:event_3085,Recommended full_payment (affordable_with_plan) after permitted spending changes (stop:event_3085).
+request_35,115012.97,affordable_later,wait,2025-12-15:212000,2025-12-15,none,Recommended wait (affordable_later).
+request_36,201.24,affordable_later,wait,2026-09-15:3954,2026-09-15,none,Recommended wait (affordable_later).
+request_37,0,affordable_later,wait,2024-05-15:14649000,2024-05-15,none,Recommended wait (affordable_later).
+request_38,84.8,affordable_later,wait,2025-10-15:971.3,2025-10-15,none,Recommended wait (affordable_later).
+request_39,62335.28,affordable_later,wait,2026-05-15:208600,2026-05-15,none,Recommended wait (affordable_later).
+request_40,0,affordable_later,wait,2024-08-15:1290.3,2024-08-15,none,Recommended wait (affordable_later).
+request_41,763908.24,affordable_later,wait,2026-01-15:38760000,2026-01-15,none,Recommended wait (affordable_later).
+request_42,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-03-15. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_43,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2024-11-15. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_44,9276.61,affordable_later,wait,2025-04-15:95800,2025-04-15,none,Recommended wait (affordable_later).
+request_45,1808595.37,affordable_later,wait,2026-09-15:21983000,2026-09-15,none,Recommended wait (affordable_later).
+request_46,31197.79,affordable_with_plan,partial_payment,2024-12-03:31197.79|2024-12-15:18252.21,2024-12-15,none,Recommended partial_payment (affordable_with_plan).
+request_47,5149358.94,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2025-06-19. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_48,45700,affordable_now,full_payment,2026-07-25:45700,2026-07-25,none,Recommended full_payment (affordable_now).
+request_49,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2024-05-22. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_50,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2025-08-21. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_51,89426.74,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-02-28. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_52,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2024-07-09. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_53,0,affordable_with_plan,installments,2025-11-21:589.06|2025-12-19:589.06|2026-01-16:589.06,2025-12-15,none,Recommended installments (affordable_with_plan).
+request_54,734.47,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-08-21. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_55,74526.93,affordable_with_plan,installments,2026-06-11:75781.33|2026-07-12:75781.33|2026-08-12:75781.33,2026-07-15,stop:event_5101,Recommended installments (affordable_with_plan) after permitted spending changes (stop:event_5101).
+request_56,407.89,affordable_with_plan,partial_payment,2025-02-03:407.89|2025-02-15:473.67,2025-02-15,none,Recommended partial_payment (affordable_with_plan).
+request_57,0,affordable_later,wait,2026-06-15:61446,2026-06-15,none,Recommended wait (affordable_later).
+request_58,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2025-01-25. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_59,140600,affordable_with_plan,installments,2025-05-07:48741.33|2025-06-04:48741.33|2025-07-02:48741.33,2025-05-04,none,Recommended installments (affordable_with_plan).
+request_60,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-03-04. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_61,29062,affordable_with_plan,installments,2024-03-17:10074.83|2024-04-17:10074.83|2024-05-18:10074.83,2024-03-03,none,Recommended installments (affordable_with_plan).
+request_62,404.23,affordable_now,full_payment,2025-08-05:404.23,2025-08-05,none,Recommended full_payment (affordable_now).
+request_63,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-09-17. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_64,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2024-08-16. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_65,4074.65,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2025-11-25. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_66,22200,affordable_now,full_payment,2026-04-03:22200,2026-04-03,none,Recommended full_payment (affordable_now).
+request_67,0,affordable_later,wait,2024-11-15:2094,2024-11-15,none,Recommended wait (affordable_later).
+request_68,767.64,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2025-04-16. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_69,169.75,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-01-14. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_70,0,affordable_later,wait,2025-02-15:243900,2025-02-15,none,Recommended wait (affordable_later).
+request_71,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2025-05-28. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_72,6704.12,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-07-14. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_73,71400,affordable_now,full_payment,2023-01-20:71400,2023-01-20,none,Recommended full_payment (affordable_now).
+request_74,5010,affordable_now,full_payment,2025-08-04:5010,2025-08-04,none,Recommended full_payment (affordable_now).
+request_75,25678.18,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-06-12. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_76,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2024-07-30. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_77,45388.28,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2025-11-14. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_78,43355.62,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2025-10-14. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_79,290.19,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2024-11-01. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_80,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2025-02-21. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_81,1501.32,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-07-14. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_82,58.22,affordable_later,wait,2025-01-15:1405.2,2025-01-15,none,Recommended wait (affordable_later).
+request_83,2182.05,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2025-06-17. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_84,253.68,affordable_later,wait,2026-05-15:95400,2026-05-15,none,Recommended wait (affordable_later).
+request_85,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2024-04-26. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_86,46300,affordable_now,full_payment,2025-08-03:46300,2025-08-03,none,Recommended full_payment (affordable_now).
+request_87,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-03-15. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_88,2475.58,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2024-08-25. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_89,5618837.33,affordable_with_plan,installments,2025-11-18:4768746.67|2025-12-16:4768746.67|2026-01-13:4768746.67,2025-12-15,none,Recommended installments (affordable_with_plan).
+request_90,2560,affordable_now,full_payment,2026-07-06:2560,2026-07-06,none,Recommended full_payment (affordable_now).
+request_91,374.53,affordable_later,wait,2024-11-15:1927.2,2024-11-15,none,Recommended wait (affordable_later).
+request_92,32755.11,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2025-02-14. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_93,914.13,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-04-14. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_94,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2024-12-22. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_95,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2025-07-14. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_96,49113.11,affordable_with_plan,installments,2026-01-10:31269.33|2026-02-09:31269.33|2026-03-11:31269.33,2026-02-15,none,Recommended installments (affordable_with_plan).
+request_97,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2024-05-24. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_98,0,affordable_later,wait,2025-09-15:27148,2025-09-15,none,Recommended wait (affordable_later).
+request_99,14876.3,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-07-14. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_100,10316.76,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2024-08-16. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_101,0,not_affordable,not_recommended,none,,none,Unresolved linked image evidence; no payment is recommended.
+request_102,1716,affordable_with_plan,installments,2026-04-05:594.88|2026-05-05:594.88|2026-06-04:594.88,2026-04-05,none,Recommended installments (affordable_with_plan).
+request_103,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2024-10-07. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_104,17194.38,affordable_with_plan,full_payment,2025-02-04:17204,,stop:event_9639,Recommended full_payment (affordable_with_plan) after permitted spending changes (stop:event_9639).
+request_105,19845.93,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-06-14. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_106,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2025-02-15. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_107,835.3,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2025-07-04. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_108,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-07-26. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_109,0,affordable_with_plan,installments,2024-03-18:645.98|2024-04-18:645.98|2024-05-19:645.98,2024-05-15,none,Recommended installments (affordable_with_plan).
+request_110,22352,affordable_with_plan,installments,2025-08-06:7748.69|2025-09-03:7748.69|2025-10-01:7748.69,2025-08-06,none,Recommended installments (affordable_with_plan).
+request_111,16625000,affordable_now,full_payment,2026-04-03:16625000,2026-04-03,none,Recommended full_payment (affordable_now).
+request_112,125.49,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2024-06-14. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_113,46.14,affordable_later,wait,2026-09-15:36500,2026-09-15,none,Recommended wait (affordable_later).
+request_114,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-01-14. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_115,7118.11,affordable_later,wait,2024-11-15:80500,2024-11-15,none,Recommended wait (affordable_later).
+request_116,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2025-04-16. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_117,735.06,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-07-14. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_118,491.86,affordable_with_plan,installments,2024-12-07:255.87|2025-01-07:255.87|2025-02-07:255.87,2025-01-15,none,Recommended installments (affordable_with_plan).
+request_119,50748.69,affordable_with_plan,installments,2025-05-18:70546.67|2025-06-15:70546.67|2025-07-13:70546.67,2025-06-15,none,Recommended installments (affordable_with_plan).
+request_120,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-04-14. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_121,192.5,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2024-03-14. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_122,20558000,affordable_with_plan,installments,2025-08-05:7126773.33|2025-09-02:7126773.33|2025-09-30:7126773.33,2025-08-05,none,Recommended installments (affordable_with_plan).
+request_123,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-03-28. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_124,767.58,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2024-08-20. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_125,2955.83,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2025-11-14. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_126,138292.52,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-07-17. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_127,0,affordable_later,wait,2024-10-15:23980,2024-10-15,none,Recommended wait (affordable_later).
+request_128,20577.96,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2025-02-14. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_129,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-06-18. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_130,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2025-02-15. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_131,1313.82,affordable_with_plan,installments,2025-05-06:643.14|2025-06-03:643.14|2025-07-01:643.14,2025-05-15,none,Recommended installments (affordable_with_plan).
+request_132,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-02-25. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_133,6543581.65,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2024-03-29. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_134,0,affordable_later,wait,2025-10-15:21831000,2025-10-15,none,Recommended wait (affordable_later).
+request_135,208.3,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-07-14. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_136,197.99,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2024-06-14. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_137,0,affordable_later,wait,2026-01-15:80100,2026-01-15,none,Recommended wait (affordable_later).
+request_138,78.25,affordable_with_plan,partial_payment,2026-04-07:78.25|2026-04-15:1178.69,2026-04-15,none,Recommended partial_payment (affordable_with_plan).
+request_139,1130.18,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2024-11-17. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_140,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2025-03-04. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_141,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-02-12. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_142,1263.6,affordable_now,full_payment,2024-12-05:1263.6,2024-12-05,none,Recommended full_payment (affordable_now).
+request_143,140.52,affordable_later,wait,2025-07-15:12584,2025-07-15,none,Recommended wait (affordable_later).
+request_144,26.74,affordable_later,wait,2026-07-15:233.34,2026-07-15,none,Recommended wait (affordable_later).
+request_145,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2024-05-26. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_146,3359.99,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2025-10-17. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_147,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-06-07. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_148,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2024-08-18. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_149,9343.21,affordable_with_plan,installments,2025-11-18:12706.03|2025-12-16:12706.03|2026-01-13:12706.03,2025-12-15,none,Recommended installments (affordable_with_plan).
+request_150,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-03-16. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_151,26999000,affordable_now,full_payment,2024-09-03:26999000,2024-09-03,none,Recommended full_payment (affordable_now).
+request_152,8598.6,affordable_with_plan,installments,2025-02-12:4812.43|2025-03-12:4812.43|2025-04-09:4812.43,2025-03-15,none,Recommended installments (affordable_with_plan).
+request_153,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-09-24. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_154,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2025-02-14. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_155,112500,affordable_now,full_payment,2025-05-06:112500,2025-05-06,none,Recommended full_payment (affordable_now).
+request_156,0,affordable_later,wait,2026-06-15:43076,2026-06-15,none,Recommended wait (affordable_later).
+request_157,0,affordable_later,wait,2024-05-15:23503000,2024-05-15,none,Recommended wait (affordable_later).
+request_158,242600,affordable_with_plan,installments,2025-08-07:84101.33|2025-09-04:84101.33|2025-10-02:84101.33,2025-08-07,none,Recommended installments (affordable_with_plan).
+request_159,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-03-20. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_160,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2024-08-20. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_161,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-01-15. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_162,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-08-26. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_163,6825721.81,affordable_with_plan,installments,2024-09-10:6692053.33|2024-10-11:6692053.33|2024-11-11:6692053.33,2024-09-15,none,Recommended installments (affordable_with_plan).
+request_164,26980665.1,affordable_with_plan,installments,2025-02-11:9366240|2025-03-11:9366240|2025-04-08:9366240,2025-02-15,none,Recommended installments (affordable_with_plan).
+request_165,80600,affordable_now,full_payment,2026-04-06:80600,2026-04-06,none,Recommended full_payment (affordable_now).
+request_166,2907.6,affordable_with_plan,installments,2024-12-03:1007.97|2025-01-03:1007.97|2025-02-03:1007.97,2024-12-03,none,Recommended installments (affordable_with_plan).
+request_167,40704.47,affordable_later,wait,2025-05-15:43802,2025-05-15,none,Recommended wait (affordable_later).
+request_168,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-03-16. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_169,39388.71,affordable_later,wait,2024-03-15:41976,2024-03-15,none,Recommended wait (affordable_later).
+request_170,22702805.45,affordable_with_plan,installments,2025-08-06:12804480|2025-09-03:12804480|2025-10-01:12804480,2025-08-15,none,Recommended installments (affordable_with_plan).
+request_171,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-09-10. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_172,1652.47,affordable_with_plan,partial_payment,2024-06-05:1652.47|2024-06-15:8547.53,2024-06-15,none,Recommended partial_payment (affordable_with_plan).
+request_173,25703.05,affordable_with_plan,installments,2025-11-21:39173.33|2025-12-19:39173.33|2026-01-16:39173.33,2026-01-15,none,Recommended installments (affordable_with_plan).
+request_174,1146.2,affordable_with_plan,installments,2026-04-04:397.35|2026-05-04:397.35|2026-06-03:397.35,2026-04-04,none,Recommended installments (affordable_with_plan).
+request_175,2015.68,affordable_later,wait,2024-09-15:2346.3,2024-09-15,none,Recommended wait (affordable_later).
+request_176,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2025-02-27. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_177,276.61,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-01-25. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_178,2938.1,affordable_with_plan,installments,2024-12-07:1018.54|2025-01-07:1018.54|2025-02-07:1018.54,2024-12-07,none,Recommended installments (affordable_with_plan).
+request_179,4807857.06,affordable_later,wait,2025-07-15:41648000,2025-07-15,none,Recommended wait (affordable_later).
+request_180,57957.05,affordable_with_plan,partial_payment,2026-07-06:57957.05|2026-07-15:8542.95,2026-07-15,none,Recommended partial_payment (affordable_with_plan).
+request_181,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2024-04-07. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_182,65714,affordable_now,full_payment,2025-08-05:65714,2025-08-05,none,Recommended full_payment (affordable_now).
+request_183,17525138.17,affordable_with_plan,installments,2026-04-10:9313546.67|2026-05-10:9313546.67|2026-06-09:9313546.67,2026-05-15,none,Recommended installments (affordable_with_plan).
+request_184,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2024-07-30. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_185,0,affordable_later,wait,2026-01-15:1257.3,2026-01-15,none,Recommended wait (affordable_later).
+request_186,2616.89,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-03-15. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_187,5298.04,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2024-11-15. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_188,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2025-03-04. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_189,488.4,affordable_now,full_payment,2026-07-04:488.4,2026-07-04,none,Recommended full_payment (affordable_now).
+request_190,0,affordable_later,wait,2025-02-15:2557.5,2025-02-15,none,Recommended wait (affordable_later).
+request_191,664.4,affordable_now,full_payment,2025-05-03:664.4,2025-05-03,none,Recommended full_payment (affordable_now).
+request_192,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-05-11. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_193,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2024-05-28. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_194,7634.6,affordable_later,wait,2025-10-15:132800,2025-10-15,none,Recommended wait (affordable_later).
+request_195,296.97,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-03-11. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_196,675.61,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2024-07-05. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_197,26375072.37,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-01-21. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_198,185800,affordable_now,full_payment,2026-07-07:185800,2026-07-07,none,Recommended full_payment (affordable_now).
+request_199,23674000,affordable_with_plan,installments,2024-09-07:8206986.67|2024-10-08:8206986.67|2024-11-08:8206986.67,2024-09-04,none,Recommended installments (affordable_with_plan).
+request_200,21717000,affordable_now,full_payment,2025-02-06:21717000,2025-02-06,none,Recommended full_payment (affordable_now).
+request_201,23997000,affordable_now,full_payment,2026-04-03:23997000,2026-04-03,none,Recommended full_payment (affordable_now).
+request_202,82792.18,affordable_later,wait,2024-12-15:123900,2024-12-15,none,Recommended wait (affordable_later).
+request_203,1442.1,affordable_with_plan,installments,2025-05-10:499.93|2025-06-07:499.93|2025-07-05:499.93,2025-05-07,none,Recommended installments (affordable_with_plan).
+request_204,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-01-31. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_205,5995919.81,affordable_later,wait,2024-03-15:10621000,2024-03-15,none,Recommended wait (affordable_later).
+request_206,1404.7,affordable_with_plan,installments,2025-08-03:486.96|2025-08-31:486.96|2025-09-28:486.96,2025-08-03,none,Recommended installments (affordable_with_plan).
+request_207,4229.55,affordable_later,wait,2026-07-15:11830,2026-07-15,none,Recommended wait (affordable_later).
+request_208,0,affordable_later,wait,2024-06-15:4413000,2024-06-15,none,Recommended wait (affordable_later).
+request_209,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2025-11-25. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_210,169.72,affordable_with_plan,partial_payment,2026-04-06:169.72|2026-04-15:1190.3,2026-04-15,none,Recommended partial_payment (affordable_with_plan).
+request_211,84.15,affordable_later,wait,2024-11-15:1788.6,2024-11-15,none,Recommended wait (affordable_later).
+request_212,2564386.91,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2025-02-28. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_213,2605.08,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-03-22. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_214,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2025-01-28. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_215,29986,affordable_with_plan,installments,2025-05-09:10395.15|2025-06-06:10395.15|2025-07-04:10395.15,2025-05-06,none,Recommended installments (affordable_with_plan).
+request_216,260.55,affordable_later,wait,2026-09-15:3332.4,2026-09-15,none,Recommended wait (affordable_later).
+request_217,9746.55,affordable_with_plan,installments,2024-03-19:12889.07|2024-04-19:12889.07|2024-05-20:12889.07,2024-05-15,none,Recommended installments (affordable_with_plan).
+request_218,20553986.19,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2025-10-06. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_219,607.7,affordable_with_plan,installments,2026-04-07:580.01|2026-05-07:580.01|2026-06-06:580.01,2026-05-15,none,Recommended installments (affordable_with_plan).
+request_220,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2024-07-03. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_221,109800,affordable_now,full_payment,2025-11-03:109800,2025-11-03,none,Recommended full_payment (affordable_now).
+request_222,34078,affordable_now,full_payment,2026-01-05:34078,2026-01-05,none,Recommended full_payment (affordable_now).
+request_223,832.41,affordable_later,wait,2024-09-15:898.7,2024-09-15,none,Recommended wait (affordable_later).
+request_224,6074090.67,affordable_with_plan,partial_payment,2025-02-04:6074090.67|2025-02-15:4252909.33,2025-02-15,none,Recommended partial_payment (affordable_with_plan).
+request_225,4368504.23,affordable_with_plan,installments,2026-07-20:7647120|2026-08-19:7647120|2026-09-18:7647120,2026-08-15,none,Recommended installments (affordable_with_plan).
+request_226,157000,affordable_now,full_payment,2024-12-03:157000,2024-12-03,none,Recommended full_payment (affordable_now).
+request_227,5082.68,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2025-06-20. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_228,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-04-30. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_229,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2024-05-23. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_230,677.22,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2025-10-04. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_231,29006.6,affordable_with_plan,installments,2026-01-06:12378.08|2026-02-05:12378.08|2026-03-07:12378.08,2026-01-15,none,Recommended installments (affordable_with_plan).
+request_232,46.28,affordable_later,wait,2024-08-15:1970.1,2024-08-15,none,Recommended wait (affordable_later).
+request_233,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2025-12-17. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_234,172.23,affordable_later,wait,2026-08-15:1213.3,2026-08-15,none,Recommended wait (affordable_later).
+request_235,878.75,affordable_later,wait,2024-09-15:967.2,2024-09-15,none,Recommended wait (affordable_later).
+request_236,3642647.96,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2025-02-23. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_237,23826000,affordable_now,full_payment,2026-04-05:23826000,2026-04-05,none,Recommended full_payment (affordable_now).
+request_238,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2025-02-16. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_239,613.86,affordable_later,wait,2025-05-15:642,2025-05-15,none,Recommended wait (affordable_later).
+request_240,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-03-20. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_241,21052000,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2024-05-25. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_242,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2025-08-25. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_243,17468,affordable_now,full_payment,2026-07-07:17468,2026-07-07,none,Recommended full_payment (affordable_now).
+request_244,42725.92,affordable_later,wait,2024-06-15:49918,2024-06-15,none,Recommended wait (affordable_later).
+request_245,0,affordable_later,wait,2026-01-15:128500,2026-01-15,none,Recommended wait (affordable_later).
+request_246,64086,affordable_with_plan,installments,2026-04-03:22216.48|2026-05-03:22216.48|2026-06-02:22216.48,2026-04-03,none,Recommended installments (affordable_with_plan).
+request_247,572.99,affordable_later,wait,2024-10-15:1059.3,2024-10-15,none,Recommended wait (affordable_later).
+request_248,738.38,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2025-04-28. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_249,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-03-15. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_250,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2025-01-18. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_251,671.54,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2025-06-06. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_252,2598942.99,affordable_later,wait,2026-08-15:28082000,2026-08-15,none,Recommended wait (affordable_later).
+request_253,511.84,affordable_with_plan,installments,2024-03-21:984.6|2024-04-21:984.6|2024-05-22:984.6,2024-05-15,none,Recommended installments (affordable_with_plan).
+request_254,493.6,affordable_later,wait,2025-10-15:3535.2,2025-10-15,none,Recommended wait (affordable_later).
+request_255,3345000,affordable_now,full_payment,2026-04-06:3345000,2026-04-06,none,Recommended full_payment (affordable_now).
+request_256,91347.07,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2024-08-19. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_257,0,affordable_later,wait,2025-12-15:1352.4,2025-12-15,none,Recommended wait (affordable_later).
+request_258,1113.6,affordable_now,full_payment,2026-01-07:1113.6,2026-01-07,none,Recommended full_payment (affordable_now).
+request_259,260.36,affordable_later,wait,2024-10-15:935,2024-10-15,none,Recommended wait (affordable_later).
+request_260,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2025-04-18. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_261,1830.4,affordable_now,full_payment,2026-07-03:1830.4,2026-07-03,none,Recommended full_payment (affordable_now).
+request_262,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2025-01-24. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_263,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2025-06-15. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_264,0,affordable_later,wait,2026-06-15:111300,2026-06-15,none,Recommended wait (affordable_later).
+request_265,45970,affordable_now,full_payment,2024-03-06:45970,2024-03-06,none,Recommended full_payment (affordable_now).
+request_266,795.57,affordable_with_plan,installments,2025-08-03:324.13|2025-08-31:324.13|2025-09-28:324.13,2025-08-15,none,Recommended installments (affordable_with_plan).
+request_267,995.31,affordable_with_plan,installments,2026-01-08:667.33|2026-02-07:667.33|2026-03-09:667.33,2026-02-15,none,Recommended installments (affordable_with_plan).
+request_268,705.57,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2024-08-15. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_269,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-01-02. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_270,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-08-30. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_271,24279.73,affordable_later,wait,2024-10-15:91300,2024-10-15,none,Recommended wait (affordable_later).
+request_272,5016498.44,affordable_with_plan,installments,2025-02-12:4709466.67|2025-03-12:4709466.67|2025-04-09:4709466.67,2025-03-15,none,Recommended installments (affordable_with_plan).
+request_273,0,not_affordable,not_recommended,none,,none,"No safe payment plan keeps the balance above the minimum and completes by 2026-06-15. The request is not affordable without inventing income or breaching a protected commitment, so no payment is recommended."
+request_274,1608.5,affordable_with_plan,installments,2024-12-04:940.75|2025-01-04:940.75|2025-02-04:940.75,2025-01-15,none,Recommended installments (affordable_with_plan).
+request_275,12972316.69,affordable_later,wait,2025-05-15:15884000,2025-05-15,none,Recommended wait (affordable_later).
