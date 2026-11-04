@@ -350,10 +350,12 @@ class BuyOrWait(App):
     BINDINGS = [
         ("ctrl+q", "quit", "Quit"),
         ("escape", "cancel_ask", "Cancel ask"),
+        ("ctrl+f", "facts", "Facts used"),
     ]
 
     account: dict | None = None
     ask_worker: Worker | None = None
+    chat_session: object | None = None
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -477,6 +479,8 @@ class BuyOrWait(App):
                     )
                     yield RichLog(id="chat-log", wrap=True)
                     yield Static("", id="chat-progress")
+                    with Horizontal(classes="actions"):
+                        yield Button("Facts used", id="chat-facts")
                     with Horizontal(classes="field-row"):
                         yield Label("Model")
                         yield Select([], id="model-select", allow_blank=True)
@@ -552,6 +556,10 @@ class BuyOrWait(App):
             worker.cancel()
             self.ask_worker = None
             self._set_chat_progress("")
+        if incoming != current:
+            # A conversation belongs to the person it was had with: switching
+            # person starts a new one rather than carrying a stale tool list.
+            self.chat_session = None
         self.account = account
         profile = account.get("profile") or {}
         self.sub_title = str(profile.get("user_id") or "")
@@ -781,6 +789,38 @@ class BuyOrWait(App):
     def _set_chat_progress(self, message: str, style: str = MUTED) -> None:
         self.query_one("#chat-progress", Static).update(Text(message, style=style))
 
+    def chat_state(self):
+        """This screen's conversation, created on first use and kept in memory.
+
+        One session per loaded person: it carries the previous exchange into the
+        next question and remembers which tools the last answer used.  It is
+        discarded when another person is loaded and never written to disk.
+        """
+        from code import chat
+
+        if self.chat_session is None:
+            self.chat_session = chat.Session()
+        return self.chat_session
+
+    def action_facts(self) -> None:
+        """Print the tools the last answer used, or say none has run yet."""
+        from code import chat
+
+        facts = chat.facts_used(self.chat_session)
+        if not facts:
+            self._chat_log(
+                "Nothing yet: no answer in this conversation has used a tool.",
+                MUTED,
+            )
+            return
+        self._chat_log("Facts used by the last answer:", MUTED)
+        for item in facts:
+            arguments = ", ".join(
+                f"{key}={value}" for key, value in (item.get("args") or {}).items()
+            )
+            call = f"{item['tool']}({arguments})" if arguments else f"{item['tool']}()"
+            self._chat_log(f"  {call} - {item['result_summary']}", MUTED)
+
     def start_ask(self, text: str, provider) -> Worker | None:
         """Send one question to the model without blocking the screen.
 
@@ -793,12 +833,13 @@ class BuyOrWait(App):
             return None
         from code import chat
 
+        session = self.chat_state()
         self._set_chat_progress(
             f"Asking {self.model_choice} — a model can take a while · esc cancels",
             BLUE,
         )
         worker = self.run_worker(
-            partial(chat.ask, self.account, text, provider=provider),
+            partial(chat.ask, self.account, text, provider=provider, session=session),
             name="chat-ask",
             group=ASK_GROUP,
             description=f"chat.ask {self.model_choice}",
@@ -856,6 +897,11 @@ class BuyOrWait(App):
     @on(Button.Pressed, "#switch-person")
     def _switch(self, event: Button.Pressed) -> None:
         self.push_screen(UserPicker())
+
+    @on(Button.Pressed, "#chat-facts")
+    def _facts_pressed(self, event: Button.Pressed) -> None:
+        """The button is the discoverable form of the ``facts`` action."""
+        self.action_facts()
 
     @on(Button.Pressed, "#refresh-position")
     def _refresh(self, event: Button.Pressed) -> None:

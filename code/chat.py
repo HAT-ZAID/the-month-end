@@ -195,21 +195,27 @@ SESSION_TTL_S = 30 * 60
 #: is the whole point of keeping the conversation in memory only.
 MAX_SESSION_MESSAGES = 12
 
+#: The most of one tool result the facts control will show, in characters.
+MAX_RESULT_SUMMARY_CHARS = 240
+
 
 @dataclass
 class Session:
     """One person's conversation, held in memory and never written to disk.
 
     ``messages`` holds finished ``user``/``assistant`` turns only: a tool result
-    from an earlier turn is stale evidence, so it is never replayed.  A session
-    belongs to exactly one account; passing another one clears it before the new
-    turn is built.  ``expires_at`` is a :func:`time.monotonic` deadline, not a
-    wall clock, so a system clock change cannot extend it.
+    from an earlier turn is stale evidence, so it is never replayed.
+    ``last_observations`` describes the tools the last answer used, summarized
+    for display.  A session belongs to exactly one account; passing another one
+    clears it before the new turn is built.  ``expires_at`` is a
+    :func:`time.monotonic` deadline, not a wall clock, so a system clock change
+    cannot extend it.
     """
 
     account_id: str = ""
     messages: list[dict] = field(default_factory=list)
     expires_at: float = 0.0
+    last_observations: list[dict] = field(default_factory=list)
 
 
 def _account_id(account) -> str:
@@ -230,6 +236,7 @@ def _session_history(session, account) -> list[dict]:
     expired = bool(session.expires_at) and now >= float(session.expires_at)
     if expired or (session.account_id and session.account_id != _account_id(account)):
         session.messages.clear()
+        session.last_observations.clear()
     session.account_id = _account_id(account)
     session.expires_at = now + SESSION_TTL_S
     return [
@@ -247,6 +254,59 @@ def _remember(session, question: str, reply: str) -> None:
     session.messages.append({"role": "user", "content": str(question)})
     session.messages.append({"role": "assistant", "content": str(reply)})
     del session.messages[:-MAX_SESSION_MESSAGES]
+
+
+def _result_summary(result) -> str:
+    """A bounded, display-only summary of one tool result.
+
+    A failed call reports its fixed ``safe_summary``, never the exception text.
+    A kernel result is rendered by :func:`_summary`, so every word and figure is
+    one the tool itself returned; nothing is computed here.
+    """
+    if _tool_error(result):
+        text = str(result.get("safe_summary") or result.get("error") or "no result")
+    elif isinstance(result, dict):
+        text = _summary([result])
+    else:
+        text = "The tool returned no summary."
+    text = " ".join(str(text).split())
+    if len(text) > MAX_RESULT_SUMMARY_CHARS:
+        text = text[: MAX_RESULT_SUMMARY_CHARS - 3].rstrip() + "..."
+    return text
+
+
+def _remember_observations(session, records) -> None:
+    """Keep the last turn's dispatched calls, summarized, for the facts control."""
+    if session is None:
+        return
+    session.last_observations = [
+        {
+            "tool": str(record.get("tool") or ""),
+            "args": dict(record.get("args") or {}),
+            "result_summary": _result_summary(record.get("result")),
+        }
+        for record in records
+        if isinstance(record, dict)
+    ]
+
+
+def facts_used(session) -> list[dict]:
+    """The tools the last answer used: name, arguments and a bounded summary.
+
+    Empty before any turn has run, and empty after a turn that dispatched no
+    tool.  A copy is returned, so a caller cannot edit the session's record.
+    """
+    if session is None:
+        return []
+    return [
+        {
+            "tool": str(item.get("tool") or ""),
+            "args": dict(item.get("args") or {}),
+            "result_summary": str(item.get("result_summary") or ""),
+        }
+        for item in (getattr(session, "last_observations", None) or [])
+        if isinstance(item, dict)
+    ]
 
 
 #: The phases a turn moves through.  ``received``, ``executing`` and
@@ -798,6 +858,7 @@ def _finish_turn(state, records, *, reply, reason, verified, model, started,
     state.fallback_reason = None if verified else str(reason)
     elapsed_ms = max(0, int(round((time.monotonic() - started) * 1000)))
     _remember(session, question, reply)
+    _remember_observations(session, state.observations)
     _write_state(trace, state)
     return {
         "reply": reply,
