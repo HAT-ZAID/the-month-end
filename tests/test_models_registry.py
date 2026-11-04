@@ -271,3 +271,16 @@ def test_the_tags_path_is_joined_onto_whatever_base_was_configured(
     assert models.ollama_models(env={OLLAMA_BASE_URL_ENV: base}) == ["tiny:latest"]
     assert probed == [expected]
 
+
+def test_cloud_tags_are_labelled_free_not_local(monkeypatch):
+    """A -cloud tag runs off this machine, so it must not inherit the local class."""
+    monkeypatch.setattr(
+        models,
+        "ollama_models",
+        lambda env=None: ["gemma4:e2b-it-qat", "gpt-oss:20b-cloud"],
+    )
+    opts = {item["model"]: item for item in models.options({})}
+    assert opts["gemma4:e2b-it-qat"]["privacy"] == "local"
+    assert opts["gpt-oss:20b-cloud"]["privacy"] == "free"
+    assert "cloud" in opts["gpt-oss:20b-cloud"]["label"].lower()
+

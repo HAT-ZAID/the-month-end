@@ -22,6 +22,7 @@ from urllib.parse import urlsplit
 
 from code.providers import (
     DEFAULT_OLLAMA_BASE_URL,
+    is_cloud_model,
     KILO_API_KEY_ENV,
     MODEL_ENV,
     OLLAMA_BASE_URL_ENV,
@@ -182,6 +183,12 @@ def options(env=None) -> list[dict]:
             "model": name,
             "privacy": "local",
         })
+    # A ``-cloud`` tag runs on the provider's hardware whatever the endpoint
+    # says, so it must not inherit the local class and its silence.
+    for item in items:
+        if item["provider"] == "ollama" and is_cloud_model(item["model"]):
+            item["privacy"] = "free"
+            item["label"] = f"Cloud (leaves this machine) - {item['model']}"
     # The free tier trains on what it is sent; say so in the label itself.
     if "openrouter" in hosted:
         items.append({
