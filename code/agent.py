@@ -13,8 +13,9 @@ The loop is deliberately manual (no LangGraph, no executor, no hidden retries):
 2. ``.bind_tools(...)`` on the provider's LangChain chat model;
 3. at most ``max_provider_calls`` chat turns and ``max_tool_calls`` tool calls,
    whichever hits first;
-4. a candidate is only accepted after at least one ``search_evidence`` call and
-   one ``get_cashflow_projection`` call (one reminder, then fallback);
+4. a candidate is only accepted after a ``search_evidence`` call that returned
+   at least one citation and one ``get_cashflow_projection`` call (one
+   reminder, then fallback);
 5. a tool that fails twice is fatal for the run (no automatic retry loop);
 6. every turn, tool result, retrieval backend, candidate, verification and the
    final row is recorded in the trace.
@@ -63,8 +64,10 @@ MAX_PROVIDER_CALLS = 6
 DEFAULT_TIMEOUT_S = 30.0
 
 #: Evidence and computation the model must touch before a decision is accepted.
+#: The evidence gate reads ``evidence_found``, not the bare attempt: a healthy
+#: search that returned zero citations did not produce evidence.
 REQUIRED_STEPS = (
-    ("search_evidence", "evidence"),
+    ("search_evidence", "evidence_found"),
     ("get_cashflow_projection", "projection"),
 )
 
@@ -894,7 +897,11 @@ def run_agent_loop(
     )
     schemas = agent_tool_schemas()
     state = {
-        "evidence": False,
+        # Three separate facts: a search was dispatched, the backend answered,
+        # and at least one citation came back. Only the last is evidence.
+        "search_attempted": False,
+        "search_backend_ok": False,
+        "evidence_found": False,
         "projection": False,
         "nag": 0,
         "final_retry": 0,
@@ -968,6 +975,9 @@ def run_agent_loop(
                         "backend": state["retrieval"] or summary.get("backend"),
                         "warnings": summary.get("warnings") or [],
                         "queries": summary.get("queries") or 0,
+                        "search_attempted": bool(state["search_attempted"]),
+                        "search_backend_ok": bool(state["search_backend_ok"]),
+                        "evidence_found": bool(state["evidence_found"]),
                     },
                 )
             except Exception as exc:  # observability must never break the request
@@ -1452,25 +1462,44 @@ def _missing_prompt(missing) -> str:
 
 
 def _note_step(tools, state, name, envelope, trace, enabled) -> None:
-    """Mark required steps done and record the retrieval backend that answered."""
-    if name == "search_evidence" and envelope.get("ok"):
-        data = envelope.get("data") or {}
-        state["evidence"] = True
-        state["retrieval"] = str(data.get("backend") or "fts")
-        if enabled:
+    """Mark required steps done and record the retrieval backend that answered.
+
+    A search keeps three facts apart, so the run state never overstates what
+    happened: it was dispatched (``search_attempted``), the backend answered
+    (``search_backend_ok``) and at least one citation came back
+    (``evidence_found``).  Only ``evidence_found`` satisfies the
+    required-evidence step; a zero-citation search is a healthy miss.
+    """
+    if name == "search_evidence":
+        ok = bool(envelope.get("ok"))
+        data = envelope.get("data") if ok else None
+        data = data if isinstance(data, dict) else {}
+        citations = [
+            item for item in (data.get("citations") or []) if isinstance(item, dict)
+        ]
+        state["search_attempted"] = True
+        if ok:
+            state["search_backend_ok"] = True
+            state["retrieval"] = str(data.get("backend") or "fts")
+        if citations:
+            state["evidence_found"] = True
+        if enabled and ok:
             trace.record(
                 "retrieval_result",
                 {
                     "backend": state["retrieval"],
-                    "count": data.get("count", 0),
+                    "count": data.get("count", len(citations)),
                     "citations": [
                         {
                             "chunk_id": item.get("chunk_id"),
                             "source_type": item.get("source_type"),
                             "source_id": item.get("source_id"),
                         }
-                        for item in (data.get("citations") or [])
+                        for item in citations
                     ],
+                    "search_attempted": state["search_attempted"],
+                    "search_backend_ok": state["search_backend_ok"],
+                    "evidence_found": state["evidence_found"],
                 },
             )
     if name == "get_cashflow_projection" and envelope.get("ok"):
