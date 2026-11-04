@@ -292,6 +292,22 @@ Read [`docs/architecture.md`](docs/architecture.md) for the module map and
 
 ---
 
+## Running it in the cloud
+
+The deterministic kernel is deployed as a Lambda function URL in
+`ap-southeast-2`, packaged by CI and capped by a $10/month budget:
+
+```
+https://73rb5yi7skfyh5y2ivmkay2ivi0pvihx.lambda-url.ap-southeast-2.on.aws
+```
+
+Every route needs a bearer token, which lives in the function's environment and
+never in this repo. `GET /health`, `GET /sample`, `GET /sample/{id}` and
+`POST /evaluate` are live. The agent loop is deliberately not deployed: a public
+chat endpoint would be a paid model call per request with no authentication
+beyond that token, so the conversational layer stays client-side where your own
+key lives.
+
 ## Status
 
 - Deterministic core: stable, 717 tests green, 503 in the wider review suite.
