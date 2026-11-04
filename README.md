@@ -113,6 +113,51 @@ python -m tools.tui                    # the terminal version
 
 ---
 
+## Runs offline, by default
+
+The batch path is offline and keyless. Install from `requirements.txt`, run it,
+and the answer is the same every time — no model, no network, no account.
+
+```bash
+pip install -r requirements.txt
+python -m code.main
+```
+
+The container image is authored but **not built on this development machine**
+(disk constrained), so treat it as unverified:
+
+```bash
+docker build -t buy-or-wait .
+docker run --rm buy-or-wait
+```
+
+## Deploying with Kilo (optional)
+
+For a hosted deployment, Kilo serving Nemotron Ultra (`nemotron-3-ultra`) is the
+trodden path. Nothing is bundled and no endpoint is committed — **you must**
+supply the endpoint, key and model yourself:
+
+```bash
+BUY_WAIT_KILO_BASE_URL=...   # your OpenAI-compatible endpoint
+BUY_WAIT_KILO_API_KEY=...    # never committed
+BUY_WAIT_KILO_MODEL=nemotron-3-ultra
+BUY_WAIT_LLM_PROVIDER=kilo
+```
+
+## Reading receipt images locally
+
+Some financial events arrive as photos with no typed amount. The local vision
+path reads them on your machine, with three backends chosen by
+`BUY_WAIT_OCR_BACKEND`:
+
+- **qwen3-vl** through Ollama (the default local reader),
+- **Docling** for structured documents,
+- **Tesseract** as the plain-text fallback.
+
+Measured coverage on the calibration fixture: the local readers resolve 15 of 16
+images (15/16). The remaining one stays unresolved by design — the app reports a
+missing amount and refuses to decide on it rather than inventing a number.
+
 ## The product surface
 
 The app is built around one idea: **change a fact, see the decision move.**
