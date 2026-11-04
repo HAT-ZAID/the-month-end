@@ -210,6 +210,9 @@ _ISO_DATE = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
 # The second figure in "3 of 5 samples" is the same count as the first. Only a
 # small leading count qualifies, so "paid 500 of 2000" still checks 2000.
 _COUNT_PREFIX = re.compile(r"(?<![\d.])\d{1,2}\s+of\s*$", re.IGNORECASE)
+#: The longest accepted prefix ("12 of ") fits in six characters. The window is
+#: read from the figure backwards, so it has to be clamped at offset zero.
+_COUNT_PREFIX_WINDOW = 6
 _COUNT_UNIT = re.compile(
     r"\s*(?:install?ments?|payments?|months?|weeks?|days?|years?|times|percent)\b"
     r"|\s*%",
@@ -321,6 +324,16 @@ def _supported_dates(row: dict, extra_dates=()) -> set[str]:
     return dates
 
 
+def _count_prefix_before(text: str, start: int) -> str:
+    """The bounded window before ``start``, clamped at the text's beginning.
+
+    A negative start slices from the end of the string or yields an empty
+    window, which hides the count prefix in "3 of 5 samples" whenever the
+    figure sits at offset zero.
+    """
+    return text[max(0, start - _COUNT_PREFIX_WINDOW):start]
+
+
 def _money_claims(text: str) -> list[tuple[str, Decimal]]:
     # An ISO date is a date, not an amount: blank the date spans first so the
     # year/month/day digits cannot be read as money.
@@ -363,7 +376,7 @@ def _money_claims(text: str) -> list[tuple[str, Decimal]]:
         # money, but "99999 installments" is a fortune wearing a count noun.
         if len(significant) <= 2 and (
             _COUNT_UNIT.match(unspanned[match.end():])
-            or _COUNT_PREFIX.search(unspanned[max(0, match.start() - 6):match.start()])
+            or _COUNT_PREFIX.search(_count_prefix_before(unspanned, match.start()))
         ):
             continue
         if _COUNT_FOLLOWS.match(unspanned[match.end():]) and len(significant) <= 2:

@@ -888,3 +888,11 @@ def test_a_long_username_run_is_scanned_once_not_at_every_offset():
     sanitize({"e": body})
     elapsed = time.monotonic() - started
     assert elapsed < 1.0, (len(body), elapsed)
+
+
+def test_a_count_prefix_at_the_very_start_of_the_text_is_recognised():
+    # The six-character window before the figure starts at a negative index
+    # here, so an unclamped slice is empty and the count becomes a money claim.
+    report = verify_claims("3 of 5 samples.", _row())
+    assert report["ok"] is True
+    assert [item for item in report["unsupported"] if item["kind"] == "amount"] == []
