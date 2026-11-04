@@ -33,6 +33,7 @@ from __future__ import annotations
 import json
 import re
 import time
+import uuid
 from dataclasses import dataclass, field
 from decimal import Decimal, InvalidOperation
 
@@ -246,6 +247,80 @@ def _remember(session, question: str, reply: str) -> None:
     session.messages.append({"role": "user", "content": str(question)})
     session.messages.append({"role": "assistant", "content": str(reply)})
     del session.messages[:-MAX_SESSION_MESSAGES]
+
+
+#: The phases a turn moves through.  ``received``, ``executing`` and
+#: ``verifying`` describe work in progress; a returned turn is ``completed`` when
+#: its prose is grounded, or ``fallback`` with the reason it could not be.
+CHAT_PHASES = frozenset(
+    {"received", "executing", "verifying", "completed", "fallback"}
+)
+
+#: Tools whose result is supporting evidence (a message or an image) rather than
+#: a kernel figure.  The conversation publishes none today, so ``evidence_found``
+#: is false; a future evidence tool joins this set and the summary follows.
+EVIDENCE_TOOLS: frozenset[str] = frozenset()
+
+
+@dataclass
+class ChatRunState:
+    """Everything one chat turn did, in one typed record.
+
+    ``observations`` holds ``{"tool", "args", "result"}`` for every *dispatched*
+    call, so ``tool_calls_used == len(observations)`` and the same number is the
+    one ``max_tool_calls`` bounds.  A rejected or over-budget call never reaches
+    the kernel, so it is not an observation.
+    """
+
+    run_id: str
+    account_id: str
+    phase: str = "received"
+    tool_calls_used: int = 0
+    observations: list[dict] = field(default_factory=list)
+    kernel_result: bool = False
+    fallback_reason: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.phase not in CHAT_PHASES:
+            raise ValueError(
+                f"unknown chat phase {self.phase!r}; expected one of "
+                f"{', '.join(sorted(CHAT_PHASES))}"
+            )
+
+    @property
+    def evidence_found(self) -> bool:
+        """True only when a supporting-evidence tool actually answered."""
+        return any(
+            record.get("tool") in EVIDENCE_TOOLS
+            for record in self.observations
+            if isinstance(record, dict)
+        )
+
+    def as_dict(self) -> dict:
+        """The trace/JSON shape: plain values, no dataclass instances."""
+        return {
+            "run_id": str(self.run_id),
+            "account_id": str(self.account_id),
+            "phase": str(self.phase),
+            "tool_calls_used": int(self.tool_calls_used),
+            "observations": list(self.observations),
+            "kernel_result": bool(self.kernel_result),
+            "fallback_reason": self.fallback_reason,
+        }
+
+    def summary(self, elapsed_ms: int = 0) -> dict:
+        """The one-line story the UI shows, derived from this state alone."""
+        return {
+            "tools": [
+                str(record.get("tool") or "")
+                for record in self.observations
+                if isinstance(record, dict)
+            ],
+            "kernel_result": bool(self.kernel_result),
+            "evidence_found": self.evidence_found,
+            "fallback_reason": self.fallback_reason,
+            "elapsed_ms": max(0, int(elapsed_ms)),
+        }
 
 
 #: The answer shown when no kernel result exists in this turn to check against.
@@ -693,16 +768,61 @@ def _invalid_call_error(name: str) -> dict:
     )
 
 
+def _write_state(trace, state: ChatRunState) -> None:
+    """Record the finished state when the caller supplied an enabled recorder.
+
+    Observability is best-effort: a trace that cannot be written must never turn
+    an answered question into a failure.
+    """
+    if trace is None or not bool(getattr(trace, "enabled", False)):
+        return
+    try:
+        trace.record("run_state", state.as_dict())
+    except Exception:
+        return
+
+
+def _finish_turn(state, records, *, reply, reason, verified, model, started,
+                 session, question, trace) -> dict:
+    """Settle the state, remember the exchange and build the one return shape.
+
+    Every exit from :func:`ask` goes through here, so the returned flags, the
+    typed state and the run summary can never disagree with one another.
+    """
+    state.observations = list(records)
+    state.tool_calls_used = len(state.observations)
+    state.kernel_result = any(
+        not _tool_error(record.get("result")) for record in state.observations
+    )
+    state.phase = "completed" if verified else "fallback"
+    state.fallback_reason = None if verified else str(reason)
+    elapsed_ms = max(0, int(round((time.monotonic() - started) * 1000)))
+    _remember(session, question, reply)
+    _write_state(trace, state)
+    return {
+        "reply": reply,
+        "tool_calls": [record["tool"] for record in state.observations],
+        "model": model,
+        "reason": reason,
+        "verified": verified,
+        "state": state,
+        "run_summary": state.summary(elapsed_ms),
+    }
+
+
 def ask(account, text: str, provider=None, *, max_tool_calls: int = 4,
-        session: Session | None = None) -> dict:
+        session: Session | None = None, trace=None) -> dict:
     """Answer a question with tools, or say plainly that there is no model.
 
-    Returns ``{"reply", "tool_calls", "model", "reason", "verified"}``.
-    ``tool_calls`` is the ordered list of names that actually ran, so a caller can
-    show them.  ``verified`` is true only when the text the model wrote is
-    grounded in a tool result from this turn; an answer with no kernel result is
-    a refusal, and a figure no tool returned replaces the prose with a summary
-    of the results.
+    Returns ``{"reply", "tool_calls", "model", "reason", "verified", "state",
+    "run_summary"}``.  ``tool_calls`` is the ordered list of names that actually
+    ran, so a caller can show them.  ``verified`` is true only when the text the
+    model wrote is grounded in a tool result from this turn; an answer with no
+    kernel result is a refusal, and a figure no tool returned replaces the prose
+    with a summary of the results.  ``state`` is the typed
+    :class:`ChatRunState` for the turn and ``run_summary`` its one-line
+    derivative; when ``trace`` is an enabled recorder the state is recorded
+    under ``"run_state"``.
 
     ``max_tool_calls`` caps the number of *dispatched* calls, not the number of
     model turns.  A batch that asks for more than the remainder is trimmed: each
@@ -724,6 +844,13 @@ def ask(account, text: str, provider=None, *, max_tool_calls: int = 4,
             "no model is configured, so nothing here can reason about the ledger; "
             "the tabs run the kernel directly"
         )
+
+    started = time.monotonic()
+    state = ChatRunState(
+        run_id=uuid.uuid4().hex[:16],
+        account_id=_account_id(account),
+    )
+    model_name = str(getattr(provider, "name", "provider"))
 
     try:
         model = provider.chat_model()
@@ -751,8 +878,7 @@ def ask(account, text: str, provider=None, *, max_tool_calls: int = 4,
         *_session_history(session, account),
         {"role": "user", "content": str(text)},
     ]
-    ran: list[str] = []
-    observations: list[dict] = []
+    records: list[dict] = []
     budget = max(0, int(max_tool_calls))
     remaining = budget
 
@@ -766,26 +892,25 @@ def ask(account, text: str, provider=None, *, max_tool_calls: int = 4,
                 "The model could not be reached, so I will not guess at your "
                 f"figures ({type(exc).__name__})."
             )
-            _remember(session, text, reply)
-            return {
-                "reply": reply,
-                "tool_calls": ran,
-                "model": getattr(provider, "name", "provider"),
-                "reason": "provider_error",
-                "verified": False,
-            }
+            return _finish_turn(
+                state, records, reply=reply, reason="provider_error",
+                verified=False, model=model_name, started=started,
+                session=session, question=text, trace=trace,
+            )
         calls = _turn_calls(message)
         content = getattr(message, "content", "")
         if not calls:
-            reply, verified = verify_reply(str(content or ""), observations)
-            _remember(session, text, reply)
-            return {
-                "reply": reply,
-                "tool_calls": ran,
-                "model": getattr(provider, "name", "provider"),
-                "reason": "answered" if verified else "unverified",
-                "verified": verified,
-            }
+            state.phase = "verifying"
+            reply, verified = verify_reply(
+                str(content or ""), [record["result"] for record in records]
+            )
+            return _finish_turn(
+                state, records, reply=reply,
+                reason="answered" if verified else "unverified",
+                verified=verified, model=model_name, started=started,
+                session=session, question=text, trace=trace,
+            )
+        state.phase = "executing"
         messages.append(_assistant_message(content, calls))
         overflowed = False
         seen_ids: set[str] = set()
@@ -834,30 +959,27 @@ def ask(account, text: str, provider=None, *, max_tool_calls: int = 4,
                 result = dispatch(account, call["name"], call["args"])
             except Exception as exc:
                 result = _tool_failure(call["name"], exc)
-            ran.append(call["name"])
-            observations.append(result)
+            records.append({
+                "tool": str(call["name"]),
+                "args": dict(call["args"]),
+                "result": result,
+            })
             messages.append(_tool_message(call_id, result))
         if overflowed:
-            _remember(session, text, BUDGET_REPLY)
-            return {
-                "reply": BUDGET_REPLY,
-                "tool_calls": ran,
-                "model": getattr(provider, "name", "provider"),
-                "reason": "tool_budget",
-                "verified": False,
-            }
+            return _finish_turn(
+                state, records, reply=BUDGET_REPLY, reason="tool_budget",
+                verified=False, model=model_name, started=started,
+                session=session, question=text, trace=trace,
+            )
         if provider.remaining_calls <= 0:
             break
         provider.reserve_call()
 
-    _remember(session, text, BUDGET_REPLY)
-    return {
-        "reply": BUDGET_REPLY,
-        "tool_calls": ran,
-        "model": getattr(provider, "name", "provider"),
-        "reason": "budget",
-        "verified": False,
-    }
+    return _finish_turn(
+        state, records, reply=BUDGET_REPLY, reason="budget", verified=False,
+        model=model_name, started=started, session=session, question=text,
+        trace=trace,
+    )
 
 
 def _arguments_text(args) -> str:
