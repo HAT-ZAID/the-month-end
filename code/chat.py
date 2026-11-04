@@ -17,6 +17,11 @@ The loop is bounded by ``max_tool_calls`` **dispatched calls** and by the
 provider's own call budget (``BUY_WAIT_LLM_MAX_CALLS``), so a model that keeps
 asking cannot run away with a session.  A batch that asks for more calls than the
 remainder is trimmed: the overflow gets a tool error, never a kernel call.
+
+A tool call is untrusted input.  Every call is checked against the published
+schema before it runs: an unknown tool, an undeclared field, a repeated call id
+or a non-object argument payload gets a structured ``{code, retryable,
+safe_summary}`` envelope and never reaches the kernel.
 """
 from __future__ import annotations
 
@@ -36,7 +41,11 @@ TOOL_SCHEMAS = [
                 "The kernel's position for this person today: balance, floor, "
                 "committed outflows and the largest safe one-off payment."
             ),
-            "parameters": {"type": "object", "properties": {}},
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": False,
+            },
         },
     },
     {
@@ -44,7 +53,11 @@ TOOL_SCHEMAS = [
         "function": {
             "name": "list_events",
             "description": "Every recorded money movement, in date order.",
-            "parameters": {"type": "object", "properties": {}},
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": False,
+            },
         },
     },
     {
@@ -52,7 +65,11 @@ TOOL_SCHEMAS = [
         "function": {
             "name": "list_requests",
             "description": "Every purchase already asked about, with its decision.",
-            "parameters": {"type": "object", "properties": {}},
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": False,
+            },
         },
     },
     {
@@ -67,6 +84,7 @@ TOOL_SCHEMAS = [
                 "type": "object",
                 "properties": {"request_id": {"type": "string"}},
                 "required": ["request_id"],
+                "additionalProperties": False,
             },
         },
     },
@@ -80,11 +98,18 @@ TOOL_SCHEMAS = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "amount": {"type": "number"},
+                    "amount": {
+                        "type": "string",
+                        "description": (
+                            "Positive decimal amount as a JSON string, for "
+                            'example "500.00". Never a JSON number.'
+                        ),
+                    },
                     "on": {"type": "string", "description": "ISO date, default today"},
                     "by": {"type": "string", "description": "optional ISO deadline"},
                 },
                 "required": ["amount"],
+                "additionalProperties": False,
             },
         },
     },
@@ -93,12 +118,21 @@ TOOL_SCHEMAS = [
         "function": {
             "name": "facts",
             "description": "What is missing from this person's account, in plain words.",
-            "parameters": {"type": "object", "properties": {}},
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": False,
+            },
         },
     },
 ]
 
 TOOL_NAMES = tuple(item["function"]["name"] for item in TOOL_SCHEMAS)
+
+#: Each tool's published parameters, by name: the closed set of arguments.
+TOOL_PARAMETERS = {
+    item["function"]["name"]: item["function"]["parameters"] for item in TOOL_SCHEMAS
+}
 
 SYSTEM_PROMPT = (
     "You are the assistant inside Buy or Wait?, a financial decision tool that "
@@ -140,9 +174,124 @@ def _figures(text) -> list[tuple[str, Decimal]]:
     return found
 
 
+#: The keys of every fail-closed tool reply: a protocol rejection or a failure.
+_ERROR_KEYS = frozenset({"code", "retryable", "safe_summary"})
+
+
+def _protocol_error(code: str, safe_summary: str, *, retryable: bool = True) -> dict:
+    """One structured, fail-closed tool reply the model can read and correct.
+
+    ``safe_summary`` is a fixed sentence built from the published schema; it
+    never repeats an untrusted argument value.
+    """
+    return {
+        "code": str(code),
+        "retryable": bool(retryable),
+        "safe_summary": str(safe_summary),
+    }
+
+
 def _tool_error(result) -> bool:
-    """True for the fail-closed dict ``dispatch`` puts in place of a result."""
-    return isinstance(result, dict) and set(result) == {"error"}
+    """True for a fail-closed dict rather than a kernel result.
+
+    Protocol rejections, budget refusals and tool failures share one three-key
+    envelope, so none of them can become a figure source for verification.  The
+    legacy single-key ``{"error": ...}`` shape is still recognised.
+    """
+    if not isinstance(result, dict):
+        return False
+    return set(result) == _ERROR_KEYS or set(result) == {"error"}
+
+
+def _accepts_text(name: str) -> str:
+    """The arguments a tool declares, for a rejection the model can act on."""
+    accepted = sorted((TOOL_PARAMETERS.get(name) or {}).get("properties") or ())
+    if accepted:
+        return "only these arguments: " + ", ".join(accepted)
+    return "no arguments"
+
+
+def _amount_problem(value: str) -> bool:
+    """True when a string is not a finite, positive decimal."""
+    try:
+        amount = Decimal(str(value).strip())
+    except (InvalidOperation, ValueError):
+        return True
+    return not amount.is_finite() or amount <= 0
+
+
+def validate_tool_call(name, args) -> list[str]:
+    """The rejection codes for one model tool call; empty means it may run.
+
+    The codes are stable: ``UNKNOWN_TOOL``, ``BAD_ARGS`` and ``EXTRA_FIELD``.
+    ``DUPLICATE_ID`` depends on the other calls in the same batch, so
+    :func:`ask` raises it.  Only the published schema is consulted; no user
+    data and no kernel state take part in the decision.
+    """
+    tool = str(name or "")
+    schema = TOOL_PARAMETERS.get(tool)
+    if schema is None:
+        return ["UNKNOWN_TOOL"]
+    if not isinstance(args, dict):
+        return ["BAD_ARGS"]
+    properties = schema.get("properties") or {}
+    required = tuple(schema.get("required") or ())
+    problems: list[str] = []
+    if any(key not in properties for key in args):
+        problems.append("EXTRA_FIELD")
+    if any(key not in args for key in required):
+        problems.append("BAD_ARGS")
+    for key, value in args.items():
+        spec = properties.get(key) or {}
+        if spec.get("type") == "string" and not isinstance(value, str):
+            problems.append("BAD_ARGS")
+    if tool == "what_if" and isinstance(args.get("amount"), str):
+        if _amount_problem(args["amount"]):
+            problems.append("BAD_ARGS")
+    if tool == "decide" and isinstance(args.get("request_id"), str):
+        if not args["request_id"].strip():
+            problems.append("BAD_ARGS")
+    ordered: list[str] = []
+    for code in problems:
+        if code not in ordered:
+            ordered.append(code)
+    return ordered
+
+
+def _rejection_summary(name: str, args, code: str) -> str:
+    """A short, safe sentence for one rejection; never repeats an untrusted value."""
+    if code == "UNKNOWN_TOOL":
+        return f"no such tool; available tools: {', '.join(TOOL_NAMES)}"
+    if code == "EXTRA_FIELD":
+        return (
+            f"{name} accepts {_accepts_text(name)}; the extra argument was not "
+            "accepted and the call was not executed"
+        )
+    if not isinstance(args, dict):
+        return (
+            "tool arguments must be a JSON object; this call was not executed, "
+            "and a string, list or number is never read as an empty argument set"
+        )
+    if name == "what_if":
+        amount = args.get("amount")
+        if "amount" not in args:
+            return (
+                'what_if needs "amount" as a JSON string such as "500.00"; use '
+                "a string of decimal digits, not a number"
+            )
+        if not isinstance(amount, str):
+            return (
+                'what_if "amount" must be a JSON string such as "500.00"; use a '
+                "string of decimal digits, never a JSON number, and the call "
+                "was not executed"
+            )
+        return (
+            'what_if "amount" must be a finite positive decimal written as a '
+            'string such as "500.00"; use a string, not a number'
+        )
+    if name == "decide":
+        return 'decide needs "request_id" as a non-empty string from list_requests'
+    return f"{name} has invalid arguments; expected {_accepts_text(name)}"
 
 
 def _kernel_observations(observations) -> list[dict]:
@@ -234,13 +383,28 @@ def _facts_text(account) -> str:
 
 
 def dispatch(account, name: str, args: dict | None = None) -> dict:
-    """Run one tool.  Raises ``KeyError`` for a tool that does not exist."""
-    args = args or {}
-    if name == "position":
+    """Run one tool after checking its arguments against the published schema.
+
+    Raises ``KeyError`` for a tool that does not exist.  A non-object payload,
+    an undeclared field, a missing required field or a malformed amount raises
+    ``ValueError`` instead of being coerced; :func:`ask` checks the same way
+    first and turns a rejection into a protocol envelope.
+    """
+    tool = str(name or "")
+    if tool not in TOOL_PARAMETERS:
+        raise KeyError(f"no tool {name!r}; available: {', '.join(TOOL_NAMES)}")
+    if args is None:
+        args = {}
+    if not isinstance(args, dict):
+        raise ValueError("tool arguments must be a JSON object")
+    problems = validate_tool_call(tool, args)
+    if problems:
+        raise ValueError(_rejection_summary(tool, args, problems[0]))
+    if tool == "position":
         return service.position(account)
-    if name == "list_events":
+    if tool == "list_events":
         return {"events": [dict(row) for row in (account.get("events") or [])]}
-    if name == "list_requests":
+    if tool == "list_requests":
         return {"requests": [
             {
                 "request_id": row.get("request_id"),
@@ -249,8 +413,8 @@ def dispatch(account, name: str, args: dict | None = None) -> dict:
             }
             for row in (account.get("requests") or [])
         ]}
-    if name == "decide":
-        request_id = str(args.get("request_id") or "").strip()
+    if tool == "decide":
+        request_id = args["request_id"].strip()
         if not request_id:
             raise ValueError("decide needs a request_id")
         decision = service.decide(account, request_id)
@@ -263,14 +427,13 @@ def dispatch(account, name: str, args: dict | None = None) -> dict:
                 "decision_explanation",
             )
         }
-    if name == "what_if":
-        amount = args.get("amount")
-        if amount in (None, ""):
-            raise ValueError("what_if needs an amount")
-        return _decide_hypothetically(account, amount, args.get("on"), args.get("by"))
-    if name == "facts":
+    if tool == "what_if":
+        return _decide_hypothetically(
+            account, args["amount"], args.get("on"), args.get("by")
+        )
+    if tool == "facts":
         return {"problems": service.acct.problems(account)}
-    raise KeyError(f"no tool {name!r}; available: {', '.join(TOOL_NAMES)}")
+    raise KeyError(f"no tool {tool!r}; available: {', '.join(TOOL_NAMES)}")
 
 
 def _decide_hypothetically(account, amount, on=None, by=None) -> dict:
@@ -311,12 +474,80 @@ def _tool_message(call_id, result: dict) -> dict:
 
 def _budget_error(limit: int) -> dict:
     """The fail-closed reply for a call the run had no budget left to dispatch."""
-    return {
-        "error": (
+    return _protocol_error(
+        "TOOL_BUDGET",
+        (
             f"tool call budget exhausted: this run dispatches at most {limit} "
             "tool call(s), and this call was not executed"
+        ),
+        retryable=False,
+    )
+
+
+def _tool_failure(name: str, exc: BaseException) -> dict:
+    """A tool that raised, in the same envelope a rejection uses.
+
+    Only the exception's type is repeated: its message can contain untrusted
+    argument text, and this reply goes back to the model.
+    """
+    return _protocol_error(
+        "TOOL_ERROR",
+        (
+            f"{name} could not run ({type(exc).__name__}); no figure from this "
+            "call was used"
+        ),
+        retryable=True,
+    )
+
+
+def _call_id(entry: dict, index: int, prefix: str) -> str:
+    """The id a call is answered under, with a deterministic fallback."""
+    return str(entry.get("id") or entry.get("name") or f"{prefix}_{index + 1}")
+
+
+def _turn_calls(message) -> list[dict]:
+    """The valid and invalid tool calls in one assistant turn, normalised.
+
+    ``invalid_tool_calls`` carries calls whose arguments the provider could not
+    parse.  They are kept so each one gets a protocol reply and none is silently
+    lost; they are marked so the loop never dispatches them.
+    """
+    calls: list[dict] = []
+    for index, raw in enumerate(getattr(message, "tool_calls", None) or ()):
+        entry = raw if isinstance(raw, dict) else {}
+        calls.append({
+            "id": _call_id(entry, index, "call"),
+            "name": str(entry.get("name") or ""),
+            "args": entry["args"] if "args" in entry else {},
+            "invalid": False,
+        })
+    for index, raw in enumerate(getattr(message, "invalid_tool_calls", None) or ()):
+        entry = raw if isinstance(raw, dict) else {}
+        calls.append({
+            "id": _call_id(entry, index, "invalid_call"),
+            "name": str(entry.get("name") or ""),
+            "args": entry.get("args"),
+            "invalid": True,
+        })
+    return calls
+
+
+def _invalid_call_error(name: str) -> dict:
+    """The reply for a call the provider itself could not parse."""
+    if name in TOOL_NAMES:
+        return _protocol_error(
+            "BAD_ARGS",
+            (
+                f"the arguments for {name} could not be parsed as JSON; the call "
+                "was not executed"
+            ),
+            retryable=True,
         )
-    }
+    return _protocol_error(
+        "UNKNOWN_TOOL",
+        f"no such tool; available tools: {', '.join(TOOL_NAMES)}",
+        retryable=True,
+    )
 
 
 def ask(account, text: str, provider=None, *, max_tool_calls: int = 4) -> dict:
@@ -333,6 +564,11 @@ def ask(account, text: str, provider=None, *, max_tool_calls: int = 4) -> dict:
     model turns.  A batch that asks for more than the remainder is trimmed: each
     overflow call still gets a tool error, so the conversation stays
     protocol-correct, and the run ends with ``reason="tool_budget"``.
+
+    Every call is validated against the published schema before dispatch.  An
+    unknown tool, an undeclared field, a repeated call id, a non-object argument
+    payload or a non-string amount gets a structured ``{code, retryable,
+    safe_summary}`` reply and never runs.
     """
     provider = _provider(provider)
     if provider is None:
@@ -387,7 +623,7 @@ def ask(account, text: str, provider=None, *, max_tool_calls: int = 4) -> dict:
                 "reason": "provider_error",
                 "verified": False,
             }
-        calls = list(getattr(message, "tool_calls", None) or [])
+        calls = _turn_calls(message)
         content = getattr(message, "content", "")
         if not calls:
             reply, verified = verify_reply(str(content or ""), observations)
@@ -400,10 +636,40 @@ def ask(account, text: str, provider=None, *, max_tool_calls: int = 4) -> dict:
             }
         messages.append(_assistant_message(content, calls))
         overflowed = False
+        seen_ids: set[str] = set()
         for call in calls:
-            entry = call or {}
-            name = str(entry.get("name") or "")
-            call_id = str(entry.get("id") or name or "call")
+            call_id = call["id"]
+            if call_id in seen_ids:
+                messages.append(_tool_message(
+                    call_id,
+                    _protocol_error(
+                        "DUPLICATE_ID",
+                        (
+                            "this turn repeated a tool call id; each call needs a "
+                            "unique id and the duplicate was not executed"
+                        ),
+                        retryable=True,
+                    ),
+                ))
+                continue
+            seen_ids.add(call_id)
+            if call["invalid"]:
+                messages.append(
+                    _tool_message(call_id, _invalid_call_error(call["name"]))
+                )
+                continue
+            problems = validate_tool_call(call["name"], call["args"])
+            if problems:
+                messages.append(_tool_message(
+                    call_id,
+                    _protocol_error(
+                        problems[0],
+                        _rejection_summary(
+                            call["name"], call["args"], problems[0]
+                        ),
+                    ),
+                ))
+                continue
             # The budget is consumed per dispatched call, before dispatch.  An
             # overflow call never reaches the kernel; it still needs a reply so
             # the next turn, if any, is well formed.
@@ -412,12 +678,11 @@ def ask(account, text: str, provider=None, *, max_tool_calls: int = 4) -> dict:
                 messages.append(_tool_message(call_id, _budget_error(budget)))
                 continue
             remaining -= 1
-            args = entry.get("args") or {}
             try:
-                result = dispatch(account, name, args)
+                result = dispatch(account, call["name"], call["args"])
             except Exception as exc:
-                result = {"error": f"{type(exc).__name__}: {exc}"}
-            ran.append(name)
+                result = _tool_failure(call["name"], exc)
+            ran.append(call["name"])
             observations.append(result)
             messages.append(_tool_message(call_id, result))
         if overflowed:
@@ -441,17 +706,28 @@ def ask(account, text: str, provider=None, *, max_tool_calls: int = 4) -> dict:
     }
 
 
+def _arguments_text(args) -> str:
+    """A tool call's arguments as JSON text, keeping raw invalid JSON as sent."""
+    if isinstance(args, str):
+        return args
+    try:
+        return json.dumps(args if args is not None else {}, default=str)
+    except (TypeError, ValueError):
+        return "{}"
+
+
 def _assistant_message(content, calls) -> dict:
+    """The assistant turn replayed back to the provider, invalid calls included."""
     return {
         "role": "assistant",
         "content": str(content or ""),
         "tool_calls": [
             {
-                "id": str((call or {}).get("id") or (call or {}).get("name") or "call"),
+                "id": str(call["id"]),
                 "type": "function",
                 "function": {
-                    "name": str((call or {}).get("name") or ""),
-                    "arguments": json.dumps((call or {}).get("args") or {}, default=str),
+                    "name": str(call["name"]),
+                    "arguments": _arguments_text(call["args"]),
                 },
             }
             for call in calls

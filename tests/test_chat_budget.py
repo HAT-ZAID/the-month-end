@@ -17,6 +17,8 @@ import code.accounts as store
 from code import chat, service
 from tests.support.fake_provider import FakeProvider
 
+ERROR_KEYS = {"code", "retryable", "safe_summary"}
+
 
 @pytest.fixture()
 def db(tmp_path, monkeypatch):
@@ -99,10 +101,12 @@ def test_a_ten_call_batch_is_cut_to_the_budget(db, monkeypatch):
         f"call_{index}" for index in range(1, 11)
     ]
     payloads = _payloads(seen[0])
-    errors = [payload for payload in payloads if set(payload) == {"error"}]
+    errors = [payload for payload in payloads if set(payload) == ERROR_KEYS]
     assert len(errors) == 6
-    assert all("budget" in payload["error"].lower() for payload in errors)
-    assert [payload for payload in payloads if set(payload) != {"error"}] == [
+    assert all(payload["code"] == "TOOL_BUDGET" for payload in errors)
+    assert all(payload["retryable"] is False for payload in errors)
+    assert all("budget" in payload["safe_summary"].lower() for payload in errors)
+    assert [payload for payload in payloads if set(payload) != ERROR_KEYS] == [
         chat.dispatch(account, "position") for _ in range(4)
     ]
 
@@ -159,5 +163,7 @@ def test_a_zero_budget_rejects_the_batch_before_dispatch(db, monkeypatch):
     assert result["reason"] == "tool_budget"
     payloads = _payloads(seen[0])
     assert len(payloads) == 1
-    assert set(payloads[0]) == {"error"}
-    assert "budget" in payloads[0]["error"].lower()
+    assert set(payloads[0]) == ERROR_KEYS
+    assert payloads[0]["code"] == "TOOL_BUDGET"
+    assert payloads[0]["retryable"] is False
+    assert "budget" in payloads[0]["safe_summary"].lower()
