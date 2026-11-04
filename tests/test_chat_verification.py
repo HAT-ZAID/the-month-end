@@ -163,3 +163,22 @@ def test_a_reply_that_cites_a_tool_figure_is_accepted_verbatim(db):
     assert result["reason"] == "answered"
     assert result["reply"] == reply
     assert result["tool_calls"] == ["position"]
+
+
+def test_a_general_answer_without_a_kernel_call_is_not_stonewalled():
+    """Only a money claim needs a witness; a greeting is allowed through."""
+    reply, verified = chat.verify_reply("Hello! Ask me about a purchase.", [])
+    assert verified is True
+    assert reply == "Hello! Ask me about a purchase."
+
+
+def test_general_prose_with_a_number_and_no_money_claim_is_allowed():
+    reply, verified = chat.verify_reply("There are 12 months in a year.", [])
+    assert verified is True
+    assert reply == "There are 12 months in a year."
+
+
+def test_a_money_claim_without_a_kernel_call_is_still_refused():
+    reply, verified = chat.verify_reply("You can safely pay 12,000 today.", [])
+    assert verified is False
+    assert reply == chat.UNVERIFIED_REPLY

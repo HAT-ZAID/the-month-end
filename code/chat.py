@@ -767,6 +767,26 @@ def _summary(observations) -> str:
     return "From your ledger: " + " | ".join(parts)
 
 
+#: Words that make a sentence a claim about the user's money.  A reply that
+#: carries a figure and none of these is general prose ("there are 12 months in
+#: a year"), not a financial assertion that needs a kernel witness.
+_FINANCIAL_CLAIM = re.compile(
+    r"\b(?:safe|safely|afford\w*|balance|minimum|reserve|ledger|budget|"
+    r"cost\w*|pay|paid|payment\w*|installment\w*|spend|spent|spending|"
+    r"plan|wait|affordability|not_affordable|full_payment|partial_payment)\b",
+    re.IGNORECASE,
+)
+
+
+def _claims_money(text: str) -> bool:
+    """True when the prose asserts a financial fact rather than general text."""
+    if not text:
+        return False
+    return bool(_FINANCIAL_CLAIM.search(text)) and any(
+        True for _token in _figures(text)
+    )
+
+
 def verify_reply(text: str, observations: list[dict]) -> tuple[str, bool]:
     """Check a model reply against the tool results produced in the same turn.
 
@@ -782,7 +802,13 @@ def verify_reply(text: str, observations: list[dict]) -> tuple[str, bool]:
     checked = _kernel_observations(observations)
     prose = str(text or "").strip()
     if not checked:
-        return UNVERIFIED_REPLY, False
+        # Nothing was computed this turn, so no financial figure can be
+        # witnessed.  A general answer is still allowed: only a reply that
+        # actually makes a money claim is refused, otherwise a greeting or an
+        # explanation would be stonewalled for no reason.
+        if _claims_money(prose):
+            return UNVERIFIED_REPLY, False
+        return prose, True
     if not prose:
         return _summary(checked), False
     observed = _observed_values(checked)
