@@ -176,11 +176,20 @@ def resolve_category(kind: str, category: str = "", recurrence: str = "",
     return resolved
 
 
-def _decimal(value) -> Decimal:
+def _decimal(value, what: str = "amount") -> Decimal:
+    """Parse one stored fact amount, or refuse it by the field it belongs to.
+
+    A non-finite value is a number only to :class:`Decimal`: storing it makes
+    the account unsavable later and, for NaN, makes the next comparison raise
+    ``InvalidOperation``.  It is refused here, before anything is recorded.
+    """
     try:
-        return Decimal(str(value))
+        amount = Decimal(str(value))
     except (InvalidOperation, TypeError):
         raise EngineError(f"{value!r} is not an amount") from None
+    if not amount.is_finite():
+        raise EngineError(f"{what} must be a finite amount")
+    return amount
 
 
 def _profile_amount(value, what: str) -> str:
@@ -194,9 +203,7 @@ def _profile_amount(value, what: str) -> str:
     text = str(value).strip()
     if not text:
         return ""
-    amount = _decimal(text)
-    if not amount.is_finite():
-        raise EngineError(f"{what} must be a finite amount")
+    amount = _decimal(text, what)
     if amount < 0:
         raise EngineError(f"{what} cannot be negative")
     return str(amount)
@@ -289,7 +296,7 @@ def add_fact(account, kind, amount, *, when=None, description="", category="",
         raise EngineError(
             f"unknown kind {kind!r}; use one of {', '.join(sorted(FACT_KINDS))}"
         )
-    value = _decimal(amount)
+    value = _decimal(amount, "amount")
     if value <= 0:
         raise EngineError("an amount must be greater than zero")
     day = str(when or date.today().isoformat())
@@ -401,7 +408,7 @@ def buy(account, amount, *, on=None, by=None, text="", allows_partial=True,
     ``options`` is an optional list of dicts in the contract's payment-option
     columns; it is stored against the new request before the kernel runs.
     """
-    value = _decimal(amount)
+    value = _decimal(amount, "purchase amount")
     if value <= 0:
         raise EngineError("a purchase amount must be greater than zero")
     day = str(on or date.today().isoformat())
