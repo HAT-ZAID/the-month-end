@@ -564,8 +564,9 @@ class OllamaProvider(ChatProvider):
                 f"langchain-ollama is not installed: {exc}"
             ) from exc
         # The default provider is an HTTP client like any other: a remote
-        # endpoint must be https, and a redirect must not carry the prompt
-        # somewhere the operator never configured.
+        # endpoint must be https, a redirect must not carry the prompt
+        # somewhere the operator never configured, and the environment proxy
+        # must not receive the prompt (see ``_http_client``).
         if not is_secure_or_local_url(self.base_url):
             raise ProviderUnavailable(
                 "endpoint must use https unless it points at this machine"
@@ -574,7 +575,11 @@ class OllamaProvider(ChatProvider):
             return ChatOllama(
                 model=self.model,
                 base_url=self.base_url,
-                client_kwargs={"follow_redirects": False},
+                # ``trust_env=False`` stops httpx from routing the prompt
+                # through HTTP_PROXY/HTTPS_PROXY.  The local endpoint is the
+                # one case where that proxy is never a deliberate choice: the
+                # request is supposed to stay on this machine.
+                client_kwargs={"follow_redirects": False, "trust_env": False},
                 **self.generation_options(),
             )
         except Exception as exc:
@@ -671,13 +676,19 @@ class OpenAICompatibleProvider(ChatProvider):
             ) from exc
 
     def _http_client(self):
-        """An HTTP client that never follows a redirect.
+        """An HTTP client that never follows a redirect or an env proxy.
 
         The OpenAI SDK follows redirects by default, and a 307 keeps the method
         and the body, so an endpoint that redirects to ``http://`` would resend
         the prompt and the key in cleartext.  The scheme check above only covers
-        the configured URL, so the transport has to refuse the rest.  Timeouts
-        mirror the SDK defaults rather than shortening them.
+        the configured URL, so the transport has to refuse the rest.
+
+        ``trust_env=False`` is the other half: httpx otherwise reads
+        ``HTTP_PROXY``/``HTTPS_PROXY`` and sends the whole request -- prompt and
+        ``Authorization`` header -- to whatever host that names, without asking
+        the user.  A proxy is only ever used when the product explicitly
+        configures one, never because a shell variable happens to be set.
+        Timeouts mirror the SDK defaults rather than shortening them.
         """
         try:
             import httpx
@@ -687,6 +698,7 @@ class OpenAICompatibleProvider(ChatProvider):
             ) from exc
         return httpx.Client(
             follow_redirects=False,
+            trust_env=False,
             timeout=httpx.Timeout(DEFAULT_HTTP_TIMEOUT_S, connect=DEFAULT_CONNECT_TIMEOUT_S),
         )
 
