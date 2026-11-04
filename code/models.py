@@ -5,8 +5,8 @@ The interface has to offer a choice, so the choice has to be discoverable.  Only
 the host's address and never by whether a URL happens to contain a local-looking
 string.  A hosted provider is listed only when its credentials are already in the
 environment, because this module must never make a paid call just to draw a
-dropdown.  The credential names come from :mod:`code.providers`, so the menu and
-the builder agree on which variables configure which provider.
+dropdown.  The credential and endpoint names come from :mod:`code.providers`,
+so the menu and the builder agree on which variables configure which provider.
 
 Privacy classes follow :mod:`code.providers`: ``local`` may see anything,
 ``paid`` may see user text but never secrets, ``free`` trains on what it is sent
@@ -22,8 +22,10 @@ import urllib.request
 from urllib.parse import urlsplit
 
 from code.providers import (
+    DEFAULT_OLLAMA_BASE_URL,
     KILO_API_KEY_ENV,
     MODEL_ENV,
+    OLLAMA_BASE_URL_ENV,
     OLLAMA_MODEL_ENV,
     PAID_API_KEY_ENV,
     PROVIDER_ENV,
@@ -31,7 +33,11 @@ from code.providers import (
 )
 
 #: Loopback only. A model list is not worth a packet leaving the machine.
-OLLAMA_TAGS = "http://127.0.0.1:11434/api/tags"
+OLLAMA_TAGS = f"{DEFAULT_OLLAMA_BASE_URL}/api/tags"
+
+#: The name this module read before the documented variable existed.  Kept so
+#: an older checkout or shell profile keeps working; the documented name wins.
+LEGACY_OLLAMA_URL_ENV = "OLLAMA_URL"
 
 #: The transports a local endpoint may use. Anything else is refused before a
 #: host is even considered.
@@ -93,16 +99,39 @@ def _get_json(url: str, timeout: float = 1.5) -> dict | None:
         return None
 
 
+def _tags_url(base: str) -> str:
+    """The ``/api/tags`` endpoint for a configured Ollama base.
+
+    The documented variable names the server root, but a user may paste the API
+    root (``/api``) or the tags path itself.  Joining blindly would ask for
+    ``/api/api/tags`` or ``/api/tags/api/tags`` and discover nothing.
+    """
+    base = str(base or "").strip().rstrip("/")
+    if base.endswith("/api/tags"):
+        return base
+    if base.endswith("/api"):
+        return f"{base}/tags"
+    return f"{base}/api/tags"
+
+
+def _configured_ollama_base(env) -> str:
+    """The documented base URL, else the legacy name, else the provider default."""
+    for name in (OLLAMA_BASE_URL_ENV, LEGACY_OLLAMA_URL_ENV):
+        value = str(env.get(name) or "").strip()
+        if value:
+            return value
+    return DEFAULT_OLLAMA_BASE_URL
+
+
 def ollama_models(env=None) -> list[str]:
     """Model names served by a local Ollama, newest first, or an empty list."""
     env = os.environ if env is None else env
     if str(env.get("BUY_WAIT_MODEL_DISCOVERY") or "1").strip() in ("0", "false", "no"):
         return []
-    base = str(env.get("OLLAMA_URL") or "http://127.0.0.1:11434")
-    base = base.rstrip("/")
+    base = _configured_ollama_base(env)
     if not is_loopback(base):
         return []  # never probe a remote host for a menu
-    payload = _get_json(f"{base}/api/tags")
+    payload = _get_json(_tags_url(base))
     if not payload:
         return []
     names = []
@@ -156,12 +185,14 @@ def options(env=None) -> list[dict]:
             "privacy": "free",
         })
     if "kilo" in hosted:
+        # KiloProvider is a free tier too (PRIVACY_FREE), so the label has to
+        # say what happens to the text rather than imply a no-training class.
         items.append({
             "id": "kilo:default",
-            "label": "Kilo · paid endpoint",
+            "label": "Kilo · free tier trains on your text",
             "provider": "kilo",
             "model": "",
-            "privacy": "paid",
+            "privacy": "free",
         })
     # The paid class does not train on what it receives: no warning is owed, and
     # the label says which class the choice belongs to.

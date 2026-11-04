@@ -17,7 +17,12 @@ from __future__ import annotations
 import pytest
 
 from code import models
-from code.providers import KILO_API_KEY_ENV, MODEL_ENV, PAID_API_KEY_ENV
+from code.providers import (
+    KILO_API_KEY_ENV,
+    MODEL_ENV,
+    OLLAMA_BASE_URL_ENV,
+    PAID_API_KEY_ENV,
+)
 
 #: Discovery off, so a test never depends on which models this machine runs.
 QUIET = {"BUY_WAIT_MODEL_DISCOVERY": "0"}
@@ -179,3 +184,71 @@ def test_an_undocumented_kilo_variable_cannot_advertise_kilo():
     # ``build_provider`` never reads a bare KILO_API_KEY, so listing Kilo for it
     # would offer a choice that could not be built.
     assert models.hosted_configured({"KILO_API_KEY": "kilo-placeholder-key"}) == []
+
+
+def test_kilo_is_listed_as_the_free_tier_it_actually_is():
+    # ``KiloProvider.privacy`` is ``PRIVACY_FREE``: the menu must not claim the
+    # paid, no-training class that the provider itself contradicts.
+    entries = listed({KILO_API_KEY_ENV: "kilo-placeholder-key"}, "kilo")
+    assert len(entries) == 1
+    assert entries[0]["privacy"] == "free"
+    assert "paid" not in entries[0]["label"].lower()
+
+
+# ------------------------------------------------------- ollama discovery
+
+
+def probing(monkeypatch):
+    """Record the discovery URLs instead of opening a socket."""
+    probed: list[str] = []
+
+    def recorder(url, timeout=1.5):
+        probed.append(url)
+        return {"models": [{"name": "tiny:latest"}]}
+
+    monkeypatch.setattr(models, "_get_json", recorder)
+    return probed
+
+
+def test_the_documented_ollama_base_url_is_probed(monkeypatch):
+    probed = probing(monkeypatch)
+    env = {OLLAMA_BASE_URL_ENV: "http" "://" "127.0.0.1:9999"}
+    assert models.ollama_models(env=env) == ["tiny:latest"]
+    assert probed == ["http" "://" "127.0.0.1:9999/api/tags"]
+
+
+def test_the_documented_ollama_base_url_wins_over_the_legacy_name(monkeypatch):
+    probed = probing(monkeypatch)
+    env = {
+        OLLAMA_BASE_URL_ENV: "http" "://" "127.0.0.1:9999",
+        "OLLAMA_URL": "http" "://" "127.0.0.1:8888",
+    }
+    assert models.ollama_models(env=env) == ["tiny:latest"]
+    assert probed == ["http" "://" "127.0.0.1:9999/api/tags"]
+
+
+def test_a_blank_documented_base_falls_back_to_the_legacy_name(monkeypatch):
+    probed = probing(monkeypatch)
+    env = {
+        OLLAMA_BASE_URL_ENV: "   ",
+        "OLLAMA_URL": "http" "://" "127.0.0.1:8888",
+    }
+    assert models.ollama_models(env=env) == ["tiny:latest"]
+    assert probed == ["http" "://" "127.0.0.1:8888/api/tags"]
+
+
+@pytest.mark.parametrize(
+    ("base", "expected"),
+    [
+        ("http" "://" "127.0.0.1:9999/", "http" "://" "127.0.0.1:9999/api/tags"),
+        ("http" "://" "127.0.0.1:9999/api", "http" "://" "127.0.0.1:9999/api/tags"),
+        ("http" "://" "127.0.0.1:9999/api/tags", "http" "://" "127.0.0.1:9999/api/tags"),
+    ],
+)
+def test_the_tags_path_is_joined_onto_whatever_base_was_configured(
+    monkeypatch, base, expected
+):
+    probed = probing(monkeypatch)
+    assert models.ollama_models(env={OLLAMA_BASE_URL_ENV: base}) == ["tiny:latest"]
+    assert probed == [expected]
+
