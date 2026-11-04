@@ -399,6 +399,8 @@ class BuyOrWait(App):
     chat_session: object | None = None
     #: A hosted question waiting for the person's explicit confirmation.
     pending_ask: PendingAsk | None = None
+    #: (provider, model) pairs the person allowed for the rest of the session.
+    session_consent: set = set()
     #: The request the Purchase tab last decided, so a what-if has one to move.
     last_request_id: str = ""
 
@@ -539,6 +541,11 @@ class BuyOrWait(App):
                     with Horizontal(classes="actions"):
                         yield Button("Facts used", id="chat-facts")
                         yield Button("Allow sending", id="chat-consent", disabled=True)
+                        yield Button(
+                            "Allow for this session",
+                            id="chat-consent-session",
+                            disabled=True,
+                        )
                     with Horizontal(classes="field-row"):
                         yield Label("Model")
                         yield Select([], id="model-select", allow_blank=True)
@@ -565,6 +572,9 @@ class BuyOrWait(App):
                 table.add_column(label, width=width)
         self.query_one("#pos-head", Static).update("Position")
         self.expand = True
+        # A fresh grant set per app instance; a class-level set would leak
+        # consent between screens in the same process.
+        self.session_consent = set()
         self.model_choice = model_registry.NO_MODEL
         try:
             entries = model_registry.options()
@@ -895,9 +905,18 @@ class BuyOrWait(App):
         )
 
     def _clear_pending_ask(self) -> None:
-        """Forget a held question and put the confirmation control back."""
+        """Forget a held question and put the confirmation controls back."""
         self.pending_ask = None
         self.query_one("#chat-consent", Button).disabled = True
+        self.query_one("#chat-consent-session", Button).disabled = True
+
+    @staticmethod
+    def _consent_key(provider, model) -> tuple:
+        """The pair a permission belongs to: one provider, one model."""
+        return (getattr(provider, "name", "provider"), str(model or ""))
+
+    def _has_session_consent(self, provider) -> bool:
+        return self._consent_key(provider, self.model_choice) in self.session_consent
 
     def ask_for_consent(self, text: str, provider) -> None:
         """Warn, hold the question, and wait for an explicit yes.
@@ -910,18 +929,27 @@ class BuyOrWait(App):
         from code import chat
         from code.providers import privacy_warning
 
+        if self._has_session_consent(provider):
+            self._chat_log(
+                f"Sending to {self.model_choice} under the permission you gave "
+                "for this session.",
+                MUTED,
+            )
+            return self.start_ask(text, provider, consent=True)
+
         warning = privacy_warning(provider, honour_acceptance=False)
         self.pending_ask = PendingAsk(text, provider, self.model_choice, warning)
         self._chat_log(warning or chat.CONSENT_MESSAGE, AMBER)
         self._chat_log(
-            f'Nothing has been sent. Press "Allow sending" to send this question '
-            f"to {self.model_choice}.",
+            f'Nothing has been sent. Press "Allow sending" for this question, or '
+            f'"Allow for this session" to stop asking for {self.model_choice}.',
             AMBER,
         )
         self._set_chat_progress("Waiting for your permission to send.", AMBER)
         self.query_one("#chat-consent", Button).disabled = False
+        self.query_one("#chat-consent-session", Button).disabled = False
 
-    def allow_pending_ask(self) -> Worker | None:
+    def allow_pending_ask(self, *, remember: bool = False) -> Worker | None:
         """Send the held question after the person's explicit confirmation.
 
         The yes is only valid for the warning and the model it was shown for.
@@ -952,7 +980,12 @@ class BuyOrWait(App):
             )
             self._set_chat_progress("Cancelled: the warning changed.", MUTED)
             return None
-        self._chat_log("Allowed for this question.", MUTED)
+        self._chat_log(
+            "Allowed for this session." if remember else "Allowed for this question.",
+            MUTED,
+        )
+        if remember:
+            self.session_consent.add(self._consent_key(pending.provider, pending.model))
         return self.start_ask(pending.text, pending.provider, consent=True)
 
     def action_facts(self) -> None:
@@ -1079,6 +1112,11 @@ class BuyOrWait(App):
     def _consent_pressed(self, event: Button.Pressed) -> None:
         """The explicit yes for a hosted provider; the only path with consent=True."""
         self.allow_pending_ask()
+
+    @on(Button.Pressed, "#chat-consent-session")
+    def _consent_session_pressed(self, event: Button.Pressed) -> None:
+        """Allow this provider and model for the rest of the session."""
+        self.allow_pending_ask(remember=True)
 
     @on(Button.Pressed, "#refresh-position")
     def _refresh(self, event: Button.Pressed) -> None:

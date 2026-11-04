@@ -326,7 +326,9 @@ def test_invalid_tool_calls_are_replied_to_and_never_dispatched(db, monkeypatch)
     assert executed == []
     assert result["tool_calls"] == []
     assert result["verified"] is False
-    assert result["reply"] == chat.UNVERIFIED_REPLY
+    # A clarification is not a money claim, so it is passed through rather than
+    # replaced by the refusal; the flag still says nothing was verified.
+    assert result["reply"] == "I need a valid amount before I can answer."
     payload = _payloads(provider.sent[0])[0]
     assert set(payload) == ERROR_KEYS
     assert payload["code"] == "BAD_ARGS"

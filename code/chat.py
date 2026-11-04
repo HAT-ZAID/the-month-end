@@ -709,7 +709,11 @@ def _kernel_observations(observations) -> list[dict]:
     return [
         item
         for item in (observations or [])
-        if isinstance(item, dict) and not _tool_error(item)
+        if isinstance(item, dict)
+        and not _tool_error(item)
+        # A protocol-error envelope carries ``code``/``safe_summary``, never a
+        # kernel field, so it must not count as a figure source either.
+        and not item.get("code")
     ]
 
 
@@ -808,7 +812,9 @@ def verify_reply(text: str, observations: list[dict]) -> tuple[str, bool]:
         # explanation would be stonewalled for no reason.
         if _claims_money(prose):
             return UNVERIFIED_REPLY, False
-        return prose, True
+        # Nothing was checked, so the flag stays False; the prose is still
+        # returned rather than replaced by a refusal.
+        return prose, False
     if not prose:
         return _summary(checked), False
     observed = _observed_values(checked)

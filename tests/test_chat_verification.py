@@ -166,15 +166,15 @@ def test_a_reply_that_cites_a_tool_figure_is_accepted_verbatim(db):
 
 
 def test_a_general_answer_without_a_kernel_call_is_not_stonewalled():
-    """Only a money claim needs a witness; a greeting is allowed through."""
+    """Only a money claim needs a witness; a greeting is passed through."""
     reply, verified = chat.verify_reply("Hello! Ask me about a purchase.", [])
-    assert verified is True
+    assert verified is False  # nothing was checked, and the flag says so
     assert reply == "Hello! Ask me about a purchase."
 
 
 def test_general_prose_with_a_number_and_no_money_claim_is_allowed():
     reply, verified = chat.verify_reply("There are 12 months in a year.", [])
-    assert verified is True
+    assert verified is False
     assert reply == "There are 12 months in a year."
 
 
