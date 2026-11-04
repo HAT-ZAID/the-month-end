@@ -1,553 +1,260 @@
 # Buy or Wait?
 
-A local-first assistant that answers one question before you spend money:
-**can I safely pay for this?**
+**Know what you can actually afford — before you commit.**
 
-You keep your own data as CSV files: balances, recurring bills, salary dates,
-payments already scheduled, and the things you refuse to cut. The assistant
-projects your cash flow forward, then tells you whether to pay now, pay part of
-it, use installments, wait, or not proceed at all — and shows the arithmetic
-behind the answer.
+Most budgeting apps tell you what you *spent*. Buy or Wait? answers the question
+you actually ask at the checkout: **can I pay for this right now without
+breaking the rest of my month — and if not, what is the smartest way to do it
+anyway?**
 
-Nothing leaves your machine unless you explicitly configure a remote model. The
-decision itself is plain Python; a language model can add narration, never a
-different answer.
+Ask it about a laptop, a trip, a rent payment or an emergency repair. It reads
+your balance, your recurring bills, your payday and the payment options the
+seller offers, then gives you one clear answer: pay in full, pay part now, take
+installments, wait for a date, or don't do it.
 
-## Origin
+---
 
-This started as a submission to **HackerRank Orchestrate (September 2026)** and
-the "Buy or Wait?" brief: decide, for each request in `mock_dataset/requests.csv`,
-whether the user should pay in full, pay partially, take installments, wait, or
-decline, never letting the projected balance fall below the user's minimum. The
-competition scaffolding is still in the repository (the calibration fixture, the
-eight-column export, the evaluation gates), but the product is now meant to be
-used day to day, offline, on your own data.
+## Why it exists
 
-### How that submission scored
+A language model alone will happily invent a number that sounds right. A
+spreadsheet alone can't read "the trip is IDR 46,018,000 and I need it done by
+10 October". Buy or Wait? refuses to choose between the two.
 
-**9/10 on the chat transcript.** That signal was graded against four criteria:
+**The model investigates and explains. Python decides.** Every machine-readable
+field — the safe amount, the status, the plan, the date, the spending changes —
+comes from a deterministic kernel that you can test, replay and audit. The model
+can suggest, clarify and narrate; it never gets to move the number.
 
-| Criterion | Weight |
+That split is the whole product.
+
+---
+
+## What it decides
+
+For every request it produces one row:
+
+| Field | Meaning |
 |---|---|
-| Direction and architecture ownership | 35% |
-| Technical specificity and constraint | 25% |
-| Iteration and verification | 25% |
-| Safety and edge-case awareness | 15% |
+| `amount_safe_to_pay` | What you can pay today, between 0 and the full request |
+| `affordability_status` | `affordable_now`, `affordable_with_plan`, `affordable_later`, `not_affordable` |
+| `recommended_payment_method` | `full_payment`, `partial_payment`, `installments`, `wait`, `not_recommended` |
+| `payment_plan` | Dated payments you can actually keep |
+| `earliest_date_for_full_payment` | The first conservative date a clean full payment works |
+| `spending_changes_needed` | Up to three `stop:` / `reduce_to:` actions, never on protected spending |
+| `decision_explanation` | Why, grounded in the figures above |
 
-## What it produces
+It respects the things people care about: a minimum balance you refuse to go
+below, protected categories like rent and education, the payment methods you
+will actually consider, and the installments the seller actually offers.
 
-Every decision is one row with eight columns. The first seven are computed in
-Python and are identical on every run; only the explanation text can come from a
-model, and only when one is configured and its prose passes validation.
-
-| Column | Meaning |
-|---|---|
-| `request_id` | The request being answered |
-| `amount_safe_to_pay` | Largest amount safe on the request date, before optional spending changes (`0 <= x <= requested_amount`) |
-| `affordability_status` | `affordable_now`, `affordable_with_plan`, `affordable_later`, or `not_affordable` |
-| `recommended_payment_method` | `full_payment`, `partial_payment`, `installments`, `wait`, or `not_recommended` |
-| `payment_plan` | Chronological `YYYY-MM-DD:amount` legs joined by `\|`, or `none` |
-| `earliest_date_for_full_payment` | First conservative date a single safe full payment fits; empty when none does |
-| `spending_changes_needed` | `none`, or up to three `stop:<event_id>` / `reduce_to:<event_id>:<amount>` actions |
-| `decision_explanation` | Short, grounded reason for the recommendation |
-
-`output.csv` is the audit/export format. The interactive screens are the
-everyday interface.
+---
 
 ## How it works
 
-Two layers, with a hard boundary between them:
-
-1. **A deterministic judge** reconstructs your financial position from the CSVs,
-   forecasts a 90-day window as a 91-point daily ledger, and searches full /
-   partial / installment / wait plans. It owns every number: safe amounts,
-   earliest dates, plan feasibility, spending-change search and plan ranking.
-2. **An optional agentic analyst** runs a bounded tool-calling loop over fourteen
-   typed tools: it reads the request context, searches evidence, projects cash
-   flow, compares payment options, reconciles receipts and submits a proposal.
-   A deterministic verifier recomputes the kernel row and keeps its own numbers.
-   The agent owns three things and nothing else:
-   - the **explanation**, shipped only when every amount, date, status and action
-     in it is reproduced by the kernel row (`code/claims.py`);
-   - a **guarded spending change proposal**: the kernel re-solves it and accepts
-     it only when the event is permitted, unprotected and the re-solved plan
-     raises the safe amount — but the shipped row keeps the kernel's own
-     `spending_changes_needed`, so an accepted proposal is advice, not a change
-     to the answer;
-   - **concerns** about unreadable or conflicting evidence, which change no number.
-
-   Schema errors and ledger disagreements are fed back to the model with the exact
-   fix and retried up to `BUY_WAIT_AGENT_REPAIR_TURNS` (default 2). When that is
-   exhausted, or on any provider error, the kernel row stands.
-
-   It can also take plain instructions in the TUI — `ask stop my streaming
-   subscription`, `ask can I afford 40,000 on the 12th`, `ask undo` — through the
-   same kernel, session-only.
-
-Supporting pieces: RAG retrieval over messages/OCR text with SQLite (FTS5) as the
-canonical structured store and fallback retriever, a static HTML trace viewer for
-every agent run, and two interactive interfaces for exploring, simulating and
-re-deciding requests without touching your files.
-
-### Simulating a hypothesis
-
-`code/scenarios.py` answers "what if?" on a **deep copy** of an account: it
-applies one change, calls the same `code.service.decide` path a real decision
-takes, and returns `{"scenario_id", "kernel_result", "assumptions",
-"persisted": False}`. The caller's account is never mutated and nothing is
-saved. Three hypotheses are supported — `pay_on`, `delay_days` and
-`change_expense` — and anything the chosen kind cannot apply (an unused field, a
-re-pricing of an income row, a missing request or event) is refused with
-`ValueError` rather than ignored. The TUI's `whatif` command is a separate
-session overlay over the same kernel; neither path writes `output.csv`.
-
-### Entry points
-
-Every command below is a module in this repository and is exercised by
-`tests/test_docs_entrypoints.py`, which fails if a documented target stops
-resolving.
-
-| Command | What it does | Writes |
-|---|---|---|
-| `python -m code.main` | Decide every request in the fixture and write the deliverable. `--agent [--agent-limit N]` adds the optional analyst pass; `--help` prints usage without running the batch. | `output.csv`, `evaluation/usage_report.md` |
-| `python -m evaluation.run --mode pr` | Run the release gates G0–G4 against the real pipeline and grade the 25 public sample rows. `--mode release` adds the archive and agent-robustness gates. | `evaluation/report.{json,md}`; does not rewrite `output.csv` |
-| `python -m tools.app` | The product interface: Textual screens for onboarding, position, purchase, ledger, decisions, report and chat. | `data/accounts.db` |
-| `python -m tools.tui` | The Rich fallback interface, with `list`, `show`, `dashboard`, `whatif`, `changes`, `apply`, `diff`, `undo`, `new`, `explain`, `trace` and `ask`. | `traces/tasks/*.json` when you use `ask`; otherwise nothing |
-| `python -m code.task_agent "<instruction>"` | One plain-language task over the kernel from the terminal. `--no-trace` skips the trace. | one task trace under `traces/tasks/` |
-| `python -m tools.trace_view --trace-dir DIR --out PAGE` | Render agent traces as static, read-only HTML (inline CSS, no JavaScript, no server). | the HTML page(s) you name |
-| `python -m code.agent --request-id ID --provider KIND` | Single-request agent debug run. | one JSON trace when `--trace-dir` is set |
-| `python -m code.cache --stats` | Inspect the OCR/VLM cache; `--purge` sweeps expired entries. | `data/cache/` changes only on `--purge` |
-| `python -m code.store --rebuild` | Rebuild the SQLite evidence/tool store from the fixture CSVs. | `data/app.db` |
-| `python -m tools.g2_probe` | G2 calibration lab: replay the 25 sample requests without a full pipeline run (`--baseline`, `--variant`, `--factors`, `--all`). | stdout only |
-| `python -m tools.g2_model_mining` | Leave-one-out model-mining lab over the 25 labelled rows (`--targets`, `--json`). | stdout, plus the JSON path you pass |
-| `python -m tools.g2_transfer_study` | Transfer study: fit on the 25 labelled rows, apply to the 250 real requests. | stdout only |
-
-The three G2 labs are investigation tools, not decision sources, and are not
-imported by production code. They need the analysis stack (`numpy`, `pandas`,
-`scikit-learn`, and the optional boosters) — the runtime and TUI do not.
-
-### Reading images locally
-
-Screenshots (payslips, receipts, bills, transfer confirmations) are read on your
-machine, never in the cloud.
-
-| Backend | What it does | Configure with |
-|---|---|---|
-| `vlm` | Qwen3-VL 2B Instruct through a local Ollama endpoint: text plus a structured amount, currency, date and merchant | `BUY_WAIT_VLM_BASE_URL`, `BUY_WAIT_VLM_MODEL` |
-| `docling` | IBM Docling layout-aware markdown, run in its own interpreter | `BUY_WAIT_DOCLING_PYTHON` |
-| `tesseract` | Classic OCR, kept as the comparison and last-resort path | `TESSERACT_CMD` |
-
-
-`BUY_WAIT_OCR_BACKEND=auto` tries Qwen3-VL, then Docling when configured, then
-Tesseract. A model-proposed amount is trusted only when it is positive, in the
-event's currency, and a deterministic reading of the same document reproduces it
-exactly. The model's own transcript counts first; when that transcript yields no
-labelled amount, an independent local Tesseract read of the same image acts as the
-second witness. If neither confirms the figure, it is discarded and the parser's own
-reading wins. A
-non-loopback VLM host is refused unless you set `BUY_WAIT_VLM_ALLOW_REMOTE=1`.
-Reads are cached on disk by image path, image bytes and backend, so repeat runs do
-no model work; entries older than `BUY_WAIT_CACHE_TTL_DAYS` (default 30) are treated
-as misses and swept from disk. Inspect or clean the cache with:
-
-```bash
-python -m code.cache --stats            # root, TTL, entry count
-python -m code.cache --purge --stats    # delete expired entries now
+```
+profile + events + FX + options + evidence
+        │
+        ▼
+   deterministic kernel            ← owns every machine field
+   facts → forecast → options
+        → solver → verifier
+        │
+        ▼
+   agent layer                     ← proposes, explains, asks, never calculates
+        │
+        ▼
+   verified answer
 ```
 
-Comparison results live in [`docs/ocr-comparison.md`](./docs/ocr-comparison.md).
+- **Facts** are reconstructed from structured profiles and financial events:
+  settled, pending, scheduled, cancelled, linked.
+- **Forecast** projects only spending the history supports, at the cadence the
+  history shows. Income is projected from a real salary stream, on its real
+  payday.
+- **Options** are the seller's actual plans, never invented.
+- **Solver** searches and ranks plans; **verifier** rebuilds the row from the
+  kernel and accepts model prose only when it agrees and its claims check out.
+- **Agent** tools are an explicit allowlist. There is no shell, filesystem or
+  network tool in the answer path.
 
-### Optional JEV decision audit (OpenCode Zen)
-
-`tools/experiments/compare_jev.py` is an experiment, not a decision source: it asks the
-TypeSafe **Jev** decision model (free `jev-1.13-free` through OpenCode Zen) to
-reproduce the kernel's affordability status and payment method as typed
-probabilities, and to rate each decision's safety and evidence sufficiency.
-The deterministic kernel still owns every machine field; the audit never edits a
-row. It needs an OpenCode API key (`OPENCODE_API_KEY`, or the signed-in
-`auth.json`), it is the only network call outside optional agent providers, and
-the free tier answers `noul` propositions only, which the tool encodes as an
-11-proposition argmax. Results live in
-[`docs/jev-decision-gate.md`](./docs/jev-decision-gate.md).
-
-See [`docs/architecture.md`](./docs/architecture.md) for the module map and data
-flow, and [`docs/edge-case-policy.md`](./docs/edge-case-policy.md) for the
-governed edge cases.
+---
 
 ## Quickstart
 
-Requires Python 3.11+.
+```bash
+pip install -r requirements.txt        # deterministic core
+python -m code.main                    # decide every request, write output.csv
+```
 
-### 1. Install the base dependencies
+That path needs no model, no key and no network. It is the same answer every
+time you run it.
+
+Want the interactive product?
 
 ```bash
-python -m pip install -r requirements.txt
+pip install -r requirements-agent.txt  # adds Textual + LangChain providers
+python -m tools.app                    # the desktop-style app
+python -m tools.tui                    # the terminal version
 ```
 
-`pandas` and `rich` are all the deterministic path and the Rich TUI need.
-`textual` adds the product interface. Image reading (`pytesseract`, `Pillow`) is
-optional and additionally needs a Tesseract binary at runtime; set
-`TESSERACT_CMD` if it is not on `PATH`. The local vision path needs a running
-Ollama server serving `qwen3-vl:2b-instruct-q4_K_M` (or a Docling interpreter);
-neither needs an API key.
+### Other entry points
 
-### 2. Run the deterministic batch
-
-```bash
-python -m code.main            # writes output.csv and the usage report
-python -m code.main --help     # usage, no run
-```
-
-One row per request, LF line endings, no model calls, no API key. Inputs are
-resolved through `code.paths`: `mock_dataset/` first, then `dataset/` for an
-older checkout. Add `--agent --agent-limit 3` to run the offline analyst pass
-over three requests (needs the optional agent stack and a local Ollama model).
-
-### 3. Explore in the TUI
-
-```bash
-python -m tools.tui
-```
-
-Everything you do there — `list`, `show`, `dashboard`, `whatif`, `changes`,
-`apply`, `diff`, `undo`, `new`, `explain`, `trace`, `ask` — is session-only. The
-TUI never writes `output.csv` or the fixture; `ask` writes only its task trace.
-
-`ask` is the conversational surface: plain-language instructions, split into
-ordered steps, each one executed against the same kernel.
-
-```text
-tui> ask why was request_101 refused
-tui> ask where am I leaking money, then stop the worst one
-tui> ask can I afford 40,000 on the 12th
-tui> ask and if I wait until the 20th
-```
-
-Each step reports what it did, what changed, and what it refused (with the
-nearest safe alternative). `python -m code.task_agent "<instruction>"` runs the
-same engine from the terminal, and `--provider ollama --model <id>` lets the
-model classify clauses the rules cannot read. Without a provider the rules answer
-alone, so nothing here needs a key.
-
-### 4. Use the product interface
-
-```bash
-python -m tools.app
-```
-
-`tools.app` opens on **Position** for the person last loaded, or on onboarding
-when nobody is stored. A person is a name in a local SQLite file
-(`data/accounts.db`, gitignored); facts are recorded one at a time and survive a
-restart. The Position, Purchase, Ledger, Decisions and Chat screens read only
-that account, never the mock fixture, and no figure is summed in the interface:
-every amount comes from `code.solver.position` or `code.solver.solve_request`
-with its assumptions attached.
-
-The **Report** tab is the old dashboard, relabelled. It lists the mock fixture's
-files and row counts, and says on screen that it is mock data, not your money.
-
-### 5. Run the evaluation gates
-
-```bash
-python -m evaluation.run --mode pr
-```
-
-This runs the real pipeline with `write_output=False`, so it grades the fixture
-but **does not rewrite output.csv**; a direct `python -m code.main` is what
-regenerates the deliverable. It grades the 25 public sample rows semantically,
-checks determinism and provenance, and writes `evaluation/report.json` plus
-`evaluation/report.md`. It exits non-zero when a required gate fails.
-
-`--mode release` additionally runs **G7**, which breaks the agent loop on purpose
-for two requests and requires that the pipeline still finishes, every machine field
-matches the deterministic baseline, and each crash is recorded in
-`usage["agent_loop_errors"]` and named on stderr. G5/G6 stay `NOT_APPLICABLE` until
-an `--archive` is supplied.
-
-### 6. Optional: local agent (Ollama, no key)
-
-```bash
-python -m pip install -r requirements-agent.txt
-ollama serve
-ollama pull qwen2.5:1.5b
-python -m code.agent --request-id <request_id> --provider ollama --trace-dir traces/demo
-```
-
-`ollama` is the local default and needs no cloud account. Every run is capped at
-`BUY_WAIT_LLM_MAX_CALLS` provider calls (default 50).
-
-Local generation settings are tunable, and the defaults stay reproducible
-(`temperature=0`, `num_ctx=8192`):
-
-```bash
-export BUY_WAIT_OLLAMA_TEMPERATURE=0.0     # raise to explore different wording
-export BUY_WAIT_OLLAMA_NUM_CTX=8192
-export BUY_WAIT_OLLAMA_TOP_P=0.9           # optional; omitted unless set
-export BUY_WAIT_OLLAMA_TOP_K=40
-export BUY_WAIT_OLLAMA_REPEAT_PENALTY=1.1
-export BUY_WAIT_OLLAMA_NUM_PREDICT=1024
-```
-
-Sampling can change what the model *says*, never what the answer *is*: the seven
-machine-readable columns always come from the kernel. `propose_decision` takes the
-ten candidate fields as flat tool arguments — small local models drop free-form
-fields when the payload is nested under a single wrapper key, so the schema is
-flat on purpose.
-
-The loop now treats a rejection as feedback instead of a stop condition:
-
-- **Intent first.** Every request is classified (`code/intent.py`) before the
-  first model call. The reading is deterministic and free; when a *clause* in a
-  task cannot be parsed by the rules, the model classifies it and the trace
-  records which reading won (`model` or `deterministic_fallback`).
-- **Repair turns.** A schema rejection or a disagreement with the ledger is sent
-  back with the exact fix ("you proposed X for `payment_plan`, the ledger computes
-  Y; re-read `get_cashflow_projection` and resubmit all ten fields"), bounded by
-  `BUY_WAIT_AGENT_REPAIR_TURNS` (default 2, max 5).
-- **Claim-checked explanations.** A model's `rationale` ships only when every
-  amount, date, status/method name and spending-change action in it is reproduced
-  by the kernel row (`code/claims.py`). A candidate that disagrees with the kernel
-  on any machine field never ships its rationale; on the agent path only, a marked
-  `Disagreements:` note ships instead. Never allowed to invent a number.
-- **Guarded spending changes.** `propose_spending_change` lets the model try a
-  permitted `stop`/`reduce_to`; the kernel re-solves and accepts it only when it
-  actually raises the safe amount. The shipped row still carries the kernel's own
-  `spending_changes_needed`: the proposal is a tested recommendation, not an
-  edit to the answer.
-- **Concerns.** `raise_concern` records unreadable evidence or ambiguity in the
-  trace and the task report. It never changes a number.
-
-### 7. Optional: Kilo + Nemotron Ultra deployment
-
-The deployment provider is Kilo's OpenAI-compatible endpoint serving
-**Nemotron Ultra**. **You must configure the API yourself** — the repository
-ships no endpoint and no key, and `OPENROUTER_KEY` is deliberately not used as a
-fallback for this provider.
-
-```bash
-export BUY_WAIT_KILO_BASE_URL="<your Kilo OpenAI-compatible base URL>"
-export BUY_WAIT_KILO_API_KEY="<your Kilo API key>"
-export BUY_WAIT_KILO_MODEL="nemotron-3-ultra"      # default; override if needed
-
-# single-request demo
-python -m code.agent --request-id <request_id> --provider kilo --trace-dir traces/demo
-
-# batch agent pass (provider selection also via BUY_WAIT_LLM_PROVIDER=kilo)
-BUY_WAIT_LLM_PROVIDER=kilo python -m code.main --agent --agent-limit 5
-```
-
-If the URL or key is missing the two entry points behave differently, on purpose:
-
-- `python -m code.agent --provider kilo` **exits with an error** naming the missing
-  variable. It is a debug entry point, and a silent fallback there would hide a
-  configuration mistake.
-- `python -m code.main --agent` (and the TUI) **falls back to the deterministic
-  kernel** row for that request and records the reason in the trace, so a batch run
-  never dies halfway.
-
-The 50-call cap is shared with the other remote providers.
-
-### 8. Providers, privacy classes, and the paid path
-
-Every provider declares one of three privacy classes (`code/providers.py`), and the
-class decides what it may be trusted with:
-
-| Class | Provider | What it may receive |
-|---|---|---|
-| `local` | `ollama` on a loopback address | anything — nothing leaves the machine |
-| `paid` | `paid` (your endpoint) | user text, never secrets |
-| `free` | `openrouter`, `kilo`, remote Ollama, anything unclassified | development fixtures and non-sensitive text only |
-
-**Free tiers train on the data they receive.** Before a `free` provider sees free
-text, every entry point prints a warning that says so and names what must not be
-entered: account numbers, card numbers, identity documents, addresses. That is
-`ask` in the TUI, `python -m code.task_agent`, `python -m code.agent`, the batch
-and agent paths of `python -m code.main`, the optional Jev gate, the embeddings
-index and the image reader. The TUI prints that notice once per session, the batch
-paths once per process. Setting `BUY_WAIT_ACCEPT_FREE_TIER=1` quiets the chat,
-explanation and Jev notices in the process that inherits it; the TUI,
-`code.task_agent`, the embeddings index and the image reader always warn, because a
-copied `.env` must not be able to silence the surface where the user is typing.
-Neither the notice nor the variable changes the provider's class.
-
-For real user data use `local`, or a `paid` endpoint you control:
-
-```bash
-export BUY_WAIT_PAID_BASE_URL="<your OpenAI-compatible base URL>"   # https, or http on loopback
-export BUY_WAIT_PAID_API_KEY="<your key>"
-export BUY_WAIT_PAID_MODEL="<model id you are entitled to call>"
-
-python -m code.task_agent "can I afford 40,000 on the 12th" --provider paid
-```
-
-Nothing is committed and there is no default endpoint, key or model, so an
-incomplete `paid` configuration is refused with the name of the missing variable.
-A remote `http://` base URL is refused too: the key is never sent in plaintext, and
-no transport in this repository follows a redirect, so a `302` cannot carry the key
-to a cleartext host either. `describe()` reports the provider, the model and the
-privacy class to whoever asks for it, and never the key; a trace records the
-provider model id and the call counts, not the key.
-
-### Docker
-
-```bash
-docker build -t month-end:test .
-docker run --rm month-end:test --help       # usage
-docker run --rm month-end:test              # deterministic batch inside /app
-touch output.csv                            # needed before a bind mount: Docker
-                                            # would otherwise create a directory
-docker run --rm -v "${PWD}/output.csv:/app/output.csv" month-end:test
-```
-
-The container runs as uid **10001**, so a host `output.csv` must be writable by that
-user (on Linux: `chown 10001 output.csv`, or mount a writable directory and copy the
-file out). `code.main` always writes `/app/output.csv`, so a directory mount needs a
-code change and is not offered here.
-The image is `python:3.11-slim`, installs both requirement files plus Tesseract,
-runs as a non-root user, and reads the fixture from `/app`. Pass `-e
-BUY_WAIT_KILO_BASE_URL=... -e BUY_WAIT_KILO_API_KEY=...` to enable the remote
-agent; without them the container is offline and keyless.
-
-**Build status: unverified.** The image definition is checked by the packaging
-tests and ships with the repository, but it has not been built here because the
-development machine ran out of disk space. Treat the first real build as
-unproven and report anything it breaks.
-
-## Use it on your own money
-
-The fixture is calibration material. To use the product on your own figures, run
-`python -m tools.app` (the Textual interface) or `python -m tools.tui` (the Rich
-fallback); both are described above. A person is a name in
-`data/accounts.db`, facts are recorded one at a time, and the account screens
-never read the mock fixture; only the Report tab lists the fixture's files, and
-it labels them as mock data.
-
-## Data and privacy
-
-- Your data stays in local files: the calibration fixture in `mock_dataset/`
-  (`dataset/` is still read when that directory is absent), account facts in
-  `data/accounts.db`, the evidence/tool store in `data/app.db` (rebuildable with
-  `python -m code.store --rebuild`), and traces under `traces/` (gitignored).
-- With no provider configured, the assistant makes **zero network calls** and
-  needs no credentials. One exception to name plainly: an `OPENROUTER_KEY` in the
-  environment is treated as a configured explanation provider, so the batch run
-  will call OpenRouter (a free tier, and it warns on stderr) unless the key is
-  unset. The local Ollama path also stays on your machine.
-- Remote providers are opt-in and hard-capped; API keys are read from environment
-  variables only and are never written to traces, reports or output.
-- Free tiers may train on what they receive, so the TUI and `code.task_agent` warn
-  before a `free` provider sees free text. Use `local` or `paid` for real user data.
-- Messages and images are **untrusted evidence**. They may confirm, amend, delay
-  or cancel a financial fact, but instructions embedded in them are ignored, and
-  anything they cannot prove is flagged rather than guessed.
-  The TUI prints the notice once per session; `BUY_WAIT_ACCEPT_FREE_TIER=1` quiets
-  only the batch-side notices, never the TUI, `code.task_agent`, the embeddings
-  index or the image reader.
-- The pipeline fails closed: unresolved image evidence, unknown FX, or an
-  over-claimed amount produces a conservative row with a warning, never an
-  invented number.
-
-### The safety contract
-
-The ledger refuses to guess. On any request whose ledger cannot be valued it
-returns `amount_safe_to_pay = 0`, `affordability_status = not_affordable`,
-`recommended_payment_method = not_recommended`, `payment_plan = none` and a
-`decision_explanation` that names the reason. The named reasons are:
-
-| Reason | Trigger |
+| Command | What it does |
 |---|---|
-| `DIRECTION_UNKNOWN` | An active cash row's `direction` is blank or not a known direction; the sign is never guessed |
-| `STATUS_UNKNOWN` | An active row's `status` is blank or unrecognised |
-| `DATE_UNKNOWN` | An active cash row has neither a parsable `settlement_date` nor `event_date` |
-| `AMOUNT_INVALID` | A blank, signed-negative or non-finite amount, or FX/accumulation overflow |
-| `FX_UNKNOWN` | No rate on or before the settlement date for the row's currency pair |
-| `RESERVE_INVALID` | `minimum_balance_to_keep` is blank, non-finite or unparsable — never read as zero |
-| `BALANCE_INVALID` | `current_available_balance` is blank, non-finite, unparsable, or overflows the projection |
+| `python -m code.main` | Batch decision over `mock_dataset/requests.csv` → `output.csv` |
+| `python -m tools.app` | Product interface: accounts, facts, decisions, chat, scenarios |
+| `python -m tools.tui` | Terminal REPL: list, show, whatif, changes, apply, undo, ask |
+| `python -m code.task_agent "<instruction>"` | One plain-language task over the kernel |
+| `python -m evaluation.run --mode pr` | Release gates G0–G7 |
+| `python -m tools.trace_view` | Render a trace |
+| `python -m tools.g2_probe` | Replay lab for the sample-quality investigation |
+| `python -m tools.g2_model_mining` | Model zoo and SHAP analysis over the sample rows |
+| `python -m tools.g2_transfer_study` | Train on the 25 labelled rows, compare against the 250 real ones |
 
-These checks are in `code/oracle.py` and are pinned by
-`tests/test_oracle_contract.py`, including the periods where a finite `Decimal`
-overflows only after FX conversion or when a day's deltas are summed.
+---
 
-### The deferred forecast corrections
+## The product surface
 
-The corrected first-bucket arithmetic (charge only the unspent remainder of the
-request month, and prorate on the real month length excluding the request day)
-lowered the day-0 charge, which raises the amount declared safe: measured against
-the labelled rows it produced 2 status upgrades and 15 safe overclaims. It was
-**removed from the code**, not left behind a default-off switch, because an
-environment variable inside the shipped decision path made `output.csv` bytes
-depend on the shell. The shipped conservative charge keeps G1 at **0 status
-upgrades / 0 safe overclaims / 0 unparsed amounts**. The incomplete-request-month
-rule is G1-neutral and ships; the corrected arithmetic is deferred until the G1
-conflict in `docs/architecture.md` is resolved.
+The app is built around one idea: **change a fact, see the decision move.**
 
-## Current limitations
+- Record income, bills and subscriptions with a real category and cadence, so
+  the forecast actually uses them.
+- Ask "what if I wait until the 20th?" and get a simulated answer on a throwaway
+  copy — never a silent edit to your ledger.
+- Ask a follow-up in plain language. The reply is verified against the kernel
+  before you see it; if it cannot be verified, the app says so instead of
+  guessing.
+- Press **"What facts did you use?"** to see the exact tool results behind the
+  last answer.
+- Long model calls run in a cancellable worker, so the window never freezes.
 
-- `output.csv` is generated, not golden. The committed file is the 250-row release
-  output with sha256
-  `1F35043F00ADDC8275D5879026FA83F6595A19712EE814AE89A194F353376486`; G4 ties it
-  to that commit. Regenerate it after any forecast or policy change.
-- Semantic agreement with the 25 public sample rows is still partial: on the
-  last recorded gate run the PR suite passed the structural and safety gates
-  (G0/G1/G3/G4) but failed the sample quality gate (G2). G2 is an unresolved
-  external contract, not a tuning target: no configuration tested reproduced a
-  single sample row whose gold amount is strictly between zero and the requested
-  amount. See [`docs/g2-hypothesis-report.md`](./docs/g2-hypothesis-report.md)
-  for the evidence and the ruled-out register, and the release record for the
-  latest gate output.
-- Image reading is local but uneven. On the 16 linked images Tesseract and
-  Qwen3-VL 2B both resolve 15 and agree on 14 of those, so the 2B model buys no
-  extra coverage here; `image_14` stays unresolved for both. The model did
-  propose two wrong amounts (a 40.00 USD receipt and a garbled nine-digit INR
-  total), both rejected by the deterministic check, which is why the parser stays
-  the authority. A third reader, IBM Docling, resolves 13/16 and agrees with
-  Tesseract on only 7 of those — it loses grand totals on dense, itemised
-  receipts — so it stays an optional third opinion. See
-  [`docs/ocr-comparison.md`](./docs/ocr-comparison.md) and
-  [`docs/docling-vs-tesseract.md`](./docs/docling-vs-tesseract.md).
-- Live model quality is measured only on small local models. `llama3.2:3b` and
-  `qwen3-vl:2b-instruct` both fail to converge on a schema-valid proposal under a
-  bounded tool budget, and every request falls back to the kernel. The
-  Kilo/Nemotron path is wired but has never been run with real credentials, so no
-  remote quality or latency number exists yet.
-- The projection horizon is 90 days with fixed, dated exchange rates. It does not
-  fetch live rates, bank balances or market data.
+---
 
-## Development
+## Privacy is a product decision, not a setting
+
+Every provider declares one of three classes:
+
+| Class | What it means | What it may see |
+|---|---|---|
+| `local` | Ollama on your machine | anything |
+| `paid` | paid endpoint, no-training terms | your text, never secrets |
+| `free` | free tiers that train on submissions | development fixtures only |
+
+- Free tiers trigger a plain warning — **before** anything is sent — and a hosted
+  provider needs your explicit consent for each question, for that specific
+  model.
+- Provider HTTP clients ignore `HTTP_PROXY`/`HTTPS_PROXY` by design, so a proxy
+  cannot quietly receive your prompt or API key.
+- Secrets live in the environment. Traces record provider, model and token
+  counts — never credentials, and never the text of a typed instruction.
+
+---
+
+## The safety contract
+
+The kernel fails **closed**. A malformed row never makes you look richer:
+
+| Situation | Result |
+|---|---|
+| Unknown or blank direction | `DIRECTION_UNKNOWN`, safe 0 |
+| Negative or non-finite amount | `AMOUNT_INVALID`, safe 0 |
+| Invalid, non-finite or negative minimum balance | `RESERVE_INVALID`, safe 0 |
+| Active cash row with no usable date | `DATE_UNKNOWN`, safe 0 |
+| Missing, stale or non-positive FX rate | `FX_UNKNOWN`, safe 0 |
+| Arithmetic overflow anywhere in the ledger | fails closed, never raises |
+
+And the rule that outranks everything: **your balance never drops below the
+minimum you said you want to keep** after any projected essential expense or
+payment in the recommended plan.
+
+---
+
+## Evaluation, honestly
+
+`python -m evaluation.run --mode pr` runs eight gates:
+
+The gate scores the committed snapshot and does not rewrite `output.csv`; provenance is read from the file on disk.
+
+| Gate | Checks |
+|---|---|
+| G0 | Structure, contracts, no secrets in the tree |
+| G1 | Safety: no status upgrades, no safe overclaims, no unparsed amounts |
+| G2 | Agreement with the 25 public sample answers |
+| G3 | Two clean runs produce byte-identical machine columns |
+| G4 | Provenance: commit, output and usage hashes |
+| G5–G7 | Archive, security and agent robustness (release mode) |
+
+Current status: **G0, G1, G3 and G4 pass. G2 fails.** The 25 sample answers were
+produced by the challenge organisers' reference implementation, and roughly 250
+scored forecast variants — including a fifteen-model zoo and two independent
+reviews — could not reproduce a single informative gold amount from the data this
+repository holds. We report that gap and did not fit the sample, because a model
+that memorises 25 answers would tell you nothing about your money.
+
+Full evidence: [`docs/release-verification.md`](docs/release-verification.md) and
+[`docs/g2-hypothesis-report.md`](docs/g2-hypothesis-report.md).
+
+---
+
+## Bring your own model
+
+Nothing is bundled. Point it at whatever you trust:
 
 ```bash
-python -m pytest -q                            # release suite (count: see the release record)
-python -m pytest tests/review -q               # wider review net (count: see the release record)
-python -m pytest tests/test_docs_entrypoints.py -q   # documented commands resolve
-python -m evaluation.run --mode pr             # required gates
+# local, no key
+BUY_WAIT_LLM_PROVIDER=ollama BUY_WAIT_OLLAMA_MODEL=qwen2.5:1.5b
+
+# a paid endpoint you control
+BUY_WAIT_LLM_PROVIDER=paid BUY_WAIT_PAID_BASE_URL=... BUY_WAIT_PAID_API_KEY=... BUY_WAIT_PAID_MODEL=...
+
+# OpenRouter or Kilo
+BUY_WAIT_LLM_PROVIDER=openrouter BUY_WAIT_LLM_MODEL=...
+BUY_WAIT_LLM_PROVIDER=kilo BUY_WAIT_KILO_BASE_URL=... BUY_WAIT_KILO_API_KEY=...
 ```
 
-- Tests are offline by default: no network, no Ollama server, no API key. Model
-  providers are exercised with recording fakes and replay fixtures.
-- The machine-readable columns are determinism-checked; explanations are not
-  compared byte for byte.
-- `tests/test_docs_entrypoints.py` parses every `python -m ...` command out of this
-  README and asserts the module resolves, so a stale command fails the suite
-  instead of the reader.
-- Every change is reviewed with a scoped CodeRabbit pass before merge, and
-  review findings are fixed or documented rather than parked silently.
-- Never commit secrets. Use `.env` (gitignored) or your shell; `.env.example`
-  carries placeholders only.
-- `python -m code.main` rewrites `output.csv`; if you only wanted to verify a
-  change, run the gates above and restore the file with
-  `git checkout -- output.csv`.
+No provider? The kernel still answers; the app simply says there is no model and
+keeps the deterministic tabs working.
+
+---
+
+## Simulate before you commit
+
+```python
+from code.scenarios import Scenario, simulate_scenario, compare_scenarios
+
+result = simulate_scenario(account, Scenario(kind="delay_days", by=14))
+# result["kernel_result"], result["assumptions"], result["persisted"] is False
+```
+
+Scenarios run on a deep copy through the same kernel, refuse to invent income or
+strip protected bills, and never write to storage.
+
+---
 
 ## Layout
 
-| Path | Role |
-|---|---|
-| `code/` | Deterministic kernel, evidence pipeline, service/scenario layer, agent loop, providers, store, traces |
-| `mock_dataset/` | Calibration fixture: input CSVs and image evidence; `mock_dataset/output.csv` is the blank template |
-| `evaluation/` | Gate runner, semantic comparator, usage report |
-| `tools/` | Textual app, Rich TUI, trace viewer, release checks, G2 labs |
-| `tests/` | Pytest suite (offline): the release gate; `tests/review/` holds the wider net |
-| `docs/` | Architecture, handover state, edge-case policy, investigation reports |
+```
+code/          deterministic kernel + agent, chat, providers, accounts, scenarios
+tools/         app (Textual), tui, trace viewer, G2 analysis labs
+evaluation/    gates G0–G7 and the PR report
+mock_dataset/  calibration fixture — never your money, never edited by the app
+docs/          architecture, handover, G2 investigation, release verification
+tests/         the release gate; tests/review/ is the wider net
+```
 
-The full problem specification is preserved in
-[`problem_statement.md`](./problem_statement.md); the repository rules for
-automated agents are in [`AGENTS.md`](./AGENTS.md).
+Read [`docs/architecture.md`](docs/architecture.md) for the module map and
+[`AGENTS.md`](AGENTS.md) for the rules this repository is built to.
+
+---
+
+## Status
+
+- Deterministic core: stable, 672 tests green, 503 in the wider review suite.
+- Interactive product: accounts, facts, decisions, verified chat, scenarios,
+  provider consent and cancellations.
+- Known gaps and deferred work are tracked as issues: the G2 reference gap, the
+  deferred forecast corrections, provider cancellation semantics, durable memory
+  and the fuller orchestration layer.
+
+Do not use this as an unattended financial decision-maker. It is decision
+support: it tells you what the numbers say, and shows its work.
