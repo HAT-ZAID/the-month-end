@@ -188,6 +188,28 @@ class NoModel(RuntimeError):
     """No provider is configured, so there is nothing that can reason."""
 
 
+class NeedsConsent(RuntimeError):
+    """A hosted provider may not see account data until the person says yes."""
+
+
+#: Said when a class that could train on the data is about to receive free text.
+CONSENT_MESSAGE = (
+    "this provider is not local or paid, so it may train on what it receives; "
+    "an explicit consent is required before any account data is sent"
+)
+
+
+def requires_consent(provider) -> bool:
+    """True unless the provider declares the ``local`` or ``paid`` class.
+
+    An unclassified or missing class is treated as the least trusted class:
+    silence is never the default, exactly as in :func:`code.providers.privacy_warning`.
+    """
+    from code.providers import PRIVACY_LOCAL, PRIVACY_PAID
+
+    return getattr(provider, "privacy", None) not in (PRIVACY_LOCAL, PRIVACY_PAID)
+
+
 #: How long a conversation may sit idle before its exchange is discarded.
 SESSION_TTL_S = 30 * 60
 
@@ -735,7 +757,10 @@ def _provider(provider=None):
     from code.providers import NullProvider, build_provider
 
     if provider is None:
-        provider = build_provider()
+        built = build_provider()
+        # ``build_provider`` returns ``(provider, reason)``; a scripted double
+        # may hand back the provider alone, and both shapes are accepted here.
+        provider = built[0] if isinstance(built, tuple) else built
     if provider is None or isinstance(provider, NullProvider):
         return None
     return provider
@@ -872,7 +897,7 @@ def _finish_turn(state, records, *, reply, reason, verified, model, started,
 
 
 def ask(account, text: str, provider=None, *, max_tool_calls: int = 4,
-        session: Session | None = None, trace=None) -> dict:
+        session: Session | None = None, trace=None, consent: bool = False) -> dict:
     """Answer a question with tools, or say plainly that there is no model.
 
     Returns ``{"reply", "tool_calls", "model", "reason", "verified", "state",
@@ -894,6 +919,10 @@ def ask(account, text: str, provider=None, *, max_tool_calls: int = 4,
     only, bounded to :data:`MAX_SESSION_MESSAGES`, and cleared when another
     account is passed; no figure from an earlier turn is ever re-verified here.
 
+    ``consent`` is the person's explicit yes for a provider that is not local or
+    paid.  Without it, :class:`NeedsConsent` is raised before the model is even
+    built, so an unclassified endpoint never receives the ledger.
+
     Every call is validated against the published schema before dispatch.  An
     unknown tool, an undeclared field, a repeated call id, a non-object argument
     payload or a non-string amount gets a structured ``{code, retryable,
@@ -905,6 +934,10 @@ def ask(account, text: str, provider=None, *, max_tool_calls: int = 4,
             "no model is configured, so nothing here can reason about the ledger; "
             "the tabs run the kernel directly"
         )
+    # The gate is first, before the model is built and before any budget is
+    # claimed: an unclassified provider has not been trusted with this ledger.
+    if requires_consent(provider) and not consent:
+        raise NeedsConsent(CONSENT_MESSAGE)
 
     started = time.monotonic()
     state = ChatRunState(

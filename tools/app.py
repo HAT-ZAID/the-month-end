@@ -356,6 +356,8 @@ class BuyOrWait(App):
     account: dict | None = None
     ask_worker: Worker | None = None
     chat_session: object | None = None
+    #: A hosted question waiting for the person's explicit confirmation.
+    pending_ask: tuple[str, object] | None = None
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -481,6 +483,7 @@ class BuyOrWait(App):
                     yield Static("", id="chat-progress")
                     with Horizontal(classes="actions"):
                         yield Button("Facts used", id="chat-facts")
+                        yield Button("Allow sending", id="chat-consent", disabled=True)
                     with Horizontal(classes="field-row"):
                         yield Label("Model")
                         yield Select([], id="model-select", allow_blank=True)
@@ -560,6 +563,7 @@ class BuyOrWait(App):
             # A conversation belongs to the person it was had with: switching
             # person starts a new one rather than carrying a stale tool list.
             self.chat_session = None
+            self._clear_pending_ask()
         self.account = account
         profile = account.get("profile") or {}
         self.sub_title = str(profile.get("user_id") or "")
@@ -802,6 +806,43 @@ class BuyOrWait(App):
             self.chat_session = chat.Session()
         return self.chat_session
 
+    def _clear_pending_ask(self) -> None:
+        """Forget a held question and put the confirmation control back."""
+        self.pending_ask = None
+        self.query_one("#chat-consent", Button).disabled = True
+
+    def ask_for_consent(self, text: str, provider) -> None:
+        """Warn, hold the question, and wait for an explicit yes.
+
+        Nothing is sent here.  The warning is shown, the question is kept, and
+        only the "Allow sending" control can reach :meth:`start_ask` with
+        ``consent=True``.
+        """
+        from code import chat
+        from code.providers import privacy_warning
+
+        warning = privacy_warning(provider, honour_acceptance=False)
+        self.pending_ask = (text, provider)
+        self._chat_log(warning or chat.CONSENT_MESSAGE, AMBER)
+        self._chat_log(
+            f'Nothing has been sent. Press "Allow sending" to send this question '
+            f"to {self.model_choice}.",
+            AMBER,
+        )
+        self._set_chat_progress("Waiting for your permission to send.", AMBER)
+        self.query_one("#chat-consent", Button).disabled = False
+
+    def allow_pending_ask(self) -> Worker | None:
+        """Send the held question after the person's explicit confirmation."""
+        pending = self.pending_ask
+        self._clear_pending_ask()
+        if pending is None:
+            self._chat_log("Nothing is waiting to be sent.", MUTED)
+            return None
+        text, provider = pending
+        self._chat_log("Allowed for this question.", MUTED)
+        return self.start_ask(text, provider, consent=True)
+
     def action_facts(self) -> None:
         """Print the tools the last answer used, or say none has run yet."""
         from code import chat
@@ -821,13 +862,16 @@ class BuyOrWait(App):
             call = f"{item['tool']}({arguments})" if arguments else f"{item['tool']}()"
             self._chat_log(f"  {call} - {item['result_summary']}", MUTED)
 
-    def start_ask(self, text: str, provider) -> Worker | None:
+    def start_ask(self, text: str, provider, *, consent: bool = False) -> Worker | None:
         """Send one question to the model without blocking the screen.
 
         ``chat.ask`` is synchronous and a provider turn can take seconds, so it
         runs in a thread worker: the screen keeps painting and escape can stop
         waiting for the answer.  Cancelling discards the turn's result; the
         request already in flight cannot be recalled from the provider.
+
+        ``consent`` is passed through to :func:`code.chat.ask` and is never the
+        default for a hosted provider: only :meth:`allow_pending_ask` sets it.
         """
         if self.account is None or provider is None:
             return None
@@ -839,7 +883,10 @@ class BuyOrWait(App):
             BLUE,
         )
         worker = self.run_worker(
-            partial(chat.ask, self.account, text, provider=provider, session=session),
+            partial(
+                chat.ask, self.account, text,
+                provider=provider, session=session, consent=consent,
+            ),
             name="chat-ask",
             group=ASK_GROUP,
             description=f"chat.ask {self.model_choice}",
@@ -881,7 +928,11 @@ class BuyOrWait(App):
             self._set_chat_progress("The model call failed.", RED)
 
     def action_cancel_ask(self) -> None:
-        """Stop waiting for the running chat turn, if there is one."""
+        """Stop waiting for the running chat turn, and withdraw a held question."""
+        if self.pending_ask is not None:
+            self._clear_pending_ask()
+            self._chat_log("Nothing will be sent.", MUTED)
+            self._set_chat_progress("Cancelled.", MUTED)
         worker = self.ask_worker
         if worker is None or worker.is_finished:
             return
@@ -902,6 +953,11 @@ class BuyOrWait(App):
     def _facts_pressed(self, event: Button.Pressed) -> None:
         """The button is the discoverable form of the ``facts`` action."""
         self.action_facts()
+
+    @on(Button.Pressed, "#chat-consent")
+    def _consent_pressed(self, event: Button.Pressed) -> None:
+        """The explicit yes for a hosted provider; the only path with consent=True."""
+        self.allow_pending_ask()
 
     @on(Button.Pressed, "#refresh-position")
     def _refresh(self, event: Button.Pressed) -> None:
@@ -1053,6 +1109,8 @@ class BuyOrWait(App):
             self._set_chat_progress(refusal, RED)
             return
         self._chat_log(f"you: {text}", BLUE)
+        # A new question replaces any question still waiting for consent.
+        self._clear_pending_ask()
         if self.model_choice == model_registry.NO_MODEL:
             message = (
                 "No model is selected, so I will not guess. The tabs run the kernel "
@@ -1074,6 +1132,12 @@ class BuyOrWait(App):
             )
             self._chat_log(message, MUTED)
             self._set_chat_progress(message, MUTED)
+            return
+        from code import chat
+
+        if chat.requires_consent(provider):
+            # The ledger stops here until the person says yes explicitly.
+            self.ask_for_consent(text, provider)
             return
         self.start_ask(text, provider)
 
