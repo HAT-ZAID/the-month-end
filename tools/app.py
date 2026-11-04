@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import sys
 from datetime import date
+from functools import partial
 from pathlib import Path
 
 try:  # Textual is optional: the Rich TUI must keep working without it.
@@ -38,6 +39,7 @@ try:  # Textual is optional: the Rich TUI must keep working without it.
         TabbedContent,
         TabPane,
     )
+    from textual.worker import Worker, WorkerState
 except ImportError:  # pragma: no cover - exercised only without the package
     sys.stderr.write(
         "textual is not installed, so the modern interface cannot start.\n"
@@ -79,6 +81,10 @@ def _money(value) -> str:
 
 #: What "yes" looks like typed into the form's monthly-pay question.
 MONTHLY_ANSWERS = frozenset({"monthly", "yes", "y", "true"})
+
+#: The one chat worker group.  Exclusive means a new question cancels the turn
+#: it replaces instead of leaving two provider turns racing for the same log.
+ASK_GROUP = "chat-ask"
 
 
 def fact_payload(kind, amount, *, when="", description="", category="",
@@ -245,14 +251,18 @@ class UserPicker(ModalScreen):
     def compose(self) -> ComposeResult:
         with Vertical(id="picker"):
             yield Static("People on this machine", classes="section")
-            holder = Vertical()
-            yield holder
+            yield Static(
+                "Choose one person. Nothing is decided or asked about money "
+                "until you do.",
+                classes="note",
+            )
+            yield Vertical(id="picker-users")
             with Horizontal(classes="actions"):
                 yield Button("New person", id="picker-new", variant="primary")
                 yield Button("Close", id="picker-close")
 
     def on_mount(self) -> None:
-        holder = self.query_one(Vertical)
+        holder = self.query_one("#picker-users", Vertical)
         names = service.list_users()
         if not names:
             holder.mount(Static("No one is stored yet.", classes="note"))
@@ -310,12 +320,17 @@ class BuyOrWait(App):
     #pos-missing {{ color: {AMBER}; padding-bottom: 1; }}
     #buy-result {{ padding-top: 1; }}
     #buy-explain {{ color: #cbd5e1; padding-top: 1; }}
+    #chat-progress {{ color: {BLUE}; height: auto; padding-top: 1; }}
     RichLog {{ background: #0f172a; border: round #1f2a37; }}
     """
 
-    BINDINGS = [("ctrl+q", "quit", "Quit")]
+    BINDINGS = [
+        ("ctrl+q", "quit", "Quit"),
+        ("escape", "cancel_ask", "Cancel ask"),
+    ]
 
     account: dict | None = None
+    ask_worker: Worker | None = None
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -438,6 +453,7 @@ class BuyOrWait(App):
                         classes="panel-sub",
                     )
                     yield RichLog(id="chat-log", wrap=True)
+                    yield Static("", id="chat-progress")
                     with Horizontal(classes="field-row"):
                         yield Label("Model")
                         yield Select([], id="model-select", allow_blank=True)
@@ -488,11 +504,31 @@ class BuyOrWait(App):
         if not names:
             self.push_screen(Onboarding())
             return
+        if len(names) > 1:
+            # Two people stored and no explicit choice: opening either one would
+            # put a stranger's balance under every tab.  Show the app with no
+            # person loaded and let the picker answer the question.
+            self.refresh_all()
+            self.push_screen(UserPicker())
+            return
         account = service.load_user(names[0])
         if account is not None:
             self.use_account(account)
 
     def use_account(self, account: dict) -> None:
+        """Make ``account`` the one this screen shows and asks about.
+
+        An answer in flight belongs to the account it was asked about, so
+        switching person cancels it rather than letting one ledger's reply
+        appear under another ledger's name.
+        """
+        current = str(((self.account or {}).get("profile") or {}).get("user_id") or "")
+        incoming = str((account.get("profile") or {}).get("user_id") or "")
+        worker = self.ask_worker
+        if incoming != current and worker is not None and not worker.is_finished:
+            worker.cancel()
+            self.ask_worker = None
+            self._set_chat_progress("")
         self.account = account
         profile = account.get("profile") or {}
         self.sub_title = str(profile.get("user_id") or "")
@@ -517,7 +553,7 @@ class BuyOrWait(App):
         if self.account is None:
             head.update("Position")
             who.update("")
-            sub.update("No person is loaded yet.")
+            sub.update("No person is loaded yet — choose one under Switch person.")
             missing.update("")
             notes.update("")
             return
@@ -699,6 +735,96 @@ class BuyOrWait(App):
                 style=MUTED,
             ))
 
+    # ------------------------------------------------------------- the chat
+
+    def _account_refusal(self) -> str | None:
+        """Why an action needs a person first, or ``None`` when one is loaded.
+
+        Two stored people and no choice is not an invitation to load the first:
+        the answer would be about somebody the person never picked.
+        """
+        if self.account is not None:
+            return None
+        if len(service.list_users()) > 1:
+            return (
+                "No account is selected: choose an account under Switch person "
+                "before deciding or asking."
+            )
+        return "Load a person first."
+
+    def _chat_log(self, message: str, style: str = TEXT) -> None:
+        self.query_one("#chat-log", RichLog).write(Text(message, style=style))
+
+    def _set_chat_progress(self, message: str, style: str = MUTED) -> None:
+        self.query_one("#chat-progress", Static).update(Text(message, style=style))
+
+    def start_ask(self, text: str, provider) -> Worker | None:
+        """Send one question to the model without blocking the screen.
+
+        ``chat.ask`` is synchronous and a provider turn can take seconds, so it
+        runs in a thread worker: the screen keeps painting and escape can stop
+        waiting for the answer.  Cancelling discards the turn's result; the
+        request already in flight cannot be recalled from the provider.
+        """
+        if self.account is None or provider is None:
+            return None
+        from code import chat
+
+        self._set_chat_progress(
+            f"Asking {self.model_choice} — a model can take a while · esc cancels",
+            BLUE,
+        )
+        worker = self.run_worker(
+            partial(chat.ask, self.account, text, provider=provider),
+            name="chat-ask",
+            group=ASK_GROUP,
+            description=f"chat.ask {self.model_choice}",
+            exclusive=True,
+            thread=True,
+            exit_on_error=False,
+        )
+        self.ask_worker = worker
+        return worker
+
+    def on_worker_state_changed(self, event: Worker.StateChanged) -> None:
+        """Render a finished chat turn on the app thread, never in the worker."""
+        if self.ask_worker is None or event.worker is not self.ask_worker:
+            return
+        if event.state == WorkerState.SUCCESS:
+            result = event.worker.result or {}
+            for name in result.get("tool_calls") or []:
+                self._chat_log(f"  ran {name}()", MUTED)
+            self._chat_log(str(result.get("reply") or "(no answer)"))
+            self._set_chat_progress("")
+        elif event.state == WorkerState.CANCELLED:
+            self._chat_log(
+                "Cancelled. A request already sent to the model may still finish; "
+                "its answer will not be shown.",
+                MUTED,
+            )
+            self._set_chat_progress("Cancelled.", MUTED)
+        elif event.state == WorkerState.ERROR:
+            from code import chat
+
+            error = event.worker.error
+            if isinstance(error, chat.NoModel):
+                self._chat_log(str(error), MUTED)
+            else:
+                self._chat_log(f"{type(error).__name__}: {error}", RED)
+            self._set_chat_progress("The model call failed.", RED)
+
+    def action_cancel_ask(self) -> None:
+        """Stop waiting for the running chat turn, if there is one."""
+        worker = self.ask_worker
+        if worker is None or worker.is_finished:
+            return
+        worker.cancel()
+        if not worker.is_finished:
+            # A worker cancelled before its task takes its first step never
+            # reaches the handler that reports CANCELLED; record it here so the
+            # progress line does not keep claiming the model is still thinking.
+            worker.state = WorkerState.CANCELLED
+
     # -------------------------------------------------------------- actions
 
     @on(Button.Pressed, "#switch-person")
@@ -717,8 +843,10 @@ class BuyOrWait(App):
     def _buy(self, event: Button.Pressed) -> None:
         explain = self.query_one("#buy-explain", Static)
         table = self.query_one("#buy-table", DataTable)
-        if self.account is None:
-            explain.update(Text("Load a person first.", style=RED))
+        refusal = self._account_refusal()
+        if refusal is not None:
+            explain.update(Text(refusal, style=RED))
+            table.clear()
             return
         try:
             decision = service.buy(
@@ -765,8 +893,9 @@ class BuyOrWait(App):
     def _save_profile(self, event: Button.Pressed) -> None:
         """Record the balance/floor a person fills in; a blank leaves it unknown."""
         status = self.query_one("#profile-status", Static)
-        if self.account is None:
-            status.update(Text("Load a person first.", style=RED))
+        refusal = self._account_refusal()
+        if refusal is not None:
+            status.update(Text(refusal, style=RED))
             return
         balance = self.query_one("#profile-balance", Input).value.strip()
         floor = self.query_one("#profile-floor", Input).value.strip()
@@ -800,9 +929,10 @@ class BuyOrWait(App):
     @on(Button.Pressed, "#fact-add")
     def _add_fact(self, event: Button.Pressed) -> None:
         status = self.query_one("#fact-status", Static)
-        if self.account is None:
-            status.update(Text("Load a person first.", style=RED))
-            self.notify("Load a person first", severity="error")
+        refusal = self._account_refusal()
+        if refusal is not None:
+            status.update(Text(refusal, style=RED))
+            self.notify(refusal, severity="error")
             return
         try:
             payload = fact_payload(
@@ -841,40 +971,39 @@ class BuyOrWait(App):
 
     @on(Input.Submitted, "#chat-input")
     def _chat(self, event: Input.Submitted) -> None:
-        log = self.query_one("#chat-log", RichLog)
         text = event.value.strip()
         event.input.value = ""
         if not text:
             return
-        if self.account is None:
-            log.write(Text("Load a person first.", style=RED))
+        refusal = self._account_refusal()
+        if refusal is not None:
+            self._chat_log(refusal, RED)
+            self._set_chat_progress(refusal, RED)
             return
-        log.write(Text(f"you: {text}", style=BLUE))
+        self._chat_log(f"you: {text}", BLUE)
         if self.model_choice == model_registry.NO_MODEL:
-            log.write(Text(
+            message = (
                 "No model is selected, so I will not guess. The tabs run the kernel "
-                "directly: Position for what is safe today, Purchase for a decision.",
-                style=MUTED,
-            ))
+                "directly: Position for what is safe today, Purchase for a decision."
+            )
+            self._chat_log(message, MUTED)
             return
-        from code import chat
-
         try:
             provider = model_registry.provider_for(self.model_choice)
         except Exception as exc:
-            log.write(Text(f"{type(exc).__name__}: {exc}", style=RED))
+            message = f"{type(exc).__name__}: {exc}"
+            self._chat_log(message, RED)
+            self._set_chat_progress(message, RED)
             return
-        try:
-            result = chat.ask(self.account, text, provider=provider)
-        except chat.NoModel as exc:
-            log.write(Text(str(exc), style=MUTED))
+        if provider is None:
+            message = (
+                f"The selected model ({self.model_choice}) is not configured, so "
+                "there is nothing to ask. The tabs run the kernel directly."
+            )
+            self._chat_log(message, MUTED)
+            self._set_chat_progress(message, MUTED)
             return
-        except Exception as exc:  # never a guessed figure, always a stated failure
-            log.write(Text(f"{type(exc).__name__}: {exc}", style=RED))
-            return
-        for name in result.get("tool_calls") or []:
-            log.write(Text(f"  ran {name}()", style=MUTED))
-        log.write(Text(str(result.get("reply") or "(no answer)"), style=TEXT))
+        self.start_ask(text, provider)
 
 
 def main(argv=None) -> int:
