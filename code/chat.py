@@ -838,13 +838,12 @@ def verify_reply(text: str, observations: list[dict]) -> tuple[str, bool]:
 MAX_PROMPT_EVENTS = 8
 
 
-def _facts_text(account) -> str:
-    """The account facts as one untrusted-data block.
+def _facts_payload(account) -> dict:
+    """The account facts as one dict: the prompt block *and* the witness set.
 
-    A profile priority and an event description are free text a person typed,
-    so both are JSON values inside the block, never a sentence beside the
-    rules.  Only the first :data:`MAX_PROMPT_EVENTS` movements are shown; the
-    ``list_events`` tool still returns every row.
+    A figure the model was given is checkable; one it invented is not.  Passing
+    this payload to :func:`verify_reply` is what lets a reply quote the real
+    balance while a fabricated number is still refused.
     """
     profile = account.get("profile") or {}
     events = [
@@ -891,7 +890,17 @@ def _facts_text(account) -> str:
         ],
         "missing": service.acct.problems(account),
     }
-    return untrusted_block(payload)
+    return payload
+
+
+def _facts_text(account) -> str:
+    """The facts as an untrusted-data block for the prompt.
+
+    A profile priority and an event description are free text a person typed,
+    so both are JSON values inside the block, never a sentence beside the
+    rules.
+    """
+    return untrusted_block(_facts_payload(account))
 
 
 def dispatch(account, name: str, args: dict | None = None) -> dict:
@@ -1381,8 +1390,11 @@ def ask(account, text: str, provider=None, *, max_tool_calls: int = 4,
             f"not be checked against the ledger ({type(exc).__name__}: {exc})"
         ) from None
 
+    # The facts the model is given double as the witness set: quoting the real
+    # balance is checkable, inventing a number is not.
+    facts_payload = _facts_payload(account)
     messages = [
-        {"role": "system", "content": SYSTEM_PROMPT.format(facts=_facts_text(account))},
+        {"role": "system", "content": SYSTEM_PROMPT.format(facts=untrusted_block(facts_payload))},
         *_session_history(session, account),
         {"role": "user", "content": str(text)},
     ]
@@ -1410,8 +1422,18 @@ def ask(account, text: str, provider=None, *, max_tool_calls: int = 4,
         if not calls:
             state.phase = "verifying"
             reply, verified = verify_reply(
-                str(content or ""), [record["result"] for record in records]
+                str(content or ""),
+                [facts_payload, *[record["result"] for record in records]],
             )
+            if not records:
+                if not verified:
+                    # Nothing ran, so there is no result to summarise: say
+                    # plainly that the claim could not be checked.
+                    reply = UNVERIFIED_REPLY
+                elif not _claims_money(reply):
+                    # No figure was checked, so the honest flag is False even
+                    # though the prose is safe to show.
+                    verified = False
             return _finish_turn(
                 state, records, reply=reply,
                 reason="answered" if verified else "unverified",
