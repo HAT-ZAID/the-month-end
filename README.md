@@ -295,9 +295,12 @@ Read [`docs/architecture.md`](docs/architecture.md) for the module map and
 ## Running it in the cloud
 
 The kernel also runs as a bearer-token-guarded AWS Lambda function URL in
-`ap-southeast-2`, under a $10/month budget. Routes, cost notes and the deploy
-command are in [`deploy/README.md`](deploy/README.md). The agent loop stays
-client-side, where your own model key lives.
+`ap-southeast-2`, under a monthly AWS budget with alerts. `GET /explain/{id}`
+rewrites a decision in plain language through Kilo's free pool — no API key —
+and the prose is accepted only if every figure in it already appears in the
+kernel's own answer. Routes, cost notes and the deploy command are in
+[`deploy/README.md`](deploy/README.md). The agent loop stays client-side, where
+your own model key lives.
 
 ## Status
 

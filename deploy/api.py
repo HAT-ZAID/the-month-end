@@ -168,7 +168,7 @@ def _explain(row: dict) -> tuple[str, str]:
         {
             "model": KILO_MODEL,
             "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": 220,
+            "max_tokens": 2048,
             "temperature": 0.2,
             "stream": False,
         }

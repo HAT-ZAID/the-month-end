@@ -51,7 +51,7 @@ request a paid model call with no authentication beyond the bearer token.
 
 ## Cost
 
-The account budget is **`month-end-monthly-10`** ($10/month, alerts at 50/80/100%).
+The account has a monthly AWS budget with alerts at 50/80/100%.
 Lambda is the cheapest shape available here:
 
 - no idle cost (scales to zero),
@@ -81,5 +81,5 @@ which is why it is produced in CI rather than on a Windows machine.
 | URL | Function URL, `auth-type NONE`, guarded by the bearer token |
 | Package | `s3://month-end-api-316658412595/function.zip` |
 | Role | `month-end-api-lambda` (basic execution only) |
-| Budget | `month-end-monthly-10` |
+| Budget | monthly AWS budget with alerts |
 | Region | `ap-southeast-2` |
