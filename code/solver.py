@@ -239,12 +239,39 @@ def _forecast_invalid_detail(result: dict) -> str | None:
     return None
 
 
-def _forecast_fail_closed(rid, evidence: dict, detail: str) -> dict:
+#: The sentence a decision carries when the person recorded income the forecast
+#: deliberately does not project.  ``irregular_income`` is credited on its own
+#: date and never repeated, so a decision that only names the plan reads as if
+#: the row had been counted.  The prose is fixed and carries no figure, so it can
+#: never be mistaken for an amount the ledger computed.
+IRREGULAR_INCOME_NOTE = "Irregular income is recorded but not projected."
+
+
+def _has_irregular_income(events, user_id) -> bool:
+    """True when the person has an ``irregular_income`` row in this ledger."""
+    return any(
+        str(event.get("category") or "").strip().lower() == "irregular_income"
+        and str(event.get("user_id") or "") in ("", str(user_id))
+        for event in events or []
+        if isinstance(event, dict)
+    )
+
+
+def _with_irregular_income_note(explanation, note: str) -> str:
+    """Append the irregular-income sentence once, or leave the text untouched."""
+    text = str(explanation or "")
+    if not note or note in text:
+        return text
+    return f"{text} {note}".strip()
+
+
+def _forecast_fail_closed(rid, evidence: dict, detail: str, note: str = "") -> dict:
     """Fail-closed envelope for a forecast that cannot be valued.
 
     Mirrors the oracle-ledger envelope: nothing safe, nothing to rank, and a
     named reason (``FORECAST_INVALID``) so the failure is visible instead of
-    being reported as an ordinary "not affordable" verdict.
+    being reported as an ordinary "not affordable" verdict.  ``note`` carries the
+    irregular-income sentence the caller already decided applies.
     """
     evidence = dict(evidence or {})
     evidence["warnings"] = list(evidence.get("warnings") or []) + [{
@@ -259,11 +286,12 @@ def _forecast_fail_closed(rid, evidence: dict, detail: str) -> dict:
         "payment_plan": "none",
         "earliest_date_for_full_payment": None,
         "spending_changes_needed": "none",
-        "decision_explanation": (
+        "decision_explanation": _with_irregular_income_note(
             "No payment is safe: the forecast could not be valued "
             f"(FORECAST_INVALID: {detail}). A plan ranked on a projection that "
             "is not a finite number would report a figure the ledger cannot "
-            "support, so no payment is recommended."
+            "support, so no payment is recommended.",
+            note,
         ),
         "evidence": evidence,
     }
@@ -721,6 +749,14 @@ def solve_request(rid, user_id, req_date, req_amt, profile, events, fx_rows, opt
         pass
     allows_partial = str(allows_partial_payment).strip().lower() == "true" if allows_partial_payment is not None else False
 
+    # The ledger actually considered: an irregular-income row is never projected,
+    # so every explanation that reports this decision has to say so.
+    irregular_note = (
+        IRREGULAR_INCOME_NOTE
+        if _has_irregular_income(events_for_oracle, user_id)
+        else ""
+    )
+
     # 2. Get Oracle results for the base state (modified copy carries salary injection).
     #    Typed evidence reaches the forecast layer here; the oracle signature is frozen.
     evidence_flags, expense_facts = _forecast_evidence(evidence)
@@ -734,9 +770,11 @@ def solve_request(rid, user_id, req_date, req_amt, profile, events, fx_rows, opt
         # A forecast that raises (an unparsable amount, a type the ledger cannot
         # add, NaN arithmetic) leaves the projection unknown.  Fail closed with a
         # named reason instead of letting a half-built ledger be ranked.
-        return _forecast_fail_closed(rid, evidence, f"{type(exc).__name__}: {exc}")
+        return _forecast_fail_closed(
+            rid, evidence, f"{type(exc).__name__}: {exc}", irregular_note
+        )
     if invalid_detail is not None:
-        return _forecast_fail_closed(rid, evidence, invalid_detail)
+        return _forecast_fail_closed(rid, evidence, invalid_detail, irregular_note)
     if res_now.get("fail_closed"):
         # An ambiguous ledger cannot certify any amount: fail closed explicitly
         # instead of ranking options derived from a synthetic ledger.
@@ -753,10 +791,11 @@ def solve_request(rid, user_id, req_date, req_amt, profile, events, fx_rows, opt
             "payment_plan": "none",
             "earliest_date_for_full_payment": None,
             "spending_changes_needed": "none",
-            "decision_explanation": (
+            "decision_explanation": _with_irregular_income_note(
                 f"No payment is safe: the ledger had to fail closed ({reason}) because at "
                 "least one cash row cannot be valued or classified with confidence. "
-                "Resolve the ambiguous row before committing to this request."
+                "Resolve the ambiguous row before committing to this request.",
+                irregular_note,
             ),
             "evidence": evidence,
         }
@@ -852,9 +891,10 @@ def solve_request(rid, user_id, req_date, req_amt, profile, events, fx_rows, opt
             "payment_plan": "none",
             "earliest_date_for_full_payment": None,
             "spending_changes_needed": "none",
-            "decision_explanation": (
+            "decision_explanation": _with_irregular_income_note(
                 f"{reason}. The request is not affordable without inventing income or "
-                "breaching a protected commitment, so no payment is recommended."
+                "breaching a protected commitment, so no payment is recommended.",
+                irregular_note,
             ),
             "evidence": evidence,
         }
@@ -874,6 +914,7 @@ def solve_request(rid, user_id, req_date, req_amt, profile, events, fx_rows, opt
             f"Recommended {best['payment_method']} ({best['affordability_status']}) after "
             f"permitted spending changes ({best['spending_changes']})."
         )
+    explanation = _with_irregular_income_note(explanation, irregular_note)
 
     return {
         "request_id": rid,
