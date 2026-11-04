@@ -342,6 +342,169 @@ def test_a_second_ask_cancels_the_turn_it_replaces(db, monkeypatch):
     assert asyncio.run(drive()) is True
 
 
+def test_a_cancelled_turn_leaves_the_shared_session_unchanged(db, monkeypatch):
+    """A cancelled worker may finish in its thread; its exchange is discarded."""
+    from textual.widgets import Input
+
+    from code import chat
+    from code import models as model_registry
+    from tools.app import BuyOrWait
+
+    _account("ana")
+    provider = FakeProvider(replies=["too late"], delay=0.3)
+    monkeypatch.setattr(
+        model_registry, "provider_for", lambda choice, env=None: provider
+    )
+
+    async def drive():
+        app = BuyOrWait()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await _open_chat(app, pilot)
+            app.model_choice = "fake:fake-1"
+            app.chat_session = chat.Session(
+                account_id="ana",
+                messages=[{"role": "user", "content": "earlier question"}],
+            )
+            before = [dict(message) for message in app.chat_session.messages]
+            field = app.query_one("#chat-input", Input)
+            field.value = "how much can I spend?"
+            app._chat(Input.Submitted(field, field.value))
+
+            worker = app.ask_worker
+            assert worker is not None and not worker.is_finished
+            await pilot.press("escape")
+            assert worker.is_cancelled
+            # The thread keeps running after the wait is cancelled; let it
+            # finish so a late write would be visible to this assertion.
+            await asyncio.sleep(0.6)
+            await pilot.pause()
+
+            assert app.chat_session.messages == before
+        return True
+
+    assert asyncio.run(drive()) is True
+
+
+def test_a_successful_turn_commits_its_private_session(db, monkeypatch):
+    """Only a finished, active turn replaces the screen's conversation."""
+    from textual.widgets import Input
+
+    from code import chat
+    from code import models as model_registry
+    from tools.app import BuyOrWait
+
+    account = _account("ana")
+    safe = service.position(account)["max_safe_payment"]
+    reply = f"Your ledger shows {safe} is safe to pay today."
+    provider = FakeProvider(
+        tool_batches=[[{"name": "position", "args": {}, "id": "call_1"}]],
+        replies=[reply],
+    )
+    monkeypatch.setattr(
+        model_registry, "provider_for", lambda choice, env=None: provider
+    )
+
+    async def drive():
+        app = BuyOrWait()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await _open_chat(app, pilot)
+            app.model_choice = "fake:fake-1"
+            app.chat_session = chat.Session(
+                account_id="ana",
+                messages=[{"role": "user", "content": "earlier question"}],
+            )
+            original = app.chat_session
+            field = app.query_one("#chat-input", Input)
+            field.value = "how much can I spend?"
+            app._chat(Input.Submitted(field, field.value))
+
+            worker = app.ask_worker
+            assert worker is not None
+            await worker.wait()
+            await pilot.pause()
+
+            assert (
+                app.chat_session is not original
+            ), "the worker wrote the shared session in place"
+            assert app.chat_session.messages[-2:] == [
+                {"role": "user", "content": "how much can I spend?"},
+                {"role": "assistant", "content": reply},
+            ]
+            assert [item["tool"] for item in app.chat_session.last_observations] == [
+                "position"
+            ]
+        return True
+
+    assert asyncio.run(drive()) is True
+
+
+def test_a_replaced_turn_cannot_overwrite_the_survivors_observations(db, monkeypatch):
+    """The late completion of a cancelled turn is not the active conversation."""
+    from textual.widgets import Input
+
+    from code import models as model_registry
+    from tools.app import BuyOrWait
+
+    _account("ana")
+    first_provider = FakeProvider(
+        tool_batches=[[{"name": "position", "args": {}, "id": "call_1"}]],
+        replies=["The earlier answer."],
+        delay=0.3,
+    )
+    second_provider = FakeProvider(
+        tool_batches=[[{"name": "list_events", "args": {}, "id": "call_2"}]],
+        replies=["The surviving answer."],
+        delay=0.05,
+    )
+    providers = iter((first_provider, second_provider))
+    monkeypatch.setattr(
+        model_registry, "provider_for", lambda choice, env=None: next(providers)
+    )
+
+    async def drive():
+        app = BuyOrWait()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await _open_chat(app, pilot)
+            app.model_choice = "fake:fake-1"
+            field = app.query_one("#chat-input", Input)
+
+            field.value = "first question"
+            app._chat(Input.Submitted(field, field.value))
+            first = app.ask_worker
+            assert first is not None and not first.is_finished
+            # Let the first turn actually enter the provider before it is
+            # replaced, so its exchange really is written late.
+            for _ in range(50):
+                if first_provider.calls:
+                    break
+                await asyncio.sleep(0.01)
+            assert first_provider.calls == 1, "the first turn never started"
+
+            field.value = "second question"
+            app._chat(Input.Submitted(field, field.value))
+            second = app.ask_worker
+            assert second is not None and second is not first
+            assert first.is_cancelled
+
+            await second.wait()
+            # Let the replaced thread finish too, so a late commit would land.
+            await asyncio.sleep(0.8)
+            await pilot.pause()
+
+            assert [item["tool"] for item in app.chat_session.last_observations] == [
+                "list_events"
+            ]
+            sent = [message["content"] for message in app.chat_session.messages]
+            assert "second question" in sent
+            assert "first question" not in sent
+        return True
+
+    assert asyncio.run(drive()) is True
+
+
 def test_cancel_with_no_turn_running_is_harmless(db):
     """The action exists and does nothing when there is nothing to cancel."""
     from tools.app import BuyOrWait

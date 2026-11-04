@@ -393,6 +393,9 @@ class BuyOrWait(App):
 
     account: dict | None = None
     ask_worker: Worker | None = None
+    #: The private session copy the active worker is writing into.  It is
+    #: committed back to ``chat_session`` only when that worker succeeds.
+    ask_session: object | None = None
     chat_session: object | None = None
     #: A hosted question waiting for the person's explicit confirmation.
     pending_ask: PendingAsk | None = None
@@ -610,6 +613,7 @@ class BuyOrWait(App):
         if incoming != current and worker is not None and not worker.is_finished:
             worker.cancel()
             self.ask_worker = None
+            self.ask_session = None
             self._set_chat_progress("")
         if incoming != current:
             # A conversation belongs to the person it was had with: switching
@@ -859,6 +863,37 @@ class BuyOrWait(App):
             self.chat_session = chat.Session()
         return self.chat_session
 
+    @staticmethod
+    def _session_copy(session):
+        """A private copy of ``session`` for one chat worker.
+
+        ``worker.cancel()`` only stops the screen waiting; the thread still
+        reaches :func:`code.chat.ask`, which writes the finished exchange to the
+        session it was given.  Copying per turn means a cancelled or replaced
+        turn writes to a session nobody reads, and only a successful active turn
+        is committed back to the screen.
+        """
+        from code import chat
+
+        return chat.Session(
+            account_id=str(getattr(session, "account_id", "") or ""),
+            messages=[
+                dict(message)
+                for message in (getattr(session, "messages", None) or [])
+                if isinstance(message, dict)
+            ],
+            expires_at=float(getattr(session, "expires_at", 0.0) or 0.0),
+            last_observations=[
+                {
+                    "tool": str(item.get("tool") or ""),
+                    "args": dict(item.get("args") or {}),
+                    "result_summary": str(item.get("result_summary") or ""),
+                }
+                for item in (getattr(session, "last_observations", None) or [])
+                if isinstance(item, dict)
+            ],
+        )
+
     def _clear_pending_ask(self) -> None:
         """Forget a held question and put the confirmation control back."""
         self.pending_ask = None
@@ -954,7 +989,8 @@ class BuyOrWait(App):
             return None
         from code import chat
 
-        session = self.chat_state()
+        session = self._session_copy(self.chat_state())
+        self.ask_session = session
         self._set_chat_progress(
             f"Asking {self.model_choice} — a model can take a while · esc cancels",
             BLUE,
@@ -979,6 +1015,11 @@ class BuyOrWait(App):
         if self.ask_worker is None or event.worker is not self.ask_worker:
             return
         if event.state == WorkerState.SUCCESS:
+            # The worker wrote into its own copy.  Only now, as the active turn,
+            # does that copy become the screen's conversation.
+            if self.ask_session is not None:
+                self.chat_session = self.ask_session
+            self.ask_session = None
             result = event.worker.result or {}
             for name in result.get("tool_calls") or []:
                 self._chat_log(f"  ran {name}()", MUTED)
@@ -988,6 +1029,7 @@ class BuyOrWait(App):
                 self._chat_log(run_summary_line(summary), MUTED)
             self._set_chat_progress("")
         elif event.state == WorkerState.CANCELLED:
+            self.ask_session = None
             self._chat_log(
                 "Cancelled. A request already sent to the model may still finish; "
                 "its answer will not be shown.",
@@ -997,6 +1039,7 @@ class BuyOrWait(App):
         elif event.state == WorkerState.ERROR:
             from code import chat
 
+            self.ask_session = None
             error = event.worker.error
             if isinstance(error, chat.NoModel):
                 self._chat_log(str(error), MUTED)
@@ -1014,6 +1057,7 @@ class BuyOrWait(App):
         if worker is None or worker.is_finished:
             return
         worker.cancel()
+        self.ask_session = None
         if not worker.is_finished:
             # A worker cancelled before its task takes its first step never
             # reaches the handler that reports CANCELLED; record it here so the
